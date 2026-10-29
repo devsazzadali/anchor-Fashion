@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyAdmin } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 import { CustomerLifecycleStage } from "@/features/crm/components/CustomersList";
@@ -46,10 +46,10 @@ export async function updateCustomerByAdminAction(
       };
     }
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 2. Check for duplicate email across other customer profiles
-    const { data: existingEmail } = await supabase
+    const { data: existingEmail } = await db
       .from("customer_profiles")
       .select("id, email")
       .ilike("email", cleanEmail)
@@ -65,7 +65,7 @@ export async function updateCustomerByAdminAction(
 
     // 3. Check for duplicate phone across other customer profiles if phone provided
     if (cleanPhone) {
-      const { data: existingPhone } = await supabase
+      const { data: existingPhone } = await db
         .from("customer_profiles")
         .select("id, phone")
         .eq("phone", cleanPhone)
@@ -80,7 +80,7 @@ export async function updateCustomerByAdminAction(
       }
     }
 
-    // 4. Update Supabase Auth user (email, password, user_metadata)
+    // 4. Update Neon Auth user (email, password, user_metadata)
     const authUpdates: {
       email?: string;
       password?: string;
@@ -103,7 +103,7 @@ export async function updateCustomerByAdminAction(
       };
     }
 
-    const { error: authErr } = await supabase.auth.admin.updateUserById(
+    const { error: authErr } = await db.auth.admin.updateUserById(
       cleanId,
       authUpdates
     );
@@ -112,7 +112,7 @@ export async function updateCustomerByAdminAction(
     }
 
     // 5. Update customer_profiles table
-    const { error: custErr } = await supabase
+    const { error: custErr } = await db
       .from("customer_profiles")
       .update({
         first_name: cleanFirstName,
@@ -129,7 +129,7 @@ export async function updateCustomerByAdminAction(
 
     // 6. Sync with public profiles table
     try {
-      await supabase
+      await db
         .from("profiles")
         .update({
           first_name: cleanFirstName,
@@ -160,7 +160,7 @@ export async function updateCustomerByAdminAction(
         crmPayload.is_vip = data.isVip;
       }
 
-      await supabase
+      await db
         .from("crm_customers")
         .upsert(crmPayload, { onConflict: "profile_id" });
     }
@@ -199,19 +199,19 @@ export async function deleteCustomerByAdminAction(
       };
     }
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 2. Cascade delete dependent CRM and customer records
     await Promise.allSettled([
-      supabase.from("support_tickets").delete().eq("customer_id", cleanId),
-      supabase.from("customer_addresses").delete().eq("customer_id", cleanId),
-      supabase.from("customer_notifications").delete().eq("customer_id", cleanId),
-      supabase.from("loyalty_accounts").delete().eq("customer_id", cleanId),
-      supabase.from("crm_customers").delete().eq("profile_id", cleanId),
+      db.from("support_tickets").delete().eq("customer_id", cleanId),
+      db.from("customer_addresses").delete().eq("customer_id", cleanId),
+      db.from("customer_notifications").delete().eq("customer_id", cleanId),
+      db.from("loyalty_accounts").delete().eq("customer_id", cleanId),
+      db.from("crm_customers").delete().eq("profile_id", cleanId),
     ]);
 
     // 3. Delete customer profile
-    const { error: profileErr } = await supabase
+    const { error: profileErr } = await db
       .from("customer_profiles")
       .delete()
       .eq("id", cleanId);
@@ -230,13 +230,13 @@ export async function deleteCustomerByAdminAction(
 
     // 4. Delete user profile from profiles table if exists
     try {
-      await supabase.from("profiles").delete().eq("id", cleanId);
+      await db.from("profiles").delete().eq("id", cleanId);
     } catch {
       // non-fatal
     }
 
-    // 5. Delete user from Supabase Auth
-    const { error: authErr } = await supabase.auth.admin.deleteUser(cleanId);
+    // 5. Delete user from Neon Auth
+    const { error: authErr } = await db.auth.admin.deleteUser(cleanId);
     if (authErr) {
       console.warn("[deleteCustomerByAdminAction] Auth delete warning:", authErr.message);
     }
@@ -263,8 +263,8 @@ export async function getCustomerPasswordAction(
     const cleanId = customerId?.trim();
     if (!cleanId) return { success: false, error: "Customer ID is required." };
 
-    const supabase = createAdminClient();
-    const { data, error } = await supabase.auth.admin.getUserById(cleanId);
+    const db = createAdminDbClient();
+    const { data, error } = await db.auth.admin.getUserById(cleanId);
     if (error) throw error;
 
     const password = (data.user?.user_metadata as any)?.assigned_password || null;

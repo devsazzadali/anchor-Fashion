@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { invalidateHomepageCache } from "@/lib/cache/invalidate-catalog";
 import { CACHE_TAGS } from "@/lib/cache/catalog-cache";
@@ -13,14 +13,14 @@ import { verifyStaff } from "@/lib/security/roles";
 const SETTINGS_KEY = "why_choose_us_settings";
 
 /**
- * Fetches the Why Choose Us / Brand Ethos settings from Supabase.
- * Uses createAdminClient to remain static/cache-safe (no cookies).
+ * Fetches the Why Choose Us / Brand Ethos settings from the database.
+ * Uses createAdminDbClient to remain static/cache-safe (no cookies).
  * Falls back to DEFAULT_WHY_CHOOSE_US if not yet stored or on error.
  */
 export async function getWhyChooseUsSettings(): Promise<WhyChooseUsSettings> {
   try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("settings")
       .select("value")
       .eq("key", SETTINGS_KEY)
@@ -54,7 +54,7 @@ export async function getWhyChooseUsSettings(): Promise<WhyChooseUsSettings> {
 }
 
 /**
- * Updates the Why Choose Us / Brand Ethos settings in Supabase.
+ * Updates the Why Choose Us / Brand Ethos settings in the database.
  * Revalidates homepage cache immediately.
  */
 export async function updateWhyChooseUsSettings(
@@ -63,7 +63,7 @@ export async function updateWhyChooseUsSettings(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const cleanSettings: WhyChooseUsSettings = {
       isEnabled: settings.isEnabled ?? true,
@@ -79,7 +79,7 @@ export async function updateWhyChooseUsSettings(
       })),
     };
 
-    const { error } = await supabase.from("settings").upsert(
+    const { error } = await db.from("settings").upsert(
       {
         key: SETTINGS_KEY,
         value: cleanSettings as any,

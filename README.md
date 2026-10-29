@@ -3,13 +3,13 @@
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.2.12-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React 19](https://img.shields.io/badge/React-19.0.0-blue?style=for-the-badge&logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%2015-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com/)
+[![Neon](https://img.shields.io/badge/Neon-PostgreSQL%2015-3ECF8E?style=for-the-badge&logo=neon)](https://neon.com/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.4.0-2D3748?style=for-the-badge&logo=prisma)](https://www.prisma.io/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4.10-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 [![Vitest](https://img.shields.io/badge/Vitest-110%20Tests%20Passing-6E9F18?style=for-the-badge&logo=vitest)](https://vitest.dev/)
 [![PWA Ready](https://img.shields.io/badge/PWA-Serwist-FF69B4?style=for-the-badge)](https://serwist.pages.dev/)
 
-> **Anchor Fashion** হলো একটি আধুনিক, এন্টারপ্রাইজ-গ্রেড, স্কেলেবল এবং পূর্ণাঙ্গ ওমনিচ্যানেল ই-কমার্স এবং ওয়্যারহাউস ইআরপি (ERP) প্ল্যাটফর্ম। এটি বিশেষত বাংলাদেশী শীর্ষ ফ্যাশন ব্র্যান্ড ও গ্লোবাল রিটেইল চেইনের জটিল অপারেশনাল চাহিদা পূরণের উদ্দেশ্যে **Next.js 16 (App Router + Turbopack)**, **Supabase PostgreSQL**, **Prisma ORM**, **bKash Tokenized**, **SSLCommerz**, **Alpha SMS BD**, **১০টি স্থানীয় ও আন্তর্জাতিক কুরিয়ার গেটওয়ে** এবং **Google Gemini AI** ইঞ্জিন সমন্বয়ে তৈরি করা হয়েছে।
+> **Anchor Fashion** হলো একটি আধুনিক, এন্টারপ্রাইজ-গ্রেড, স্কেলেবল এবং পূর্ণাঙ্গ ওমনিচ্যানেল ই-কমার্স এবং ওয়্যারহাউস ইআরপি (ERP) প্ল্যাটফর্ম। এটি বিশেষত বাংলাদেশী শীর্ষ ফ্যাশন ব্র্যান্ড ও গ্লোবাল রিটেইল চেইনের জটিল অপারেশনাল চাহিদা পূরণের উদ্দেশ্যে **Next.js 16 (App Router + Turbopack)**, **Neon PostgreSQL**, **Prisma ORM**, **bKash Tokenized**, **SSLCommerz**, **Alpha SMS BD**, **১০টি স্থানীয় ও আন্তর্জাতিক কুরিয়ার গেটওয়ে** এবং **Google Gemini AI** ইঞ্জিন সমন্বয়ে তৈরি করা হয়েছে।
 
 ---
 
@@ -91,9 +91,9 @@ graph TD
 
     subgraph Data & Storage Layer
         Services --> PrismaORM[Prisma Client ORM]
-        Services --> SupabaseClient[Supabase Client & RPC]
+        Services --> NeonClient[Data-layer client & RPC]
         PrismaORM --> PostgresDB[(PostgreSQL 15 Database)]
-        SupabaseClient --> PostgresDB
+        NeonClient --> PostgresDB
         PostgresDB --> RLS[Row Level Security Policies]
         PostgresDB --> AtomicRPC[Postgres Atomic Functions]
     end
@@ -107,7 +107,7 @@ graph TD
 |---|---|---|
 | **Core Framework** | **Next.js 16.2.12** | React 19, Server Components (RSC), Turbopack, App Router, Server Actions |
 | **Language** | **TypeScript 5.8** | স্ট্রিক্ট টাইপ-সেফ কোডবেস (Strict mode, Zero runtime type leaks) |
-| **Database Engine** | **Supabase (PostgreSQL 15)** | হাই-পারফরম্যান্স রিলেশনাল ডাটাবেস, রিয়েলটাইম লিসেনার, RLS এনফোর্সমেন্ট |
+| **Database Engine** | **Neon (PostgreSQL 15)** | হাই-পারফরম্যান্স রিলেশনাল ডাটাবেস, রিয়েলটাইম লিসেনার, RLS এনফোর্সমেন্ট |
 | **ORM & Modeling** | **Prisma 6.4.0** | স্কিমা মাইগ্রেশন, টাইপস্ক্রিপ্ট টাইপ জেনারেশন ও টাইপ-সেফ ডাটাবেস কোয়েরি |
 | **UI & Styling** | **Tailwind CSS + shadcn/ui** | Radix UI primitives, Lucide Icons, CVA, Tailwind Animate |
 | **Motion & Charts** | **Framer Motion 12 + Recharts** | ড্যাশবোর্ড ডাটা ভিজ্যুয়ালাইজেশন ও স্মুথ মাইক্রো-ইন্টারঅ্যাকশন |
@@ -270,7 +270,7 @@ stateDiagram-v2
 
 ## 🗄 ডাটাবেস আর্কিটেকচার ও স্কিমা ডিজাইন (Database Schema)
 
-সিস্টেমে PostgreSQL ডাটাবেসের মডেলিং করা হয়েছে **Prisma ORM** (`prisma/schema.prisma`) এবং **Supabase RLS & RPC Functions** এর মেলবন্ধনে:
+সিস্টেমে PostgreSQL ডাটাবেসের মডেলিং করা হয়েছে **Prisma ORM** (`prisma/schema.prisma`) এবং **Neon RLS & RPC Functions** এর মেলবন্ধনে:
 
 ```mermaid
 erDiagram
@@ -366,7 +366,7 @@ anchorfashion/
 ├── lib/                      # সিস্টেম কোর লাইব্রেরিজ ও ক্লায়েন্টস
 │   ├── auth/                 # সেশন ও অথেনটিকেশন হেল্পার্স
 │   ├── prisma.ts             # গ্লোবাল প্রিজমা ক্লায়েন্ট সিঙ্গলটন
-│   ├── supabase/             # সুপাবেস ক্লায়েন্ট, মিডলওয়্যার ও এসএসআর ক্লায়েন্ট
+│   ├── neon/             # সুপাবেস ক্লায়েন্ট, মিডলওয়্যার ও এসএসআর ক্লায়েন্ট
 │   └── observability.ts      # পারফরম্যান্স মেট্রিক্স ও সিস্টেম মনিটরিং
 │
 ├── prisma/
@@ -386,7 +386,7 @@ anchorfashion/
 │   ├── payment/              # পেমেন্ট ফ্যাক্টরি ও মেথড প্রোভাইডারস (bKash, SSLCommerz, etc.)
 │   └── warehouse.service.ts  # ওয়্যারহাউস অপারেশনাল সার্ভিস
 │
-├── supabase/
+├── neon/
 │   ├── migrations/           # এসকিউএল মাইগ্রেশন স্ক্রিপ্ট ও অডিট টেবিল
 │   └── seed/                 # ইনিশিয়াল রোলস ও ডেমো ডাটা সিড
 │
@@ -418,12 +418,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 NEXT_PUBLIC_ENVIRONMENT=development
 
-# --- Database & Supabase (PostgreSQL 15) ---
+# --- Database & Neon (PostgreSQL 15) ---
 DATABASE_URL="postgresql://postgres:[PASSWORD]@[HOST]:6543/postgres?pgbouncer=true"
 DIRECT_URL="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
-NEXT_PUBLIC_SUPABASE_URL=https://[PROJECT_REF].supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1Ni...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1Ni...
 
 # --- Payment Gateway: bKash Tokenized ---
 BKASH_APP_KEY=your_bkash_app_key
@@ -569,7 +566,7 @@ cmd.exe /c "npm run dev"
 - **সমাধান**: না। `.env` ফাইলে `SMS_TEST_MODE=true` থাকলে আসল Alpha SMS এপিআই কল করা হয় না, বরং কনসোলে মক রেসপন্স তৈরি করে যাতে ব্যালেন্স খরচ না হয়। প্রোডাকশনে যাওয়ার পূর্বে এটিকে `false` করে দিন।
 
 #### ৩. ডাটাবেস কানেকশন পুলে `Connection Limit Exceeded` এরর দেখালে কী করবেন?
-- **সমাধান**: Supabase ব্যবহার করার সময় `DATABASE_URL` এ অবশ্যই PgBouncer পোর্ট (`6543`) ও `?pgbouncer=true` ব্যবহার করুন এবং মাইগ্রেশনের জন্য `DIRECT_URL` (পোর্ট `5432`) ব্যবহার করুন।
+- **সমাধান**: Neon ব্যবহার করার সময় `DATABASE_URL` এ অবশ্যই PgBouncer পোর্ট (`6543`) ও `?pgbouncer=true` ব্যবহার করুন এবং মাইগ্রেশনের জন্য `DIRECT_URL` (পোর্ট `5432`) ব্যবহার করুন।
 
 #### ৪. কাস্টমার লগইন করার পর কার্ট খালি দেখায় কেন?
 - **সমাধান**: নিশ্চিত করুন ব্রাউজার কুকি ব্লক করা নেই। `proxy.ts` এর মাধ্যমে সেশন হ্যান্ডল হয় এবং গেস্ট কার্ট ডাটাবেসে ইউজার আইডি দিয়ে আপডেট হয়ে মার্জ হয়।

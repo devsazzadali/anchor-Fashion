@@ -12,7 +12,7 @@
  * This endpoint is idempotent: calling it multiple times is always safe.
  */
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { InventoryService } from "@/services/inventory.service";
 import { CouponService } from "@/services/coupon.service";
 
@@ -25,12 +25,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   const inventoryService = new InventoryService();
 
   try {
     // ── Find expired PENDING_PAYMENT orders ───────────────────────────────
-    const { data: expiredOrders, error: fetchError } = await supabase
+    const { data: expiredOrders, error: fetchError } = await db
       .from("orders")
       .select("id, order_number")
       .in("status", ["pending_payment", "PENDING_PAYMENT", "pending", "PENDING"])
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
         await CouponService.releaseCoupon(order.id);
 
         // Cancel the order. Use service_role client so RLS doesn't block.
-        const { error: cancelError } = await supabase
+        const { error: cancelError } = await db
           .from("orders")
           .update({ 
             status: "cancelled",

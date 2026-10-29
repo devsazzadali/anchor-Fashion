@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   Table,
   TableBody,
@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/badge";
 export const revalidate = 0;
 
 export default async function WebhooksPage() {
-  const supabase = await createAdminClient();
-  const { data: webhooks, error } = await supabase
+  const db = await createAdminDbClient();
+  const { data: webhooks, error } = await db
     .from("payment_webhooks")
     .select(
       `

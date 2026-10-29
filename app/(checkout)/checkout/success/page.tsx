@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle, Package, Truck, Home, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient, createDbClient } from "@/lib/db/client";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +23,8 @@ export default async function CheckoutSuccessPage({
     redirect("/");
   }
 
-  const supabase = createAdminClient();
-  const { data: order, error } = await supabase
+  const db = createAdminDbClient();
+  const { data: order, error } = await db
     .from("orders")
     .select("*, order_items(*)")
     .eq("id", order_id)
@@ -90,6 +90,36 @@ export default async function CheckoutSuccessPage({
 
   const transactionId = trxID || order.payment_intent_id;
 
+  // Phase 12: a guest order silently created an unclaimed profile keyed by
+  // the order phone. Offer the owner of that phone the chance to claim the
+  // account (set a password) right here — no pressure, the order is already
+  // placed either way. Shown only to logged-out visitors whose order is
+  // linked to a still-unclaimed profile.
+  let claimPhone: string | null = null;
+  if ((order as any).profile_id) {
+    try {
+      const sessionDb = await createDbClient();
+      const {
+        data: { user: sessionUser },
+      } = await sessionDb.auth.getUser();
+      if (!sessionUser) {
+        const { data: profile } = await db
+          .from("profiles")
+          .select("claimed_at")
+          .eq("id", (order as any).profile_id)
+          .maybeSingle();
+        if (profile && !profile.claimed_at) {
+          claimPhone =
+            (order as any).shipping_address?.phone ||
+            (order as any).shipping_address?.phone_number ||
+            "";
+        }
+      }
+    } catch {
+      claimPhone = null;
+    }
+  }
+
   return (
     <div className="container mx-auto max-w-3xl px-4 py-12">
       <div className="rounded-lg border bg-white p-8 text-center shadow-sm">
@@ -147,6 +177,25 @@ export default async function CheckoutSuccessPage({
             <span className="text-xs font-medium">Delivered</span>
           </div>
         </div>
+
+        {claimPhone !== null && (
+          <div className="mx-auto mb-8 max-w-md rounded-lg border border-[#C9A86A]/50 bg-amber-50/70 p-5 text-center">
+            <p className="mb-1 text-base font-semibold text-slate-900">
+              Password সেট করে অ্যাকাউন্টটি নিজের করুন
+            </p>
+            <p className="mb-4 text-sm text-slate-600">
+              এই অর্ডারটি আপনার মোবাইল নম্বরে সেভ হয়েছে। Password সেট করলেই
+              সব অর্ডার আপনার অ্যাকাউন্টে দেখতে পাবেন।
+            </p>
+            <Button asChild className="bg-[#C9A86A] hover:bg-[#b09156] text-white">
+              <Link
+                href={`/auth/claim?phone=${encodeURIComponent(claimPhone)}`}
+              >
+                Set a Password
+              </Link>
+            </Button>
+          </div>
+        )}
 
         <div className="flex flex-col justify-center gap-4 sm:flex-row">
           <Button asChild variant="outline">

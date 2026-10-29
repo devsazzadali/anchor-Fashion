@@ -9,18 +9,18 @@ import { CheckoutStoreInitializer } from "./initializer";
 export const dynamic = "force-dynamic";
 
 export default async function CheckoutPage() {
-  const { createClient } = await import("@/lib/supabase/server");
+  const { createDbClient } = await import("@/lib/db/client");
   const { ADMIN_ROLES } = await import("@/lib/constants/auth");
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (user) {
     let role = user.user_metadata?.role || user.app_metadata?.role;
     if (!role) {
       try {
-        const { data: profile } = await supabase
+        const { data: profile } = await db
           .from("profiles")
           .select("roles(name)")
           .eq("id", user.id)

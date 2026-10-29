@@ -2,13 +2,13 @@
 
 import { WishlistService } from "@/services/wishlist.service";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server-client";
+import { createDbClient } from "@/lib/db/client";
 
 async function requireAuth() {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
   if (!user) throw new Error("Authentication required for wishlist");
   return user.id;
 }

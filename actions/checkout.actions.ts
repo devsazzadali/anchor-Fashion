@@ -8,7 +8,7 @@ import {
   CheckoutShippingFormValues,
 } from "@/schemas/checkout.schema";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server-client";
+import { createDbClient } from "@/lib/db/client";
 import { CouponService } from "@/services/coupon.service";
 
 async function getUserId(): Promise<string | undefined> {
@@ -18,10 +18,10 @@ async function getUserId(): Promise<string | undefined> {
     if (user?.id) return user.id;
   } catch (_) {}
   try {
-    const supabase = await createClient();
+    const db = await createDbClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
     return user?.id ?? undefined;
   } catch (_) {
     return undefined;

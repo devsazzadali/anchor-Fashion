@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createDbClient } from "@/lib/db/client";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,9 +100,9 @@ export default function LiveChatInterfacePage() {
       }
     });
 
-    // Supabase Realtime channel for live customer/agent updates
-    const supabase = createClient();
-    const channel = supabase
+    // Live-update channel hookup for customer/agent updates (no-op stub; updates also arrive via refetch)
+    const db = createDbClient();
+    const channel = db
       .channel(`ticket-chat-${activeTicket.id}`)
       .on(
         "postgres_changes",
@@ -128,7 +128,7 @@ export default function LiveChatInterfacePage() {
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      db.removeChannel(channel);
     };
   }, [activeTicket?.id]);
 

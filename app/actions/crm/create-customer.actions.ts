@@ -1,6 +1,7 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
+import { verifyStaff } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
 export async function createCustomerAction(data: {
@@ -10,14 +11,19 @@ export async function createCustomerAction(data: {
   phone?: string;
   lifecycleStage?: string;
 }): Promise<{ success?: boolean; data?: any; error?: string }> {
+  // SECURITY: this action had NO authorization check — anyone could create
+  // customer accounts (it provisions Neon Auth users) and enumerate which
+  // emails/phones are already registered from its error messages.
+  await verifyStaff();
+
   const cleanEmail = data.email.trim().toLowerCase();
   const cleanPhone = data.phone?.trim() ? data.phone.trim() : null;
 
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Check if customer profile already exists with this email
-    const { data: existingEmail } = await supabase
+    const { data: existingEmail } = await db
       .from("customer_profiles")
       .select("id, email, first_name, last_name")
       .ilike("email", cleanEmail)
@@ -31,7 +37,7 @@ export async function createCustomerAction(data: {
 
     // 2. Check if customer profile already exists with this phone number (unique constraint)
     if (cleanPhone) {
-      const { data: existingPhone } = await supabase
+      const { data: existingPhone } = await db
         .from("customer_profiles")
         .select("id, email, first_name, last_name")
         .eq("phone", cleanPhone)
@@ -44,11 +50,11 @@ export async function createCustomerAction(data: {
       }
     }
 
-    // 3. Provision user in Supabase Auth to obtain a valid UUID (primary key for customer_profiles)
+    // 3. Provision user in Neon Auth to obtain a valid UUID (primary key for customer_profiles)
     let userId: string;
     const tempPassword = `AnchorCustomer@${Math.random().toString(36).slice(-8)}!2026`;
 
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    const { data: authData, error: authError } = await db.auth.admin.createUser({
       email: cleanEmail,
       password: tempPassword,
       email_confirm: true,
@@ -67,7 +73,7 @@ export async function createCustomerAction(data: {
         authError.message.toLowerCase().includes("already registered") ||
         authError.message.toLowerCase().includes("already exists")
       ) {
-        const { data: listData } = await supabase.auth.admin.listUsers();
+        const { data: listData } = await db.auth.admin.listUsers();
         const existingAuth = listData?.users?.find(
           (u) => u.email?.toLowerCase() === cleanEmail
         );
@@ -86,7 +92,7 @@ export async function createCustomerAction(data: {
 
     // 4. Sync with profiles table if present
     try {
-      await supabase.from("profiles").upsert(
+      await db.from("profiles").upsert(
         {
           id: userId,
           email: cleanEmail,
@@ -103,7 +109,7 @@ export async function createCustomerAction(data: {
     }
 
     // 5. Create customer profile with valid primary key id
-    const { data: newCustomer, error: profileError } = await supabase
+    const { data: newCustomer, error: profileError } = await db
       .from("customer_profiles")
       .upsert(
         {
@@ -123,7 +129,7 @@ export async function createCustomerAction(data: {
 
     // 6. Initialize CRM customer metadata
     if (newCustomer?.id) {
-      await supabase.from("crm_customers").upsert(
+      await db.from("crm_customers").upsert(
         {
           profile_id: newCustomer.id,
           customer_lifecycle_stage: data.lifecycleStage || "PROSPECT",

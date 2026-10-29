@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
 import { CourierProviderCode } from "@/types/shipping.types";
 import { ShippingService } from "@/services/shipping/shipping.service";
 import { OrderService } from "@/lib/services/oms/order.service";
@@ -26,12 +26,12 @@ export async function dispatchOrderAction(
 
     const role = await getRoleForUser(user);
 
-    const adminSupabase = await createAdminClient();
+    const adminDb = await createAdminDbClient();
     const orderService = new OrderService();
     const shippingService = new ShippingService();
 
     // 1. Fetch Authoritative Order
-    const orderDetails = await orderService.getOrderDetails(orderId, adminSupabase);
+    const orderDetails = await orderService.getOrderDetails(orderId, adminDb);
     if (!orderDetails) {
       return { success: false, error: "Order not found" };
     }
@@ -67,8 +67,14 @@ export async function dispatchOrderAction(
       return { success: false, error: "Order is missing shipping address." };
     }
 
+    // Phase 8: the storefront checkout stores the street as
+    // "address_line_1" — the parser previously accepted only
+    // address_line1/address_line/addressLine/address, so dispatch
+    // rejected EVERY storefront order as "missing address" before any
+    // courier logic ran.
     const addressLine =
       rawAddress.address_line1 ||
+      rawAddress.address_line_1 ||
       rawAddress.address_line ||
       rawAddress.addressLine ||
       rawAddress.address ||
@@ -88,13 +94,20 @@ export async function dispatchOrderAction(
     }
 
     // 4. Idempotency Check (Does an active shipment already exist?)
-    const { data: existingShipments } = await adminSupabase
+    // Phase 8: a 'created' draft with no consignment (left behind by a
+    // failed submission) must not block a retry — only shipments that
+    // actually reached a courier count as active.
+    const { data: existingShipments } = await adminDb
       .from("shipments")
-      .select("id, status")
+      .select("id, status, consignment_id")
       .eq("order_id", orderId)
       .neq("status", "cancelled");
 
-    if (existingShipments && existingShipments.length > 0) {
+    const activeShipments = (existingShipments || []).filter(
+      (s: any) => s.status !== "created" || s.consignment_id
+    );
+
+    if (activeShipments.length > 0) {
       return {
         success: false,
         error: "An active shipment already exists for this order.",
@@ -114,9 +127,38 @@ export async function dispatchOrderAction(
        codAmount = Number(orderDetails.grand_total || 0);
     }
 
+    // 5b. Phase 8: courier pre-flight. Fail BEFORE creating any shipment
+    // when the chosen courier is not registered or has no credentials.
+    // Previously the flow created the shipment, swallowed the provider
+    // failure, advanced the order to ready_for_shipment and reported
+    // success — a booking that never happened.
+    const { prisma } = await import("@/lib/prisma");
+    const courierRow = await prisma.courier_providers.findFirst({
+      where: { code: courierCode },
+    });
+    if (!courierRow || courierRow.is_active === false) {
+      return {
+        success: false,
+        error: `Courier "${courierCode}" is not registered or is inactive. Add it under Shipping → Couriers first. No shipment was created.`,
+      };
+    }
+    if (courierCode !== "sandbox") {
+      const cfg = (courierRow.config as any) || {};
+      const creds = (cfg.credentials as any) || {};
+      const apiKey = courierRow.api_key || creds.apiKey || creds.api_key;
+      const secretKey =
+        courierRow.api_secret || creds.secretKey || creds.secret_key;
+      if (!apiKey || !secretKey) {
+        return {
+          success: false,
+          error: `${courierRow.name || courierCode} is not configured — API credentials are missing. Add the API key and secret key in Shipping → Couriers, then try again. No shipment was created.`,
+        };
+      }
+    }
+
     // 6. Create Shipment
     const recipientName = `${firstName} ${lastName}`.trim();
-    const addressLine2 = rawAddress.address_line2 || rawAddress.addressLine2 || "";
+    const addressLine2 = rawAddress.address_line2 || rawAddress.address_line_2 || rawAddress.addressLine2 || "";
     
     const shipmentInput = {
       orderId: orderId,

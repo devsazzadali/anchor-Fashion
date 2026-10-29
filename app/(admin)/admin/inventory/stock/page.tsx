@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { StockControlClient } from "@/features/inventory/components/StockControlClient";
 
 export const metadata: Metadata = {
@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default async function StockControlPage() {
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
 
   const [
     invRes,
@@ -16,19 +16,19 @@ export default async function StockControlPage() {
     varRes,
     supRes,
   ] = await Promise.all([
-    supabase
+    db
       .from("inventory_levels")
       .select("*, variants(id, sku, barcode, attributes, price_override, sale_price, product:products(id, name, sku, base_price, cost_price)), warehouses(id, name, is_active)")
       .order("quantity_available", { ascending: true }),
-    supabase
+    db
       .from("warehouses")
       .select("id, name, is_active")
       .order("name", { ascending: true }),
-    supabase
+    db
       .from("variants")
       .select("id, sku, barcode, price_override, sale_price, attributes, product:products(id, name, sku, base_price, cost_price)")
       .order("sku", { ascending: true }),
-    supabase
+    db
       .from("supplier_profiles")
       .select("id, company_name, contact_person, email, phone")
       .order("company_name", { ascending: true }),

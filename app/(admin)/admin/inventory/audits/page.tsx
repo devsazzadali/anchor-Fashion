@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { AuditsClient } from "@/features/inventory/components/AuditsClient";
 import { getWarehouses } from "@/app/actions/admin/procurement.actions";
 
@@ -11,10 +11,10 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AuditsPage() {
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
 
   const [{ data: audits }, whRes] = await Promise.all([
-    supabase
+    db
       .from("inventory_audits")
       .select("*, warehouses(id, name, warehouse_code)")
       .order("created_at", { ascending: false }),

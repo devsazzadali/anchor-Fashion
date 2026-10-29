@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AIGateway } from "@/lib/ai/gateway";
+import { verifyStaff } from "@/lib/security/roles";
 
 export async function POST(req: NextRequest) {
   try {
+    // This endpoint had NO authentication (and no UI callers): anyone
+    // could execute stored AI prompts with an arbitrary userId. All
+    // sibling /api/ai/* routes are staff-gated; this one now is too.
+    await verifyStaff();
+
     const body = await req.json();
 
     // Validate request

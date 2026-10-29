@@ -576,7 +576,7 @@ export function TicketDetailClient({
                     {ticket.order_id}
                   </span>
                 </div>
-                <Link href={`/admin/operations/fulfillment/orders`} className="block">
+                <Link href={`/admin/orders`} className="block">
                   <Button variant="secondary" size="sm" className="w-full">
                     View Orders
                   </Button>

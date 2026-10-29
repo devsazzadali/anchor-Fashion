@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import {
   HealthCheckSchema,
   SystemMetricSchema,
@@ -15,9 +15,9 @@ export async function logSystemEvent(
   await verifyStaff();
   try {
     const parsedData = SystemLogSchema.parse(data);
-    const supabase = await createClient();
+    const db = await createDbClient();
 
-    const { error } = await supabase.from("system_logs").insert({
+    const { error } = await db.from("system_logs").insert({
       level: parsedData.level,
       service_name: parsedData.service_name,
       message: parsedData.message,
@@ -41,9 +41,9 @@ export async function recordMetric(
   await verifyStaff();
   try {
     const parsedData = SystemMetricSchema.parse(data);
-    const supabase = await createClient();
+    const db = await createDbClient();
 
-    const { error } = await supabase.from("system_metrics").insert({
+    const { error } = await db.from("system_metrics").insert({
       metric_name: parsedData.metric_name,
       value: parsedData.value,
       unit: parsedData.unit || null,
@@ -65,9 +65,9 @@ export async function recordHealthCheck(
   await verifyStaff();
   try {
     const parsedData = HealthCheckSchema.parse(data);
-    const supabase = await createClient();
+    const db = await createDbClient();
 
-    const { error } = await supabase.from("health_checks").insert({
+    const { error } = await db.from("health_checks").insert({
       service_name: parsedData.service_name,
       status: parsedData.status,
       response_time_ms: parsedData.response_time_ms || null,
@@ -87,9 +87,9 @@ export async function getSystemAlerts(
 ): Promise<{ data?: any[]; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("system_alerts")
       .select("*")
       .order("created_at", { ascending: false })

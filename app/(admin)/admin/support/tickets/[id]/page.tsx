@@ -4,7 +4,7 @@ import {
   getTicketDetailsAction,
   getAvailableAgentsAction,
 } from "@/app/actions/support/ticket.actions";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { TicketDetailClient } from "./TicketDetailClient";
 
 export async function generateMetadata({
@@ -26,8 +26,8 @@ export default async function SupportTicketDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: authData } = await supabase.auth.getUser();
+  const db = await createDbClient();
+  const { data: authData } = await db.auth.getUser();
   const currentUserId = authData?.user?.id;
 
   const [{ data: ticket, error }, agentsRes] = await Promise.all([

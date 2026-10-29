@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { ReturnsService } from "@/services/shipping/returns.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,11 +45,11 @@ export default async function CustomerReturnDetailPage({
   params,
 }: ReturnDetailPageProps) {
   const { id } = await params;
-  const supabase = await createClient();
+  const db = await createDbClient();
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect(`/auth/login?redirect=/account/returns/${id}`);

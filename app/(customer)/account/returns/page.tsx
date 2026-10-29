@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { ReturnsService } from "@/services/shipping/returns.service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,10 +79,10 @@ const STATUS_BADGES: Record<
 };
 
 export default async function CustomerReturnsPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?redirect=/account/returns");

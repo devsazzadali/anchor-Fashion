@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { CustomerService } from "@/lib/services/customer.service";
 import { auth, getServerSession } from "@/lib/auth/server";
-import { createClient } from "@/lib/supabase/server";
-// Storage needs migration from Supabase to Neon/S3, temporarily keeping createAdminClient for image upload only if it exists
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createDbClient } from "@/lib/db/client";
+// Image uploads go through the data layer's storage (local uploads directory)
+import { createAdminDbClient } from "@/lib/db/client";
 import { WalletService } from "@/services/wallet.service";
 import { LoyaltyService } from "@/services/loyalty.service";
 import { verifyAuthenticated } from "@/lib/security/roles";
+import { prisma } from "@/lib/prisma";
+import { ReviewRepository } from "@/lib/repositories/catalog/review.repository";
 
 const customerService = new CustomerService();
 
@@ -65,16 +67,31 @@ export async function uploadAvatarAction(formData: FormData) {
       return { success: false, error: "File size exceeds 5MB limit" };
     }
 
-    const fileExt = file.name.split(".").pop() || "jpg";
+    // SECURITY: allow-list image MIME types and derive the stored extension
+    // from the validated type — previously any file (e.g. .html/.svg) could
+    // be stored under a customer-controlled extension and content type.
+    const AVATAR_MIME_TO_EXT: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+    };
+    const fileExt = AVATAR_MIME_TO_EXT[(file.type || "").toLowerCase()];
+    if (!fileExt) {
+      return {
+        success: false,
+        error: "Invalid file type. Only JPG, PNG, and WebP images are permitted",
+      };
+    }
+
     const fileName = `avatars/${user.id}-${Date.now()}.${fileExt}`;
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
     const { error: uploadError } = await admin.storage
       .from("media")
       .upload(fileName, buffer, {
-        contentType: file.type || "image/jpeg",
+        contentType: file.type,
         upsert: true,
       });
 
@@ -168,9 +185,9 @@ export async function fetchLoyaltyAction() {
   await verifyAuthenticated();
   try {
     const userId = await getUserId();
-    const supabase = await createClient();
+    const db = await createDbClient();
 
-    const { data: loyalty, error: loyaltyError } = await supabase
+    const { data: loyalty, error: loyaltyError } = await db
       .from("loyalty_accounts")
       .select("*")
       .eq("customer_id", userId)
@@ -178,11 +195,25 @@ export async function fetchLoyaltyAction() {
 
     if (loyaltyError) {
       if (loyaltyError.code === "PGRST116")
-        return { success: true, data: { tier: "MEMBER", points_balance: 0 } };
+        return {
+          success: true,
+          data: { tier: "MEMBER", points_balance: 0, lifetime_points: 0 },
+        };
       throw loyaltyError;
     }
 
-    return { success: true, data: loyalty };
+    return {
+      success: true,
+      data: {
+        ...loyalty,
+        // The loyalty page reads `lifetime_points`; the stored column is
+        // total_points_earned — expose it under the name the UI consumes.
+        lifetime_points:
+          (loyalty as any).lifetime_points ??
+          (loyalty as any).total_points_earned ??
+          0,
+      },
+    };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -204,12 +235,12 @@ export async function fetchAccountSummaryAction() {
   await verifyAuthenticated();
   try {
     const userId = await getUserId();
-    const supabase = await createClient();
+    const db = await createDbClient();
 
     const [walletRes, loyaltyRes, ordersRes] = await Promise.all([
       fetchWalletAction(),
       fetchLoyaltyAction(),
-      supabase
+      db
         .from("orders")
         .select("id", { count: "exact" })
         .eq("customer_id", userId)
@@ -219,6 +250,10 @@ export async function fetchAccountSummaryAction() {
         ),
     ]);
 
+    const tickets = await customerService
+      .getTickets(userId)
+      .catch(() => [] as any[]);
+
     return {
       success: true,
       data: {
@@ -227,12 +262,38 @@ export async function fetchAccountSummaryAction() {
         currency: walletRes.data?.currency || "BDT",
         loyaltyPoints: loyaltyRes.data?.points_balance || 0,
         loyaltyTier: loyaltyRes.data?.tier || "MEMBER",
-        supportTickets: 0, // Can be replaced by actual count
+        supportTickets: tickets.length,
       },
     };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
+}
+
+export async function updateAddressAction(id: string, formData: FormData) {
+  // SECURITY: server actions are public endpoints; authorize every call.
+  // The service/repository additionally scope the update to addresses
+  // owned by this user (IDOR guard).
+  await verifyAuthenticated();
+  const userId = await getUserId();
+
+  await customerService.updateAddress(id, userId, {
+    title: (formData.get("title") as string) || "Home",
+    first_name: formData.get("first_name") as string,
+    last_name: formData.get("last_name") as string,
+    phone: formData.get("phone") as string,
+    address_line_1: formData.get("address_line_1") as string,
+    address_line_2: formData.get("address_line_2") as string,
+    city: formData.get("city") as string,
+    state: formData.get("state") as string,
+    zip: formData.get("zip") as string,
+    country: (formData.get("country") as string) || "US",
+    is_default_shipping: formData.get("is_default_shipping") === "true",
+    is_default_billing: formData.get("is_default_billing") === "true",
+  });
+
+  revalidatePath("/account/addresses");
+  return { success: true };
 }
 
 export async function deleteAddressAction(id: string) {
@@ -366,10 +427,10 @@ export async function fetchPurchasedProductsAction(): Promise<{
   await verifyAuthenticated();
   try {
     const userId = await getUserId();
-    const supabase = await createClient();
+    const db = await createDbClient();
 
     // Fetch user's orders
-    const { data: orders, error: ordersError } = await supabase
+    const { data: orders, error: ordersError } = await db
       .from("orders")
       .select("id, order_number")
       .eq("customer_id", userId);
@@ -383,7 +444,7 @@ export async function fetchPurchasedProductsAction(): Promise<{
     }
 
     const orderIds = (orders || []).map((o: any) => o.id);
-    const { data: items } = await supabase
+    const { data: items } = await db
       .from("order_items")
       .select("product_id, product_name, order_id")
       .in("order_id", orderIds)
@@ -414,24 +475,9 @@ export async function fetchPurchasedProductsAction(): Promise<{
       }
     }
 
-    if (purchased.length === 0) {
-      const { data: catalogProducts } = await supabase
-        .from("products")
-        .select("id, name")
-        .eq("status", "ACTIVE")
-        .limit(10);
-
-      return {
-        success: true,
-        data: (catalogProducts || []).map((p: any) => ({
-          productId: p.id,
-          productName: p.name,
-          orderId: "",
-          orderNumber: "Store Product",
-        })),
-      };
-    }
-
+    // Only products the customer actually purchased may be offered for
+    // review. (Previously this fell back to returning random catalog
+    // products labelled as purchases when the customer had bought nothing.)
     return { success: true, data: purchased };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -452,7 +498,7 @@ export async function createReviewAction(data: {
   await verifyAuthenticated();
   try {
     const userId = await getUserId();
-    const adminClient = createAdminClient();
+    const adminClient = createAdminDbClient();
 
     if (data.rating < 1 || data.rating > 5) {
       return { error: "Rating must be between 1 and 5" };
@@ -469,75 +515,45 @@ export async function createReviewAction(data: {
       return { error: "Review is too long (maximum 2000 characters)" };
     }
 
-    // Ensure customer_profiles record exists to satisfy foreign key constraint
-    const { data: customerProfile } = await adminClient
-      .from("customer_profiles")
-      .select("id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (!customerProfile) {
-      const { data: staffProfile } = await adminClient
-        .from("profiles")
-        .select("first_name, last_name, phone, avatar_url")
-        .eq("id", userId)
-        .maybeSingle();
-
-      const { user } = await getServerSession();
-
-      await adminClient.from("customer_profiles").upsert({
+    // Reviews live in the `reviews` table (the PDP and admin moderation read
+    // it via Prisma). The previous implementation wrote to a Supabase-era
+    // `customer_reviews` table that does not exist in this schema, so every
+    // submission silently vanished into the data layer's graceful-empty path.
+    //
+    // Ensure a profiles row exists so the reviews.user_id FK holds, and take
+    // the display name from it.
+    const { user } = await getServerSession();
+    const profile = await prisma.profile.upsert({
+      where: { id: userId },
+      update: {},
+      create: {
         id: userId,
-        first_name:
-          staffProfile?.first_name ||
-          user?.user_metadata?.first_name ||
-          (user?.user_metadata as any)?.name ||
-          "Customer",
-        last_name:
-          staffProfile?.last_name ||
-          user?.user_metadata?.last_name ||
-          "",
         email: user?.email || "",
-        phone: staffProfile?.phone || null,
-        avatar_url: staffProfile?.avatar_url || null,
-        is_active: true,
-      });
-    }
+        firstName:
+          (user as any)?.user_metadata?.first_name ||
+          user?.name?.split(" ")[0] ||
+          "Customer",
+        lastName:
+          (user as any)?.user_metadata?.last_name ||
+          user?.name?.split(" ").slice(1).join(" ") ||
+          "",
+      },
+    });
+    const customerName =
+      [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim() ||
+      user?.name ||
+      "Customer";
 
-    // Check if user has an order for this product (for verified purchase badge)
-    let linkedOrderId: string | null = data.orderId || null;
-
-    if (!linkedOrderId) {
-      const { data: userOrders } = await adminClient
-        .from("orders")
-        .select("id, status")
-        .eq("customer_id", userId);
-
-      if (userOrders && userOrders.length > 0) {
-        const orderIds = userOrders.map((o: any) => o.id);
-        const { data: matchingItem } = await adminClient
-          .from("order_items")
-          .select("order_id")
-          .eq("product_id", data.productId)
-          .in("order_id", orderIds)
-          .limit(1)
-          .maybeSingle();
-
-        if (matchingItem) {
-          linkedOrderId = matchingItem.order_id;
-        }
-      }
-    }
-
-    // Insert new review (customers can submit multiple reviews for the same product)
+    // Insert the review into the real table.
     const { data: review, error: insertError } = await adminClient
-      .from("customer_reviews")
+      .from("reviews")
       .insert({
-        customer_id: userId,
         product_id: data.productId,
-        order_id: linkedOrderId,
+        user_id: userId,
+        customer_name: customerName,
         rating: data.rating,
         title: data.title || null,
-        review_text: reviewContent,
+        comment: reviewContent,
         images: data.images || [],
         is_approved: true,
       })
@@ -546,22 +562,8 @@ export async function createReviewAction(data: {
 
     if (insertError) throw insertError;
 
-    // Recalculate and update product average rating
-    const { data: prodReviews } = await adminClient
-      .from("customer_reviews")
-      .select("rating")
-      .eq("product_id", data.productId)
-      .eq("is_approved", true);
-
-    if (prodReviews && prodReviews.length > 0) {
-      const avg =
-        prodReviews.reduce((sum: number, r: any) => sum + (r.rating || 0), 0) /
-        prodReviews.length;
-      await adminClient
-        .from("products")
-        .update({ average_rating: Number(avg.toFixed(2)) })
-        .eq("id", data.productId);
-    }
+    // Keep products.rating / review_count truthful (real aggregates).
+    await ReviewRepository.recalculateProductRating(data.productId);
 
     // Revalidate paths so reviews appear immediately
     const { data: prod } = await adminClient
@@ -589,28 +591,18 @@ export async function topUpWalletAction(data: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyAuthenticated();
-  try {
-    const userId = await getUserId();
-    if (!data.amount || data.amount <= 0) {
-      return { success: false, error: "Amount must be greater than zero" };
-    }
-    if (!data.paymentRef || !data.paymentRef.trim()) {
-      return { success: false, error: "Payment transaction reference is required" };
-    }
-
-    const result = await WalletService.topUp({
-      userId,
-      amount: Number(data.amount),
-      paymentMethod: data.paymentMethod || "bKash / Nagad",
-      paymentRef: data.paymentRef.trim(),
-    });
-
-    revalidatePath("/account/wallet");
-    revalidatePath("/account");
-    return { success: true, data: result };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
+  // SECURITY / MONEY INTEGRITY: this action previously credited the wallet
+  // instantly from a customer-typed payment reference with NO gateway
+  // verification and NO staff approval — any signed-in customer could mint
+  // themselves arbitrary balance. Wallet credit is therefore only issued
+  // through verified paths (staff-approved manual payments on orders, and
+  // staff-processed refund store-credit via WalletService.topUp internally).
+  // Fail closed until a verified top-up flow exists.
+  return {
+    success: false,
+    error:
+      "Wallet top-up is unavailable online. Wallet credit is added by our team after a verified payment — please contact support if you have made a payment.",
+  };
 }
 
 export async function withdrawWalletAction(data: {
@@ -691,6 +683,13 @@ export async function redeemLoyaltyPointsAction(data: {
       rewardId: data.rewardId,
     });
 
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Redemption failed. Please try again.",
+      };
+    }
+
     revalidatePath("/account/loyalty");
     revalidatePath("/account/rewards");
     revalidatePath("/account/wallet");
@@ -706,15 +705,34 @@ export async function deleteCustomerReviewAction(reviewId: string): Promise<{ su
   await verifyAuthenticated();
   try {
     const userId = await getUserId();
-    const supabase = await createClient();
+    const adminClient = createAdminDbClient();
 
-    const { error } = await supabase
-      .from("customer_reviews")
+    // Reviews live in `reviews` (scoped by user_id); capture the product so
+    // its rating aggregates can be refreshed after the delete.
+    const { data: existing } = await adminClient
+      .from("reviews")
+      .select("id, product_id")
+      .eq("id", reviewId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!existing) {
+      return { success: false, error: "Review not found" };
+    }
+
+    const { error } = await adminClient
+      .from("reviews")
       .delete()
       .eq("id", reviewId)
-      .eq("customer_id", userId);
+      .eq("user_id", userId);
 
     if (error) throw error;
+
+    if ((existing as any).product_id) {
+      await ReviewRepository.recalculateProductRating(
+        (existing as any).product_id
+      );
+    }
 
     revalidatePath("/account/reviews");
     revalidatePath("/account");
@@ -731,10 +749,13 @@ export async function voteReviewHelpfulAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyAuthenticated();
   try {
-    const adminClient = createAdminClient();
+    const adminClient = createAdminDbClient();
 
+    // Votes are stored on the real `reviews.helpful_votes` column (added in
+    // Phase 5); the previous implementation targeted the nonexistent
+    // `customer_reviews` table and could never persist a vote.
     const { data: review, error: fetchErr } = await adminClient
-      .from("customer_reviews")
+      .from("reviews")
       .select("id, helpful_votes, product_id")
       .eq("id", reviewId)
       .maybeSingle();
@@ -747,7 +768,7 @@ export async function voteReviewHelpfulAction(
     const nextVotes = increment ? currentVotes + 1 : Math.max(0, currentVotes - 1);
 
     const { error: updateErr } = await adminClient
-      .from("customer_reviews")
+      .from("reviews")
       .update({ helpful_votes: nextVotes })
       .eq("id", reviewId);
 

@@ -3,12 +3,19 @@
 import { blogService } from "@/services/blog.service";
 import { BlogPost, BlogCategory, BlogTag } from "@/types/blog.types";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createDbClient } from "@/lib/db/client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 
 export async function getPosts(status?: string): Promise<BlogPost[]> {
   try {
+    // SECURITY: server actions are public endpoints. Only the published list
+    // is public; any other status (or the unfiltered all-statuses list used
+    // by the admin/manager CMS) requires a staff session, otherwise drafts
+    // would be enumerable anonymously.
+    if (String(status || "").toLowerCase() !== "published") {
+      await verifyStaff();
+    }
     return await blogService.getPosts(status);
   } catch (error) {
     console.error("[getPosts Error]:", error);
@@ -27,6 +34,9 @@ export async function getPostBySlug(slug: string): Promise<BlogPost | null> {
 
 export async function getPostById(id: string): Promise<BlogPost | null> {
   try {
+    // SECURITY: only consumer is the admin CMS edit page; by-id reads can
+    // fetch unpublished drafts, so require staff (fails closed to null).
+    await verifyStaff();
     return await blogService.getPostById(id);
   } catch (error) {
     console.error("[getPostById Error]:", error);
@@ -40,10 +50,10 @@ export async function createPost(data: unknown): Promise<BlogPost> {
   let authorId = (data as any)?.author_id;
 
   try {
-    const supabase = await createClient();
+    const db = await createDbClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
     if (!authorId || authorId === "00000000-0000-0000-0000-000000000000") {
       authorId = user?.id;
@@ -54,7 +64,7 @@ export async function createPost(data: unknown): Promise<BlogPost> {
 
   if (!authorId) {
     try {
-      const admin = createAdminClient();
+      const admin = createAdminDbClient();
       const { data: profile } = await admin
         .from("profiles")
         .select("id")

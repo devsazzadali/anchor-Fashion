@@ -367,7 +367,7 @@ export function CustomerActionButtons({
                 ) : (
                   <div className="p-2.5 rounded-md border border-dashed border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
                     Customer registered prior to password logging and is stored
-                    hashed in Supabase. Set a new password below to view and
+                    hashed in Neon Auth. Set a new password below to view and
                     manage it anytime.
                   </div>
                 )}

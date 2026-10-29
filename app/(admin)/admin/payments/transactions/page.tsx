@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   Table,
   TableBody,
@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/badge";
 export const revalidate = 0;
 
 export default async function TransactionsPage() {
-  const supabase = await createAdminClient();
-  const { data: transactions, error } = await supabase
+  const db = await createAdminDbClient();
+  const { data: transactions, error } = await db
     .from("payment_transactions")
     .select(
       `

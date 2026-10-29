@@ -75,6 +75,25 @@ export default async function AccountOverviewPage() {
         take: 5,
       });
 
+      // Accurate 30-day figures over the full window (not just the 5
+      // display orders): spending excludes cancelled/failed/refunded/
+      // returned orders, matching the finance reporting rule.
+      const windowWhere = {
+        OR: [{ customerId: customerId }, { profileId: customerId }],
+        createdAt: { gte: thirtyDaysAgo },
+      };
+      recentOrdersCount = await prisma.order.count({ where: windowWhere });
+      const spendingAgg = await prisma.order.aggregate({
+        where: {
+          ...windowWhere,
+          status: {
+            notIn: ["CANCELLED", "FAILED", "REFUNDED", "RETURNED"],
+          },
+        },
+        _sum: { totalAmount: true },
+      });
+      monthlySpending = Number(spendingAgg._sum.totalAmount || 0);
+
       recentOrders = orders.map((o) => ({
         id: o.id,
         order_number: o.orderNumber,
@@ -83,14 +102,6 @@ export default async function AccountOverviewPage() {
         created_at: o.createdAt.toISOString(),
       }));
 
-      const ordersLast30Days = orders.filter(
-        (o) => o.createdAt >= thirtyDaysAgo
-      );
-      recentOrdersCount = ordersLast30Days.length;
-      monthlySpending = ordersLast30Days.reduce(
-        (acc, o) => acc + Number(o.totalAmount || 0),
-        0
-      );
     } catch (err) {
       console.error("[Account Overview] Orders lookup error:", err);
     }

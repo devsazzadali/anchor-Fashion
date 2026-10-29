@@ -4,10 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { OrderService } from "@/lib/services/oms/order.service";
 import { OrderRepository } from "@/lib/repositories/oms/order.repository";
 import {
-  CreateOrderInput,
   UpdateOrderStatusInput,
   updateOrderStatusSchema,
-  createOrderSchema,
 } from "@/lib/validations/oms";
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "@/lib/auth/server";
@@ -18,18 +16,10 @@ import { PaymentService } from "@/services/payment/payment.service";
 const orderService = new OrderService();
 const orderRepo = new OrderRepository();
 
-export async function createOrderAction(input: CreateOrderInput) {
-  // SECURITY: server actions are public endpoints; authorize every call.
-  await verifyAuthenticated();
-  try {
-    const validatedData = createOrderSchema.parse(input);
-    const newOrder = await orderService.createOrder(validatedData);
-    revalidatePath("/admin/orders");
-    return { success: true, data: newOrder };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-}
+// NOTE (Phase 11, owner rule 2026-10-29): there is intentionally NO
+// create-order action here anymore. Anchor Fashion has no manual sales —
+// staff must never create orders. Every order is placed by a customer from
+// their own account through the storefront checkout (OrderService.placeOrder).
 
 export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
   // SECURITY: server actions are public endpoints; authorize every call.
@@ -59,9 +49,9 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
 
     if (validatedData.reason) {
       try {
-        const { createAdminClient } = await import("@/lib/supabase/server");
-        const adminSupabase = await createAdminClient();
-        await adminSupabase.from("order_notes").insert({
+        const { createAdminDbClient } = await import("@/lib/db/client");
+        const adminDb = await createAdminDbClient();
+        await adminDb.from("order_notes").insert({
           order_id: validatedData.order_id,
           author_id: userId || null,
           note: `Status updated to ${validatedData.new_status}: ${validatedData.reason}`,
@@ -75,9 +65,9 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
     // Send Order Confirmation Email
     if (validatedData.new_status === "confirmed") {
       try {
-        const { createAdminClient } = await import("@/lib/supabase/server");
-        const adminSupabase = await createAdminClient();
-        const details = await orderService.getOrderDetails(validatedData.order_id, adminSupabase);
+        const { createAdminDbClient } = await import("@/lib/db/client");
+        const adminDb = await createAdminDbClient();
+        const details = await orderService.getOrderDetails(validatedData.order_id, adminDb);
         
         const customerEmail = details?.customer?.email || (details as any)?.customer_email;
         if (details && customerEmail) {
@@ -155,7 +145,22 @@ export async function fetchOrdersAction(params: {
     const isStaff = await isStaffOrManager(user);
 
     if (!isStaff) {
-      params.customerId = user.id;
+      // Phase 12: scope by the customer's PROFILE id. Profiles are normally
+      // bound 1:1 to the auth user id, but a profile created from guest
+      // checkout (auto-profile) or matched by email can carry a different
+      // id — resolving by the session email (the same binding
+      // resolveUserRole uses) keeps those orders visible in /account.
+      let scopedId = user.id;
+      if (user.email) {
+        const profile = await prisma.profile
+          .findUnique({
+            where: { email: user.email.toLowerCase().trim() },
+            select: { id: true },
+          })
+          .catch(() => null);
+        if (profile?.id) scopedId = profile.id;
+      }
+      params.customerId = scopedId;
     }
 
     const orders = await orderRepo.getOrders(params, null);

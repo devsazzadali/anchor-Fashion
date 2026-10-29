@@ -223,10 +223,10 @@ export default function AdminOrderDetailsPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">
-                          ${Number(item.unit_price).toFixed(2)} x {item.quantity}
+                          ৳{Number(item.unit_price).toFixed(2)} x {item.quantity}
                         </p>
                         <p className="font-bold text-foreground font-mono">
-                          ${Number(item.line_total).toFixed(2)}
+                          ৳{Number(item.line_total).toFixed(2)}
                         </p>
                       </div>
                     </div>
@@ -239,25 +239,25 @@ export default function AdminOrderDetailsPage() {
                 <div className="w-72 space-y-2 text-sm">
                   <div className="flex justify-between text-muted-foreground">
                     <span>Subtotal:</span>
-                    <span className="font-mono">${Number(order.subtotal).toFixed(2)}</span>
+                    <span className="font-mono">৳{Number(order.subtotal).toFixed(2)}</span>
                   </div>
                   {Number(order.discount_total) > 0 && (
                     <div className="flex justify-between text-emerald-600">
                       <span>Discount:</span>
-                      <span className="font-mono">-${Number(order.discount_total).toFixed(2)}</span>
+                      <span className="font-mono">-৳{Number(order.discount_total).toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-muted-foreground">
                     <span>Shipping:</span>
-                    <span className="font-mono">${Number(order.shipping_total).toFixed(2)}</span>
+                    <span className="font-mono">৳{Number(order.shipping_total).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Estimated Tax:</span>
-                    <span className="font-mono">${Number(order.tax_total).toFixed(2)}</span>
+                    <span>VAT:</span>
+                    <span className="font-mono">৳{Number(order.tax_total).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2 text-lg font-bold">
                     <span>Total:</span>
-                    <span className="font-mono text-primary">${Number(order.grand_total).toFixed(2)}</span>
+                    <span className="font-mono text-primary">৳{Number(order.grand_total).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -735,7 +735,7 @@ export default function AdminOrderDetailsPage() {
                       className="w-full text-xs gap-1.5 h-8"
                       asChild
                     >
-                      <Link href={`/admin/crm/customers?search=${encodeURIComponent(customer.email || customer.full_name)}`}>
+                      <Link href={`/admin/customers?q=${encodeURIComponent(customer.email || customer.full_name)}`}>
                         <ExternalLink className="h-3.5 w-3.5" />
                         View Customer in CRM
                       </Link>

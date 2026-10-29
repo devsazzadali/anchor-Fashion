@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { CustomerService } from "@/lib/services/customer.service";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
@@ -10,10 +10,10 @@ export const metadata: Metadata = {
 };
 
 export default async function NotificationsPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login");

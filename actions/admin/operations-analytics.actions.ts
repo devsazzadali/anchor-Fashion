@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyManager } from "@/lib/security/roles";
 
 export interface OperationsMetrics {
@@ -50,7 +50,7 @@ export async function getOperationsAnalyticsAction(timeRange: "7d" | "30d" | "90
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Calculate cutoff date
     let cutoffDate: Date | null = new Date();
@@ -69,7 +69,7 @@ export async function getOperationsAnalyticsAction(timeRange: "7d" | "30d" | "90
     const cutoffIso = cutoffDate ? cutoffDate.toISOString() : null;
 
     // 1. Orders aggregation
-    let ordersQuery = supabase
+    let ordersQuery = db
       .from("orders")
       .select("id, grand_total, status, created_at");
     if (cutoffIso) {
@@ -83,7 +83,7 @@ export async function getOperationsAnalyticsAction(timeRange: "7d" | "30d" | "90
     const averageOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
 
     // 2. Inventory aggregation
-    const { data: levels = [] } = await supabase
+    const { data: levels = [] } = await db
       .from("inventory_levels")
       .select("quantity_available, quantity_reserved, reorder_point, warehouse_id");
 
@@ -96,7 +96,7 @@ export async function getOperationsAnalyticsAction(timeRange: "7d" | "30d" | "90
     const totalVariants = safeLevels.length;
 
     // 3. Procurement (Purchase Orders) aggregation
-    let poQuery = supabase
+    let poQuery = db
       .from("purchase_orders")
       .select("id, po_number, status, total_amount, warehouse_id, created_at");
     if (cutoffIso) {
@@ -112,7 +112,7 @@ export async function getOperationsAnalyticsAction(timeRange: "7d" | "30d" | "90
     ).length;
 
     // 4. Fulfillment (Pick Lists) aggregation
-    let pickQuery = supabase
+    let pickQuery = db
       .from("pick_lists")
       .select("id, status, warehouse_id, created_at");
     if (cutoffIso) {
@@ -129,7 +129,7 @@ export async function getOperationsAnalyticsAction(timeRange: "7d" | "30d" | "90
       totalPickLists > 0 ? Math.round((completedPickLists / totalPickLists) * 100) : 100;
 
     // 5. Returns aggregation
-    let returnsQuery = supabase
+    let returnsQuery = db
       .from("returns")
       .select("id, status, refund_amount, created_at");
     if (cutoffIso) {
@@ -146,7 +146,7 @@ export async function getOperationsAnalyticsAction(timeRange: "7d" | "30d" | "90
     );
 
     // 6. Warehouses breakdown
-    const { data: warehouses = [] } = await supabase
+    const { data: warehouses = [] } = await db
       .from("warehouses")
       .select("id, name, warehouse_code, is_active");
 

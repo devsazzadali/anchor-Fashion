@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { StockTransfersClient } from "@/features/inventory/components/StockTransfersClient";
 import { getWarehouses, getVariants } from "@/app/actions/admin/procurement.actions";
 
@@ -11,14 +11,14 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function TransfersPage() {
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
 
   const [
     transfersRes,
     whRes,
     varRes,
   ] = await Promise.all([
-    supabase
+    db
       .from("stock_movements")
       .select(`
         *,

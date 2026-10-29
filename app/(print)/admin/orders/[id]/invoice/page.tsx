@@ -1,14 +1,15 @@
 import { getOrderDetailsAction } from "@/app/actions/oms/order.actions";
 import { notFound, redirect } from "next/navigation";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { STAFF_ROLES } from "@/lib/constants/auth";
 import { InvoiceToolbar } from "@/components/print/invoice-toolbar";
 import { InvoiceSheet, InvoiceData } from "@/components/print/invoice-sheet";
+import { getStoreInfo } from "@/lib/actions/settings.actions";
 
 export default async function AdminPrintInvoicePage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const db = await createDbClient();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?next=/admin");
@@ -17,13 +18,16 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
   // Basic authorization check
   let role = user.user_metadata?.role || user.app_metadata?.role;
   if (!role) {
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from("profiles")
       .select("roles(name)")
       .eq("id", user.id)
       .single();
     role = (profile?.roles as any)?.name || "CUSTOMER";
   }
+
+  // Canonical role names are UPPERCASE; normalize before the allow-list check.
+  role = String(role || "").toUpperCase().trim();
 
   if (!STAFF_ROLES.includes(role)) {
     redirect("/account/profile");
@@ -39,8 +43,8 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
   // Fetch courier shipments if available
   let activeShipment: any = null;
   try {
-    const adminSupabase = await createAdminClient();
-    const { data: shipments } = await adminSupabase
+    const adminDb = await createAdminDbClient();
+    const { data: shipments } = await adminDb
       .from("shipments")
       .select("*, courier_providers(name, logo_url)")
       .eq("order_id", order.id)
@@ -101,14 +105,14 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
   const recipientPhone = shippingAddress?.phone || customerPhone;
 
   const formatAddress = (addr: any) => {
-    if (!addr) return "Standard Delivery Address";
+    if (!addr) return "";
     const line1 = addr.address_line_1 || addr.street || "";
     const line2 = addr.address_line_2 ? `, ${addr.address_line_2}` : "";
     const city = addr.city ? `, ${addr.city}` : "";
     const zip = addr.zip || addr.postal_code ? ` - ${addr.zip || addr.postal_code}` : "";
     const country = addr.country ? `, ${addr.country}` : ", Bangladesh";
     const full = `${line1}${line2}${city}${zip}${country}`.replace(/^,\s*/, "");
-    return full || "Banani, Dhaka, Bangladesh";
+    return full;
   };
 
   const deliveryAddress = formatAddress(shippingAddress);
@@ -121,8 +125,12 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
   const subtotal = Number(order.subtotal ?? items.reduce((acc: number, it: any) => acc + (Number(it.line_total ?? it.total_price ?? (Number(it.unit_price) * Number(it.quantity)))), 0));
   const grandTotal = Number(order.grand_total ?? order.total_amount ?? subtotal);
 
-  const courierName = activeShipment?.courier_providers?.name || activeShipment?.courier_provider_code || "Anchor Express Delivery";
+  const courierName = activeShipment?.courier_providers?.name || activeShipment?.courier_provider_code || "Standard Courier";
   const trackingNumber = activeShipment?.tracking_number || null;
+
+  // Branch identity from store settings — previously a hardcoded person's
+  // name and a hardcoded Rangpur address printed on every invoice.
+  const storeInfo = await getStoreInfo().catch(() => null);
 
   const invoiceData: InvoiceData = {
     invoiceNumber,
@@ -149,10 +157,9 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
       discountTotal: Number(order.discount_total || 0),
       taxTotal: Number(order.tax_total || 0),
       grandTotal,
-      servedBy: "Shojol Mia",
       cashier: "Web",
-      branchName: "Dhaka Branch",
-      branchAddress: "H-271, Station road, Jahaj company mor, Rangpur , 5400",
+      branchName: storeInfo?.store_name || "Anchor Fashion",
+      branchAddress: storeInfo?.address || "",
     },
     items: items.map((it: any) => ({
       id: it.id,

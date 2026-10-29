@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   try {
     await verifyStaff();
     // For a real dashboard, you'd aggregate this in SQL, but for MVP we fetch top logs
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("ai_request_logs")
       .select("*")
       .order("created_at", { ascending: false })

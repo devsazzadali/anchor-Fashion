@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { WishlistGrid } from "@/components/wishlist/wishlist-grid";
 import { fetchWishlistAction } from "@/lib/actions/wishlist.actions";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Share2, Plus } from "lucide-react";
@@ -12,10 +12,10 @@ export const metadata: Metadata = {
 };
 
 export default async function WishlistPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?redirect=/account/wishlist");

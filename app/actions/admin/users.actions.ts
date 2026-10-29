@@ -1,16 +1,16 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifySuperAdmin } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
 export async function fetchAdminUsersAction() {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Fetch all profiles that have a role
-    const { data: profiles, error: profileErr } = await supabase
+    const { data: profiles, error: profileErr } = await db
       .from("profiles")
       .select("*, roles(name, description)")
       .not("role_id", "is", null);
@@ -18,7 +18,7 @@ export async function fetchAdminUsersAction() {
     if (profileErr) throw profileErr;
 
     // Fetch auth users to get emails
-    const { data: authData, error: authErr } = await supabase.auth.admin.listUsers();
+    const { data: authData, error: authErr } = await db.auth.admin.listUsers();
     if (authErr) throw authErr;
 
     const usersList = (profiles || []).map((p: any) => {
@@ -51,10 +51,10 @@ export async function toggleUserStatusAction(userId: string, isActive: boolean) 
       throw new Error("You cannot change your own status.");
     }
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     
     // Update profile status
-    const { error: profileErr } = await supabase
+    const { error: profileErr } = await db
       .from("profiles")
       .update({ is_active: isActive })
       .eq("id", userId);
@@ -63,9 +63,9 @@ export async function toggleUserStatusAction(userId: string, isActive: boolean) 
 
     // Update Auth status (ban/unban)
     if (!isActive) {
-      await supabase.auth.admin.updateUserById(userId, { ban_duration: "876000h" }); // Ban for 100 years
+      await db.auth.admin.updateUserById(userId, { ban_duration: "876000h" }); // Ban for 100 years
     } else {
-      await supabase.auth.admin.updateUserById(userId, { ban_duration: "none" }); // Remove ban
+      await db.auth.admin.updateUserById(userId, { ban_duration: "none" }); // Remove ban
     }
 
     revalidatePath("/admin/users");
@@ -86,12 +86,12 @@ export async function createAdminUserAction(data: {
 }) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Create auth user
     const finalPassword = data.password || (Math.random().toString(36).slice(-8) + "A1!"); 
     
-    const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+    const { data: authData, error: authErr } = await db.auth.admin.createUser({
       email: data.email,
       password: finalPassword,
       email_confirm: true,
@@ -132,7 +132,7 @@ export async function createAdminUserAction(data: {
     }
 
     // 2. Insert or Update Profile
-    const { error: profileErr } = await supabase.from("profiles").upsert({
+    const { error: profileErr } = await db.from("profiles").upsert({
       id: userId,
       email: data.email,
       first_name: data.firstName,
@@ -173,8 +173,8 @@ export async function updateUserPasswordAction(userId: string, newPassword: stri
     if (!newPassword || newPassword.trim().length < 6) {
       throw new Error("Password must be at least 6 characters long.");
     }
-    const supabase = createAdminClient();
-    const { error } = await supabase.auth.admin.updateUserById(userId, {
+    const db = createAdminDbClient();
+    const { error } = await db.auth.admin.updateUserById(userId, {
       password: newPassword.trim(),
     });
     if (error) throw error;

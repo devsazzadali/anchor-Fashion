@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +15,10 @@ export async function GET(req: Request) {
   }
 
   try {
-    const adminSupabase = createAdminClient();
+    const adminDb = createAdminDbClient();
 
     // 2. Fetch active shipments needing synchronization
-    const { data: activeShipments, error: fetchError } = await adminSupabase
+    const { data: activeShipments, error: fetchError } = await adminDb
       .from("shipments")
       .select("id, courier_provider_code, consignment_id, tracking_number, status, order_id")
       .in("status", ["pickup_requested", "picked_up", "in_transit", "out_for_delivery"])
@@ -61,7 +61,7 @@ export async function GET(req: Request) {
           liveTracking.currentStatusNormalized !== shipment.status
         ) {
           // Update DB status
-          await adminSupabase
+          await adminDb
             .from("shipments")
             .update({
               status: liveTracking.currentStatusNormalized,
@@ -71,7 +71,7 @@ export async function GET(req: Request) {
             .eq("id", shipment.id);
 
           // Add tracking event
-          await adminSupabase.from("shipment_tracking_events").insert({
+          await adminDb.from("shipment_tracking_events").insert({
             shipment_id: shipment.id,
             tracking_number: trackingIdentifier,
             status: liveTracking.currentStatusNormalized,
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
 
           // Update order if delivered
           if (liveTracking.currentStatusNormalized === "delivered" && shipment.order_id) {
-            await adminSupabase
+            await adminDb
               .from("orders")
               .update({ status: "delivered", delivered_at: new Date().toISOString() })
               .eq("id", shipment.order_id);

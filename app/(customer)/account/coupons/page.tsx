@@ -1,11 +1,11 @@
-import { createClient } from "@/lib/supabase/server-client";
+import { createDbClient } from "@/lib/db/client";
 import { CouponRepository } from "@/lib/repositories/marketing/coupon.repository";
 import { CouponsClient } from "./coupons-client";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function CouponsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const db = await createDbClient();
+  const { data: { user } } = await db.auth.getUser();
 
   // We should ideally fetch all coupons and then check user usages if needed.
   // For simplicity, we just show active ones.
@@ -14,7 +14,7 @@ export default async function CouponsPage() {
   // Also get user's used coupons
   let usedCouponIds = new Set<string>();
   if (user) {
-    const { data: usages } = await supabase
+    const { data: usages } = await db
       .from("coupon_usages")
       .select("coupon_id")
       .eq("customer_id", user.id);
@@ -27,10 +27,10 @@ export default async function CouponsPage() {
     const isUsed = usedCouponIds.has(c.id);
     let type = isUsed ? "Used" : (c.is_active ? "Available" : "Expired");
     
-    // Check expiry
+    // Check expiry (null valid_until = open-ended, never expires)
     const now = new Date();
-    const validUntil = new Date(c.valid_until);
-    if (validUntil < now) type = "Expired";
+    const validUntil = c.valid_until ? new Date(c.valid_until) : null;
+    if (validUntil && validUntil < now) type = "Expired";
 
     let discountStr = "";
     if (c.discount_type === "PERCENTAGE") {
@@ -39,7 +39,9 @@ export default async function CouponsPage() {
       discountStr = `${formatCurrency(c.value)} OFF`;
     }
 
-    let expiryStr = `Valid until ${validUntil.toLocaleDateString()}`;
+    let expiryStr = validUntil
+      ? `Valid until ${validUntil.toLocaleDateString()}`
+      : "No expiry";
     if (isUsed) expiryStr = "Already Used";
     if (type === "Expired") expiryStr = "Expired";
 

@@ -2,7 +2,7 @@ import React from "react";
 import { Metadata } from "next";
 import { ExpenseRepository } from "@/repositories/expense.repository";
 import { WarehouseRepository } from "@/repositories/warehouse.repository";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { ExpensesClient } from "@/features/finance/components/ExpensesClient";
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function ExpensesManagementPage() {
   const expenseRepo = new ExpenseRepository();
   const warehouseRepo = new WarehouseRepository();
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
 
   // Fetch real data safely in parallel
   const [expenses, warehousesResult, branchesResult] = await Promise.all([
@@ -28,7 +28,7 @@ export default async function ExpensesManagementPage() {
       return { data: [] };
     }),
     Promise.resolve(
-      supabase
+      db
         .from("branches")
         .select("id, name")
         .eq("status", "active")

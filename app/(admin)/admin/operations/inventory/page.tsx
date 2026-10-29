@@ -15,7 +15,7 @@ import {
   Plus,
 } from "lucide-react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { OperationsInventoryClient } from "@/features/inventory/components/OperationsInventoryClient";
 
 export const metadata: Metadata = {
@@ -24,8 +24,8 @@ export const metadata: Metadata = {
 };
 
 export default async function InventoryDashboard() {
-  const supabase = await createClient();
-  const { data: inventory } = await supabase
+  const db = await createDbClient();
+  const { data: inventory } = await db
     .from("inventory_levels")
     .select("*, variants(sku, price_override, sale_price, attributes, products(name, base_price)), warehouses(name)")
     .order("quantity_available", { ascending: true });

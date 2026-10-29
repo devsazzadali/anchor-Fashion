@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
 import { CourierError } from "@/lib/couriers/errors";
 import { verifyStaff } from "@/lib/security/roles";
@@ -20,12 +20,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const adminSupabase = createAdminClient();
+    const adminDb = createAdminDbClient();
 
     // 1. Fetch Order
-    const { data: order, error: orderError } = await adminSupabase
+    // Phase 8: orders store the address as a shipping_address JSON column
+    // — there is no shipping_address_id relation to embed. The old select
+    // made EVERY lookup fail, so this route 404'd for every real order.
+    const { data: order, error: orderError } = await adminDb
       .from("orders")
-      .select("*, shipping_address:shipping_address_id(*)")
+      .select("*")
       .eq("id", orderId)
       .maybeSingle();
 
@@ -38,7 +41,9 @@ export async function POST(req: Request) {
 
     // 2. Address validation
     const addr = order.shipping_address;
-    if (!addr || !addr.address_line1 || !addr.phone || !addr.first_name) {
+    const addressLine1 =
+      addr?.address_line1 || addr?.address_line_1 || addr?.address || "";
+    if (!addr || !addressLine1 || !addr.phone || !addr.first_name) {
       return NextResponse.json(
         { success: false, error: "Order is missing complete shipping address or recipient phone" },
         { status: 400 }
@@ -46,7 +51,7 @@ export async function POST(req: Request) {
     }
 
     // 3. Idempotency Check: prevent duplicate active shipments
-    const { data: existingActive } = await adminSupabase
+    const { data: existingActive } = await adminDb
       .from("shipments")
       .select("id, status")
       .eq("order_id", orderId)
@@ -78,12 +83,16 @@ export async function POST(req: Request) {
     }
 
     // 5. Calculate COD
+    // Phase 8: payment_status is stored UPPERCASE and the amount column
+    // is total_amount (grand_total does not exist on orders).
+    const paymentStatus = String(order.payment_status || "").toUpperCase();
     const isCOD =
-      order.payment_method === "COD" ||
-      order.payment_status === "unpaid" ||
-      order.payment_status === "pending";
-    const codAmount = isCOD ? Number(order.grand_total || 0) : 0;
+      String(order.payment_method || "").toUpperCase() === "COD" ||
+      paymentStatus === "UNPAID" ||
+      paymentStatus === "PENDING";
+    const codAmount = isCOD ? Number(order.total_amount || 0) : 0;
     const recipientName = `${addr.first_name || ""} ${addr.last_name || ""}`.trim();
+    const addressLine2 = addr.address_line2 || addr.address_line_2 || "";
 
     // 6. Submit consignment to provider API
     const shipmentResult = await provider.createShipment({
@@ -91,7 +100,7 @@ export async function POST(req: Request) {
       invoiceNumber: order.order_number || order.id,
       recipientName,
       recipientPhone: addr.phone,
-      recipientAddress: `${addr.address_line1}${addr.address_line2 ? `, ${addr.address_line2}` : ""}`,
+      recipientAddress: `${addressLine1}${addressLine2 ? `, ${addressLine2}` : ""}`,
       recipientCity: addr.city || "Dhaka",
       recipientZone: addr.state || "Dhaka",
       weightKg: Number(weight) || 0.5,
@@ -101,18 +110,18 @@ export async function POST(req: Request) {
     });
 
     // 7. Save shipment to DB
-    const { data: newShipment, error: insertError } = await adminSupabase
+    // (shipments has no courier_provider_id or consignment_id column —
+    // the courier reference is courier_provider_code + tracking_number.)
+    const { data: newShipment, error: insertError } = await adminDb
       .from("shipments")
       .insert({
         order_id: order.id,
         courier_provider_code: provider.code,
-        courier_provider_id: courierRecord.id,
         status: "created",
-        consignment_id: shipmentResult.consignmentId,
         tracking_number: shipmentResult.trackingCode,
         recipient_name: recipientName,
         recipient_phone: addr.phone,
-        recipient_address: addr.address_line1,
+        recipient_address: addressLine1,
         recipient_city: addr.city,
         recipient_district: addr.state,
         is_cod: isCOD,
@@ -129,7 +138,7 @@ export async function POST(req: Request) {
     }
 
     // 8. Create initial tracking event
-    await adminSupabase.from("shipment_tracking_events").insert({
+    await adminDb.from("shipment_tracking_events").insert({
       shipment_id: newShipment.id,
       tracking_number: shipmentResult.trackingCode,
       status: "created",
@@ -138,7 +147,7 @@ export async function POST(req: Request) {
     });
 
     // 9. Update order status if OMS requires it
-    await adminSupabase
+    await adminDb
       .from("orders")
       .update({ status: "ready_for_shipment" })
       .eq("id", order.id);

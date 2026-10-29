@@ -89,7 +89,7 @@ const RenderVideo = ({ content }: { content: any }) => (
   </section>
 );
 
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { STAFF_ROLES } from "@/lib/constants/auth";
 
 export default async function CMSPage({
@@ -112,10 +112,10 @@ export default async function CMSPage({
   let isAuthorizedPreview = false;
   if (isPreviewRequested) {
     try {
-      const supabase = await createClient();
+      const db = await createDbClient();
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await db.auth.getUser();
 
       if (user) {
         const role = user.user_metadata?.role || user.app_metadata?.role || "";

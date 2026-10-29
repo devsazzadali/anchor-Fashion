@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -12,9 +12,9 @@ export async function createGroupAction(data: {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from("customer_segments")
       .select("id")
       .ilike("name", data.name.trim())
@@ -24,7 +24,7 @@ export async function createGroupAction(data: {
       return { error: "A group with this name already exists." };
     }
 
-    const { data: newGroup, error } = await supabase
+    const { data: newGroup, error } = await db
       .from("customer_segments")
       .insert({
         name: data.name.trim(),
@@ -50,12 +50,12 @@ export async function deleteGroupAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // First delete any members
-    await supabase.from("customer_segment_members").delete().eq("segment_id", id);
+    await db.from("customer_segment_members").delete().eq("segment_id", id);
 
-    const { error } = await supabase
+    const { error } = await db
       .from("customer_segments")
       .delete()
       .eq("id", id);
@@ -77,9 +77,9 @@ export async function updateGroupAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await db
       .from("customer_segments")
       .update({
         name: data.name.trim(),
@@ -113,9 +113,9 @@ export async function getGroupMembersAction(groupId: string): Promise<{
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { data: group, error: groupErr } = await supabase
+    const { data: group, error: groupErr } = await db
       .from("customer_segments")
       .select("*")
       .eq("id", groupId)
@@ -128,7 +128,7 @@ export async function getGroupMembersAction(groupId: string): Promise<{
     let members: any[] = [];
 
     // 1. Fetch explicitly assigned static members by customer_id
-    const { data: directRows, error: directErr } = await supabase
+    const { data: directRows, error: directErr } = await db
       .from("customer_segment_members")
       .select("customer_id, added_at")
       .eq("segment_id", groupId);
@@ -136,7 +136,7 @@ export async function getGroupMembersAction(groupId: string): Promise<{
     if (!directErr && directRows && directRows.length > 0) {
       const customerIds = directRows.map((r: any) => r.customer_id).filter(Boolean);
       if (customerIds.length > 0) {
-        const { data: profiles } = await supabase
+        const { data: profiles } = await db
           .from("customer_profiles")
           .select("id, first_name, last_name, email, phone, created_at")
           .in("id", customerIds);
@@ -150,7 +150,7 @@ export async function getGroupMembersAction(groupId: string): Promise<{
 
       if (name.includes("VIP")) {
         // Query VIPs from crm_customers
-        const { data: crmMatches } = await supabase
+        const { data: crmMatches } = await db
           .from("crm_customers")
           .select("profile_id")
           .or("is_vip.eq.true,health_score.gte.80")
@@ -158,7 +158,7 @@ export async function getGroupMembersAction(groupId: string): Promise<{
 
         const profileIds = (crmMatches || []).map((m: any) => m.profile_id).filter(Boolean);
         if (profileIds.length > 0) {
-          const { data: vipProfiles } = await supabase
+          const { data: vipProfiles } = await db
             .from("customer_profiles")
             .select("id, first_name, last_name, email, phone, created_at")
             .in("id", profileIds)
@@ -167,14 +167,14 @@ export async function getGroupMembersAction(groupId: string): Promise<{
         }
       } else if (name.includes("REPEAT") || name.includes("FREQUENT")) {
         // Customers with multiple orders
-        const { data: orders } = await supabase.from("orders").select("customer_id");
+        const { data: orders } = await db.from("orders").select("customer_id");
         const orderCounts: Record<string, number> = {};
         orders?.forEach((o: any) => {
           if (o.customer_id) orderCounts[o.customer_id] = (orderCounts[o.customer_id] || 0) + 1;
         });
         const repeatIds = Object.keys(orderCounts).filter((id) => orderCounts[id] >= 2);
         if (repeatIds.length > 0) {
-          const { data: repProfiles } = await supabase
+          const { data: repProfiles } = await db
             .from("customer_profiles")
             .select("id, first_name, last_name, email, phone, created_at")
             .in("id", repeatIds)
@@ -183,14 +183,14 @@ export async function getGroupMembersAction(groupId: string): Promise<{
         }
       } else if (name.includes("FIRST")) {
         // Customers with 1 order
-        const { data: orders } = await supabase.from("orders").select("customer_id");
+        const { data: orders } = await db.from("orders").select("customer_id");
         const orderCounts: Record<string, number> = {};
         orders?.forEach((o: any) => {
           if (o.customer_id) orderCounts[o.customer_id] = (orderCounts[o.customer_id] || 0) + 1;
         });
         const firstIds = Object.keys(orderCounts).filter((id) => orderCounts[id] === 1);
         if (firstIds.length > 0) {
-          const { data: firstProfiles } = await supabase
+          const { data: firstProfiles } = await db
             .from("customer_profiles")
             .select("id, first_name, last_name, email, phone, created_at")
             .in("id", firstIds)
@@ -199,22 +199,22 @@ export async function getGroupMembersAction(groupId: string): Promise<{
         }
       } else if (name.includes("PROSPECT") || name.includes("LEAD")) {
         // Customers with 0 orders
-        const { data: orders } = await supabase.from("orders").select("customer_id");
+        const { data: orders } = await db.from("orders").select("customer_id");
         const buyerIds = new Set(orders?.map((o: any) => o.customer_id).filter(Boolean));
-        const { data: allProfiles } = await supabase
+        const { data: allProfiles } = await db
           .from("customer_profiles")
           .select("id, first_name, last_name, email, phone, created_at")
           .limit(50);
         members = (allProfiles || []).filter((p: any) => !buyerIds.has(p.id));
       } else if (name.includes("RISK") || name.includes("INACTIVE")) {
-        const { data: crmMatches } = await supabase
+        const { data: crmMatches } = await db
           .from("crm_customers")
           .select("profile_id")
           .or("customer_lifecycle_stage.eq.AT_RISK,health_score.lt.50")
           .limit(50);
         const profileIds = (crmMatches || []).map((m: any) => m.profile_id).filter(Boolean);
         if (profileIds.length > 0) {
-          const { data: riskProfiles } = await supabase
+          const { data: riskProfiles } = await db
             .from("customer_profiles")
             .select("id, first_name, last_name, email, phone, created_at")
             .in("id", profileIds)
@@ -225,7 +225,7 @@ export async function getGroupMembersAction(groupId: string): Promise<{
 
       // If dynamic rules returned empty or no specific keyword, fallback to active customers
       if (members.length === 0) {
-        const { data: defaultProfiles } = await supabase
+        const { data: defaultProfiles } = await db
           .from("customer_profiles")
           .select("id, first_name, last_name, email, phone, created_at")
           .order("created_at", { ascending: false })
@@ -255,10 +255,10 @@ export async function addMemberToGroupAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Check if already in group
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from("customer_segment_members")
       .select("customer_id")
       .eq("segment_id", groupId)
@@ -269,7 +269,7 @@ export async function addMemberToGroupAction(
       return { success: false, error: "This customer is already in this group." };
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from("customer_segment_members")
       .insert({
         segment_id: groupId,
@@ -294,9 +294,9 @@ export async function removeMemberFromGroupAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error } = await supabase
+    const { error } = await db
       .from("customer_segment_members")
       .delete()
       .eq("segment_id", groupId)
@@ -319,10 +319,10 @@ export async function searchAvailableCustomersAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const clean = query.trim().replace(/,/g, "");
 
-    let q = supabase
+    let q = db
       .from("customer_profiles")
       .select("id, first_name, last_name, email, phone")
       .limit(10);

@@ -6,6 +6,10 @@ export const metadata: Metadata = {
 };
 
 export default function SalesDashboardPage() {
+  // This legacy page previously rendered invented figures (hardcoded sales
+  // totals and a "live" order stream with random amounts). Those
+  // fabrications were removed in Phase 6; real sales analytics live in the
+  // admin dashboard and report builder.
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
@@ -15,47 +19,33 @@ export default function SalesDashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-xl border bg-card p-6 text-card-foreground shadow">
           <h3 className="mb-2 text-sm font-medium tracking-tight">
-            Today's Sales
+            Today&apos;s Sales
           </h3>
-          <div className="text-2xl font-bold">$12,450</div>
-          <p className="text-xs text-green-600">+14% vs yesterday</p>
+          <div className="text-2xl font-bold">—</div>
+          <p className="text-xs text-muted-foreground">No data loaded</p>
         </div>
         <div className="rounded-xl border bg-card p-6 text-card-foreground shadow">
           <h3 className="mb-2 text-sm font-medium tracking-tight">
             Conversion Rate
           </h3>
-          <div className="text-2xl font-bold">3.2%</div>
-          <p className="text-xs text-muted-foreground">Average: 2.8%</p>
+          <div className="text-2xl font-bold">—</div>
+          <p className="text-xs text-muted-foreground">No data loaded</p>
         </div>
         <div className="rounded-xl border bg-card p-6 text-card-foreground shadow">
           <h3 className="mb-2 text-sm font-medium tracking-tight">
             Average Order Value
           </h3>
-          <div className="text-2xl font-bold">$145.20</div>
-          <p className="text-xs text-green-600">+2.4% vs last week</p>
+          <div className="text-2xl font-bold">—</div>
+          <p className="text-xs text-muted-foreground">No data loaded</p>
         </div>
       </div>
 
       <div className="mt-8 rounded-xl border bg-card p-6 text-card-foreground shadow">
         <h3 className="mb-4 text-lg font-semibold">Live Orders Stream</h3>
-        <div className="space-y-4">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
-            >
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">
-                  Order #ORD-{9000 + i}
-                </span>
-                <span className="text-xs text-muted-foreground">Just now</span>
-              </div>
-              <div className="text-sm font-medium text-green-600">
-                ${(Math.random() * 200 + 50).toFixed(2)}
-              </div>
-            </div>
-          ))}
-        </div>
+        <p className="text-sm text-muted-foreground">
+          No live orders to show. See the admin orders dashboard for real-time
+          order activity.
+        </p>
       </div>
     </div>
   );

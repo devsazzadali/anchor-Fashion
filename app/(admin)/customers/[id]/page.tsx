@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { ArrowLeft, User, Package, Calendar, AlertCircle } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createDbClient } from "@/lib/db/client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export default async function AdminCustomerDetailPage({
   params,
@@ -18,10 +18,10 @@ export default async function AdminCustomerDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const adminClient = createAdminClient();
+  const db = await createDbClient();
+  const adminClient = createAdminDbClient();
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from("profiles")
     .select("*, roles(name)")
     .eq("id", id)
@@ -47,7 +47,7 @@ export default async function AdminCustomerDetailPage({
   }
 
   // Fetch real orders for this customer
-  const { data: orders } = await supabase
+  const { data: orders } = await db
     .from("orders")
     .select("id, total, status, created_at")
     .or(`customer_id.eq.${id},user_id.eq.${id}`)

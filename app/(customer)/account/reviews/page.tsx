@@ -1,6 +1,6 @@
 import { fetchReviewsAction } from "@/app/actions/customer.actions";
 import { ReviewsList } from "@/components/customer/ReviewsList";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { redirect } from "next/navigation";
 import { WriteReviewButton } from "@/features/customer/WriteReviewButton";
 
@@ -9,10 +9,10 @@ export const metadata = {
 };
 
 export default async function ReviewsPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?redirect=/account/reviews");

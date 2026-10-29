@@ -1,15 +1,15 @@
 import React from "react";
 import { getOrderDetailsAction } from "@/app/actions/oms/order.actions";
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { STAFF_ROLES } from "@/lib/constants/auth";
 import { ClientBarcode } from "@/components/ui/ClientBarcode";
 import { AutoPrint } from "@/components/print/auto-print";
 
 export default async function AdminPrintPackingSlipPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const db = await createDbClient();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?next=/admin");
@@ -17,13 +17,16 @@ export default async function AdminPrintPackingSlipPage(props: { params: Promise
 
   let role = user.user_metadata?.role || user.app_metadata?.role;
   if (!role) {
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from("profiles")
       .select("roles(name)")
       .eq("id", user.id)
       .single();
     role = (profile?.roles as any)?.name || "CUSTOMER";
   }
+
+  // Canonical role names are UPPERCASE; normalize before the allow-list check.
+  role = String(role || "").toUpperCase().trim();
 
   if (!STAFF_ROLES.includes(role)) {
     redirect("/account/profile");
@@ -120,7 +123,7 @@ export default async function AdminPrintPackingSlipPage(props: { params: Promise
               Dispatch Details:
             </h3>
             <p className="text-slate-700">
-              Courier Carrier: <span className="font-semibold">Standard Courier / Anchor Express</span>
+              Courier Carrier: <span className="font-semibold">{order.courier || "Standard Courier"}</span>
             </p>
             <p className="text-slate-700 mt-0.5">
               Current Fulfillment Status: <span className="font-bold text-slate-900 uppercase">{order.status.replace(/_/g, " ")}</span>

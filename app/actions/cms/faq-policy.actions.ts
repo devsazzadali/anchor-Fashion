@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
@@ -125,14 +125,14 @@ const DEFAULT_FAQS: Omit<FAQItem, "id" | "created_at">[] = [
 ];
 
 // Seed default FAQs if the table is empty
-async function seedDefaultFaqs(supabase: any) {
+async function seedDefaultFaqs(db: any) {
   try {
-    const { count } = await supabase
+    const { count } = await db
       .from("faqs")
       .select("*", { count: "exact", head: true });
 
     if (count === 0 || count === null) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("faqs")
         .insert(DEFAULT_FAQS)
         .select();
@@ -156,8 +156,8 @@ export async function getFaqsAction(): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("faqs")
       .select("*")
       .order("display_order", { ascending: true })
@@ -166,7 +166,7 @@ export async function getFaqsAction(): Promise<{
     if (error) throw error;
 
     if (!data || data.length === 0) {
-      const seeded = await seedDefaultFaqs(supabase);
+      const seeded = await seedDefaultFaqs(db);
       if (seeded && seeded.length > 0) {
         return { success: true, data: seeded };
       }
@@ -191,7 +191,7 @@ export async function createFaqAction(payload: {
 }> {
   try {
     await verifyStaff();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const cleanCategory = payload.category?.trim() || "General";
     const cleanQuestion = payload.question?.trim();
@@ -201,7 +201,7 @@ export async function createFaqAction(payload: {
       return { success: false, error: "Question and Answer are required." };
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("faqs")
       .insert({
         category: cleanCategory,
@@ -240,7 +240,7 @@ export async function updateFaqAction(
 }> {
   try {
     await verifyStaff();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const updateData: any = {};
     if (payload.category !== undefined) updateData.category = payload.category.trim();
@@ -249,7 +249,7 @@ export async function updateFaqAction(
     if (payload.display_order !== undefined)
       updateData.display_order = Number(payload.display_order) || 0;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("faqs")
       .update(updateData)
       .eq("id", id)
@@ -275,9 +275,9 @@ export async function deleteFaqAction(id: string): Promise<{
 }> {
   try {
     await verifyStaff();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error } = await supabase.from("faqs").delete().eq("id", id);
+    const { error } = await db.from("faqs").delete().eq("id", id);
     if (error) throw error;
 
     revalidatePath("/support/faq");
@@ -300,8 +300,8 @@ export async function getStorePoliciesAction(): Promise<{
   returns: ReturnPolicyConfig;
 }> {
   try {
-    const supabase = createAdminClient();
-    const { data } = await supabase
+    const db = createAdminDbClient();
+    const { data } = await db
       .from("settings")
       .select("key, value")
       .in("key", ["shipping_policy_settings", "return_policy_settings"]);
@@ -336,14 +336,14 @@ export async function updateStorePoliciesAction(payload: {
 }> {
   try {
     await verifyStaff();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const current = await getStorePoliciesAction();
     const updatedShipping = { ...current.shipping, ...(payload.shipping || {}) };
     const updatedReturns = { ...current.returns, ...(payload.returns || {}) };
 
     if (payload.shipping) {
-      const { error: shipError } = await supabase.from("settings").upsert(
+      const { error: shipError } = await db.from("settings").upsert(
         {
           key: "shipping_policy_settings",
           value: updatedShipping,
@@ -355,7 +355,7 @@ export async function updateStorePoliciesAction(payload: {
 
       // Also keep store_info free_shipping_threshold in sync
       try {
-        const { data: storeInfoRow } = await supabase
+        const { data: storeInfoRow } = await db
           .from("settings")
           .select("value")
           .eq("key", "store_info")
@@ -366,7 +366,7 @@ export async function updateStorePoliciesAction(payload: {
             ...storeInfoRow.value,
             free_shipping_threshold: String(updatedShipping.free_shipping_threshold || 999),
           };
-          await supabase.from("settings").upsert(
+          await db.from("settings").upsert(
             {
               key: "store_info",
               value: updatedStoreInfo,
@@ -381,7 +381,7 @@ export async function updateStorePoliciesAction(payload: {
     }
 
     if (payload.returns) {
-      const { error: retError } = await supabase.from("settings").upsert(
+      const { error: retError } = await db.from("settings").upsert(
         {
           key: "return_policy_settings",
           value: updatedReturns,

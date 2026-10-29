@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { redirect } from "next/navigation";
 import {
   Card,
@@ -34,17 +34,17 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminProfilePage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?next=/admin/profile");
   }
 
   // Fetch full profile from database
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from("profiles")
     .select("*, roles(name, description)")
     .eq("id", user.id)
@@ -73,9 +73,9 @@ export default async function AdminProfilePage() {
 
   if (isMarketing) {
     const [campRes, leadsRes, couponsRes] = await Promise.all([
-      supabase.from("campaigns").select("id", { count: "exact", head: true }),
-      supabase.from("crm_leads").select("id", { count: "exact", head: true }),
-      supabase.from("coupons").select("id", { count: "exact", head: true }),
+      db.from("campaigns").select("id", { count: "exact", head: true }),
+      db.from("crm_leads").select("id", { count: "exact", head: true }),
+      db.from("coupons").select("id", { count: "exact", head: true }),
     ]);
     campaignsCount = campRes.count || 0;
     leadsCount = leadsRes.count || 0;
@@ -83,7 +83,7 @@ export default async function AdminProfilePage() {
   }
 
   // Fetch assigned tasks if available
-  const { data: assignedTasks } = await supabase
+  const { data: assignedTasks } = await db
     .from("tasks")
     .select("*")
     .eq("assigned_to", user.id)

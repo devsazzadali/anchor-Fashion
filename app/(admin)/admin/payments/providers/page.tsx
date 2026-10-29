@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { PaymentProvidersForm } from "./PaymentProvidersForm";
 
 export const metadata: Metadata = {
@@ -15,15 +15,15 @@ const DEFAULT_CONFIG = (key: string) => ({
 });
 
 export default async function PaymentProvidersPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
 
   const [{ data: bkashData }, { data: sslData }] = await Promise.all([
-    supabase
+    db
       .from("settings")
       .select("value")
       .eq("key", "payment_bkash")
       .single(),
-    supabase
+    db
       .from("settings")
       .select("value")
       .eq("key", "payment_sslcommerz")

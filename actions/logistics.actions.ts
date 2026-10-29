@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { CourierProviderRecord } from "@/types/shipping.types";
 import { CourierRegistry } from "@/services/courier/courier-registry";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
 import { HealthCheckResult } from "@/lib/couriers/types";
 import {
+  encrypt,
+  decrypt,
   encryptCredentialsObject,
   decryptCredentialsObject,
   maskCredentialsObject,
@@ -28,34 +30,168 @@ export interface CourierMetrics {
 /**
  * Fetch all courier providers with credentials securely masked
  */
+/**
+ * Phase 9 fix: the courier_providers table's real columns are
+ * (id, code, name, is_active, api_key, api_secret, config). Effective
+ * credentials live encrypted in config.credentials, with the encrypted
+ * api_key/api_secret columns as fallback (the registry merges them the
+ * same way). The previous implementation ordered by a phantom "priority"
+ * column, read a phantom "credentials" column (always empty) and spread
+ * the raw api_key/api_secret values to the browser. This version returns
+ * only masked credentials and derives display fields from real columns.
+ */
+function effectiveCredentials(row: any): Record<string, any> {
+  const config = (row.config ?? {}) as Record<string, any>;
+  const creds: Record<string, any> = {
+    ...decryptCredentialsObject((config.credentials ?? {}) as Record<string, any>),
+  };
+  if (creds.apiKey === undefined && row.api_key) {
+    creds.apiKey = decrypt(row.api_key);
+  }
+  if (creds.secretKey === undefined && row.api_secret) {
+    creds.secretKey = decrypt(row.api_secret);
+  }
+  return creds;
+}
+
+function sanitizeProvider(row: any): CourierProviderRecord {
+  const config = (row.config ?? {}) as Record<string, any>;
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    display_name: row.name,
+    logo_url: null,
+    is_active: row.is_active !== false,
+    is_cod_supported: true,
+    is_sandbox: !!config.is_sandbox || row.code === "sandbox",
+    priority: 0,
+    max_weight_kg: null,
+    credentials: maskCredentialsObject(effectiveCredentials(row)),
+    settings: config.settings ?? {},
+    webhook_secret: null,
+    supported_zones: null,
+    created_at: row.created_at,
+    updated_at: row.created_at,
+  } as CourierProviderRecord;
+}
+
 export async function getCourierProvidersAction(): Promise<
   ActionResponse<CourierProviderRecord[]>
 > {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("courier_providers")
       .select("*")
-      .order("priority", { ascending: true });
+      .order("created_at", { ascending: true });
 
     if (error) throw error;
 
-    // Mask sensitive fields so secrets never leak to the client
-    const sanitized = (data || []).map((provider: any) => ({
-      ...provider,
-      credentials: maskCredentialsObject(provider.credentials || {}),
-    }));
-
-    return { success: true, data: sanitized as CourierProviderRecord[] };
+    return { success: true, data: (data || []).map(sanitizeProvider) };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
 }
 
+export interface CreateCourierProviderInput {
+  code: string;
+  name: string;
+  apiKey?: string;
+  secretKey?: string;
+  isSandbox?: boolean;
+  isActive?: boolean;
+}
+
+const COURIER_CODES = [
+  "steadfast",
+  "pathao",
+  "redx",
+  "paperfly",
+  "sundarban",
+  "ecourier",
+  "dhl",
+  "fedex",
+  "ups",
+  "sandbox",
+] as const;
+
 /**
- * Update a courier provider configuration, securely encrypting credentials
+ * Create a courier provider (Phase 9 — admin gap build). Phase 8 found the
+ * admin could only edit pre-seeded rows: there was NO create path, so a
+ * provider like Steadfast could never be added from the dashboard when its
+ * API key arrives. Credentials are stored encrypted both in
+ * config.credentials and in the api_key/api_secret columns, matching how
+ * CourierRegistry reads them.
+ */
+export async function createCourierProviderAction(
+  input: CreateCourierProviderInput
+): Promise<ActionResponse<CourierProviderRecord>> {
+  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyManager();
+  try {
+    const code = (input.code || "").trim().toLowerCase();
+    const name = (input.name || "").trim();
+    if (!(COURIER_CODES as readonly string[]).includes(code)) {
+      return { success: false, error: `Unsupported courier code "${input.code}"` };
+    }
+    if (!name) return { success: false, error: "Provider name is required" };
+
+    const db = createAdminDbClient();
+    const { data: existing } = await db
+      .from("courier_providers")
+      .select("id")
+      .eq("code", code)
+      .maybeSingle();
+    if (existing) {
+      return {
+        success: false,
+        error: `A provider with code "${code}" already exists — edit it instead`,
+      };
+    }
+
+    const creds: Record<string, string> = {};
+    if (input.apiKey?.trim()) creds.apiKey = input.apiKey.trim();
+    if (input.secretKey?.trim()) creds.secretKey = input.secretKey.trim();
+
+    const { data, error } = await db
+      .from("courier_providers")
+      .insert({
+        code,
+        name,
+        is_active: input.isActive !== false,
+        api_key: creds.apiKey ? encrypt(creds.apiKey) : null,
+        api_secret: creds.secretKey ? encrypt(creds.secretKey) : null,
+        config: {
+          is_sandbox: !!input.isSandbox,
+          credentials: Object.keys(creds).length
+            ? encryptCredentialsObject(creds)
+            : {},
+        },
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    CourierRegistry.getInstance().invalidate();
+    revalidatePath("/admin/operations/logistics/couriers");
+    return { success: true, data: sanitizeProvider(data) };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to create courier provider" };
+  }
+}
+
+/**
+ * Update a courier provider configuration, securely encrypting credentials.
+ *
+ * Phase 9 fix: this previously wrote a phantom `credentials` column (and a
+ * phantom `is_sandbox` column) that the data layer silently dropped, so
+ * saving in Courier Settings NEVER persisted anything. Credentials are now
+ * persisted where CourierRegistry actually reads them: encrypted in
+ * config.credentials, mirrored encrypted into the api_key/api_secret
+ * columns; is_sandbox lives in config.is_sandbox.
  */
 export async function updateCourierProviderAction(
   id: string,
@@ -64,15 +200,31 @@ export async function updateCourierProviderAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {
-    const adminSupabase = createAdminClient();
+    const adminDb = createAdminDbClient();
 
-    // Prevent overwriting code or id
-    const { id: _id, code: _code, created_at, updated_at, credentials, ...allowedUpdates } =
-      updates;
+    const { data: existing, error: fetchError } = await adminDb
+      .from("courier_providers")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) return { success: false, error: "Courier provider not found" };
 
-    const dbPayload: Record<string, any> = { ...allowedUpdates };
+    const existingConfig = (existing.config ?? {}) as Record<string, any>;
+    const nextConfig: Record<string, any> = { ...existingConfig };
 
-    // If updating credentials, merge with existing and encrypt
+    const dbPayload: Record<string, any> = {};
+    if (typeof updates.name === "string" && updates.name.trim()) {
+      dbPayload.name = updates.name.trim();
+    }
+    if (typeof updates.is_active === "boolean") {
+      dbPayload.is_active = updates.is_active;
+    }
+    if (typeof (updates as any).is_sandbox === "boolean") {
+      nextConfig.is_sandbox = (updates as any).is_sandbox;
+    }
+
+    const credentials = (updates as any).credentials;
     if (credentials !== undefined && typeof credentials === "object") {
       const credEntries = Object.entries(credentials);
       const isExplicitEmpty = credEntries.length === 0;
@@ -80,48 +232,41 @@ export async function updateCourierProviderAction(
         ([_, val]) => typeof val === "string" && val.trim() === ""
       );
 
+      let mergedCreds: Record<string, any>;
       if (isExplicitEmpty || allValuesEmpty) {
         // Explicitly clear all credentials
-        dbPayload.credentials = {};
+        mergedCreds = {};
       } else {
-        const { data: existing } = await adminSupabase
-          .from("courier_providers")
-          .select("credentials")
-          .eq("id", id)
-          .maybeSingle();
-
-        const existingCreds = existing?.credentials || {};
-        const mergedCreds: Record<string, any> = { ...existingCreds };
-
+        mergedCreds = { ...effectiveCredentials(existing) };
         for (const [key, val] of credEntries) {
           if (typeof val === "string") {
-            // If value is masked (e.g. "••••••••9X21" or "••••••••"), leave existing unchanged
-            if (val.startsWith("••••••••")) {
-              continue;
-            }
-            if (val.trim() === "") {
-              delete mergedCreds[key];
-            } else {
-              mergedCreds[key] = val;
-            }
+            // Masked values (e.g. "••••••••9X21") leave the stored value unchanged
+            if (val.startsWith("••••••••")) continue;
+            if (val.trim() === "") delete mergedCreds[key];
+            else mergedCreds[key] = val;
           } else if (val === null || val === undefined) {
             delete mergedCreds[key];
           } else {
             mergedCreds[key] = val;
           }
         }
-
-        const hasRemainingValues = Object.values(mergedCreds).some(
-          (v) => typeof v === "string" && v.trim() !== ""
-        );
-
-        dbPayload.credentials = hasRemainingValues
-          ? encryptCredentialsObject(mergedCreds)
-          : {};
       }
+
+      const hasValues = Object.values(mergedCreds).some(
+        (v) => typeof v === "string" && v.trim() !== ""
+      );
+      nextConfig.credentials = hasValues ? encryptCredentialsObject(mergedCreds) : {};
+      dbPayload.api_key =
+        hasValues && mergedCreds.apiKey ? encrypt(String(mergedCreds.apiKey)) : null;
+      dbPayload.api_secret =
+        hasValues && mergedCreds.secretKey
+          ? encrypt(String(mergedCreds.secretKey))
+          : null;
     }
 
-    const { error } = await adminSupabase
+    dbPayload.config = nextConfig;
+
+    const { error } = await adminDb
       .from("courier_providers")
       .update(dbPayload)
       .eq("id", id);
@@ -242,17 +387,17 @@ export async function getCourierMetricsAction(): Promise<
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Fetch all providers
-    const { data: providers, error: provError } = await supabase
+    const { data: providers, error: provError } = await db
       .from("courier_providers")
       .select("id, code");
 
     if (provError) throw provError;
 
     // 2. Fetch shipments
-    const { data: shipments, error: shipError } = await supabase
+    const { data: shipments, error: shipError } = await db
       .from("shipments")
       .select("courier_provider_code, status, cod_amount, is_cod");
 
@@ -315,8 +460,8 @@ export async function getCourierLogsAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {
-    const supabase = createAdminClient();
-    let query = supabase
+    const db = createAdminDbClient();
+    let query = db
       .from("courier_api_logs")
       .select("*")
       .order("created_at", { ascending: false })

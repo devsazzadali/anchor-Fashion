@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -32,9 +32,9 @@ export async function getOperationsReturnsAction(filters: {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    let query = supabase
+    let query = db
       .from("returns")
       .select(`
         *,
@@ -55,7 +55,7 @@ export async function getOperationsReturnsAction(filters: {
 
     if (error) {
       // Fallback query without customer join if foreign key differs
-      let fallbackQuery = supabase
+      let fallbackQuery = db
         .from("returns")
         .select("*, items:return_items(*)")
         .order("created_at", { ascending: false });
@@ -84,13 +84,13 @@ export async function createOperationsReturnAction(payload: CreateReturnPayload)
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const rand = Math.floor(1000 + Math.random() * 9000);
     const returnNumber = `RET-${dateStr}-${rand}`;
 
-    const { data: ret, error: returnError } = await supabase
+    const { data: ret, error: returnError } = await db
       .from("returns")
       .insert({
         return_number: returnNumber,
@@ -117,7 +117,7 @@ export async function createOperationsReturnAction(payload: CreateReturnPayload)
         restocked: false,
       }));
 
-      const { error: itemsError } = await supabase
+      const { error: itemsError } = await db
         .from("return_items")
         .insert(itemsToInsert);
 
@@ -145,7 +145,7 @@ export async function updateOperationsReturnStatusAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const updateData: Record<string, any> = {
       status: newStatus,
@@ -156,7 +156,7 @@ export async function updateOperationsReturnStatusAction(
       updateData.notes = notes;
     }
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await db
       .from("returns")
       .update(updateData)
       .eq("id", returnId)
@@ -170,7 +170,7 @@ export async function updateOperationsReturnStatusAction(
       for (const item of updated.items) {
         if (!item.restocked && item.condition === "good" && item.variant_id) {
           // Find first active warehouse or default warehouse
-          const { data: wh } = await supabase
+          const { data: wh } = await db
             .from("warehouses")
             .select("id")
             .eq("is_active", true)
@@ -178,7 +178,7 @@ export async function updateOperationsReturnStatusAction(
             .maybeSingle();
 
           if (wh?.id) {
-            const { data: currentLevel } = await supabase
+            const { data: currentLevel } = await db
               .from("inventory_levels")
               .select("id, quantity_available")
               .eq("variant_id", item.variant_id)
@@ -189,12 +189,12 @@ export async function updateOperationsReturnStatusAction(
             const newQty = prevQty + (item.quantity || 1);
 
             if (currentLevel?.id) {
-              await supabase
+              await db
                 .from("inventory_levels")
                 .update({ quantity_available: newQty })
                 .eq("id", currentLevel.id);
             } else {
-              await supabase
+              await db
                 .from("inventory_levels")
                 .insert({
                   variant_id: item.variant_id,
@@ -207,7 +207,7 @@ export async function updateOperationsReturnStatusAction(
 
             // Record stock movement
             try {
-              await supabase.from("stock_movements").insert({
+              await db.from("stock_movements").insert({
                 variant_id: item.variant_id,
                 warehouse_id: wh.id,
                 quantity_change: item.quantity || 1,
@@ -220,7 +220,7 @@ export async function updateOperationsReturnStatusAction(
             }
 
             // Mark item as restocked
-            await supabase
+            await db
               .from("return_items")
               .update({ restocked: true })
               .eq("id", item.id);
@@ -244,9 +244,9 @@ export async function getOrdersForReturnAction(search: string = "") {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    let query = supabase
+    let query = db
       .from("orders")
       .select("id, order_number, total_amount, status, customer_id, profiles(first_name, last_name, email)")
       .order("created_at", { ascending: false })
@@ -259,7 +259,7 @@ export async function getOrdersForReturnAction(search: string = "") {
     const { data: orders, error } = await query;
     if (error) {
       // Fallback
-      const { data: fbOrders } = await supabase
+      const { data: fbOrders } = await db
         .from("orders")
         .select("id, order_number, total_amount, status, customer_id")
         .order("created_at", { ascending: false })

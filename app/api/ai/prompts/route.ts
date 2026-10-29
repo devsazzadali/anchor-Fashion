@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db/client";
 import { verifyStaff, verifyAdmin } from "@/lib/security/roles";
 
 // GET all prompts
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const category = searchParams.get("category");
 
-    let query = supabase
+    let query = db
       .from("ai_prompts")
       .select("*")
       .order("updated_at", { ascending: false });
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("ai_prompts")
       .insert([
         {

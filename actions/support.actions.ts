@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import {
   SupportRepository,
   SupportTicketRecord,
@@ -54,10 +54,10 @@ export async function sendAgentMessageAction(params: {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = await createClient();
+    const db = await createDbClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
     const msg = await SupportRepository.sendMessage({
       ticketId: params.ticketId,
@@ -98,10 +98,10 @@ export async function addTicketMessageAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyAuthenticated();
   try {
-    const supabase = await createClient();
+    const db = await createDbClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
     const text = data.message || data.body || "";
     const msg = await SupportRepository.sendMessage({
@@ -125,8 +125,8 @@ export async function getKnowledgeBaseAction(): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createDbClient();
+    const { data, error } = await db
       .from("knowledge_base_articles")
       .select("*")
       .order("created_at", { ascending: false });

@@ -313,7 +313,7 @@ export async function seedInitialNotificationsIfEmptyAction(): Promise<void> {
 }
 
 /**
- * Creates an authoritative order notification in Neon PostgreSQL and Supabase,
+ * Creates an authoritative order notification in Neon PostgreSQL,
  * and revalidates admin caches.
  */
 export async function createOrderNotificationAction(params: {
@@ -346,11 +346,11 @@ export async function createOrderNotificationAction(params: {
       },
     });
 
-    // 2. Supabase notifications table (for realtime broadcasting)
+    // 2. Notifications table (for realtime broadcasting)
     try {
-      const { createAdminClient } = await import("@/lib/supabase/admin-client");
-      const supabase = createAdminClient();
-      await supabase.from("notifications").insert({
+      const { createAdminDbClient } = await import("@/lib/db/client");
+      const db = createAdminDbClient();
+      await db.from("notifications").insert({
         title,
         message,
         type: "order",
@@ -358,7 +358,7 @@ export async function createOrderNotificationAction(params: {
         user_id: null,
       });
     } catch (sbErr) {
-      console.warn("Supabase notification broadcast fallback:", sbErr);
+      console.warn("Notification broadcast fallback:", sbErr);
     }
 
     safeRevalidate();

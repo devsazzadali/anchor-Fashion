@@ -1,21 +1,22 @@
 import { notFound, redirect } from "next/navigation";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { InvoiceToolbar } from "@/components/print/invoice-toolbar";
 import { InvoiceSheet, InvoiceData } from "@/components/print/invoice-sheet";
+import { getStoreInfo } from "@/lib/actions/settings.actions";
 
 export default async function CustomerPrintInvoicePage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const db = await createDbClient();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?next=/account/orders");
   }
 
-  const adminSupabase = await createAdminClient();
+  const adminDb = await createAdminDbClient();
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.id);
 
-  let orderQuery = adminSupabase
+  let orderQuery = adminDb
     .from("orders")
     .select(
       `
@@ -37,30 +38,20 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
     return notFound();
   }
 
-  // Fetch order addresses separately
-  const { data: orderAddresses } = await adminSupabase
-    .from("order_addresses")
-    .select("*")
-    .eq("order_id", order.id);
-
-  order.order_addresses = orderAddresses || [];
-
-  const shippingAddress =
-    order.order_addresses?.find((a: any) => a.address_type === "SHIPPING") ||
-    order.shippingAddress ||
-    order.order_addresses?.[0] ||
-    null;
+  // There is no order_addresses table in this schema — the delivery address
+  // is stored as JSON on the order itself (orders.shipping_address).
+  const shippingAddress = (order as any).shipping_address || null;
 
   // Fetch customer profile if customer_id is present
   let customer: any = null;
   if (order.customer_id) {
     try {
-      const { data: cProfile } = await adminSupabase
+      const { data: cProfile } = await adminDb
         .from("customer_profiles")
         .select("first_name, last_name, email, phone")
         .eq("id", order.customer_id)
         .maybeSingle();
-      const { data: pProfile } = await adminSupabase
+      const { data: pProfile } = await adminDb
         .from("profiles")
         .select("first_name, last_name, phone")
         .eq("id", order.customer_id)
@@ -88,7 +79,7 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   if (!isOwner) {
     let role = user.user_metadata?.role || user.app_metadata?.role;
     if (!role) {
-      const { data: profile } = await adminSupabase
+      const { data: profile } = await adminDb
         .from("profiles")
         .select("roles(name)")
         .eq("id", user.id)
@@ -127,7 +118,7 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   // Fetch courier shipments if available
   let activeShipment: any = null;
   try {
-    const { data: shipments } = await adminSupabase
+    const { data: shipments } = await adminDb
       .from("shipments")
       .select("*, courier_providers(name, logo_url)")
       .eq("order_id", order.id)
@@ -190,14 +181,14 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   const recipientPhone = shippingAddress?.phone || customerPhone;
 
   const formatAddress = (addr: any) => {
-    if (!addr) return "Standard Delivery Address";
+    if (!addr) return "";
     const line1 = addr.address_line_1 || addr.street || "";
     const line2 = addr.address_line_2 ? `, ${addr.address_line_2}` : "";
     const city = addr.city ? `, ${addr.city}` : "";
     const zip = addr.zip || addr.postal_code ? ` - ${addr.zip || addr.postal_code}` : "";
     const country = addr.country ? `, ${addr.country}` : ", Bangladesh";
     const full = `${line1}${line2}${city}${zip}${country}`.replace(/^,\s*/, "");
-    return full || "Banani, Dhaka, Bangladesh";
+    return full;
   };
 
   const deliveryAddress = formatAddress(shippingAddress);
@@ -210,8 +201,13 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   const subtotal = Number(order.subtotal ?? items.reduce((acc: number, it: any) => acc + (Number(it.line_total ?? it.total_price ?? (Number(it.unit_price) * Number(it.quantity)))), 0));
   const grandTotal = Number(order.grand_total ?? order.total_amount ?? subtotal);
 
-  const courierName = activeShipment?.courier_providers?.name || activeShipment?.courier_provider_code || "Anchor Express Delivery";
+  const courierName = activeShipment?.courier_providers?.name || activeShipment?.courier_provider_code || "Standard Courier";
   const trackingNumber = activeShipment?.tracking_number || null;
+
+  // Branch identity comes from the store's configured settings — the page
+  // previously printed a hardcoded person's name ("Shojol Mia") and a
+  // hardcoded Rangpur address on every customer invoice.
+  const storeInfo = await getStoreInfo().catch(() => null);
 
   const invoiceData: InvoiceData = {
     invoiceNumber,
@@ -234,14 +230,13 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
       courierName,
       trackingNumber,
       subtotal,
-      shippingTotal: Number(order.shipping_total || 0),
-      discountTotal: Number(order.discount_total || 0),
-      taxTotal: Number(order.tax_total || 0),
+      shippingTotal: Number(order.shipping_fee || 0),
+      discountTotal: Number(order.discount || 0),
+      taxTotal: Number(order.vat_amount ?? order.tax_total ?? 0),
       grandTotal,
-      servedBy: "Shojol Mia",
       cashier: "Web",
-      branchName: "Dhaka Branch",
-      branchAddress: "H-271, Station road, Jahaj company mor, Rangpur , 5400",
+      branchName: storeInfo?.store_name || "Anchor Fashion",
+      branchAddress: storeInfo?.address || "",
     },
     items: items.map((it: any) => ({
       id: it.id,

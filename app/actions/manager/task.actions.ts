@@ -4,7 +4,7 @@ import {
   TaskRepository,
   ManagerTask,
 } from "@/lib/repositories/manager/task.repository";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -25,10 +25,10 @@ async function resolveAssigneePayload(
       trimmed
     );
 
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
 
   if (isUuid) {
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from("profiles")
       .select("id")
       .eq("id", trimmed)
@@ -40,7 +40,7 @@ async function resolveAssigneePayload(
   }
 
   // Check if matches a profile by first_name or last_name
-  const { data: matchedProfiles } = await supabase
+  const { data: matchedProfiles } = await db
     .from("profiles")
     .select("id, first_name, last_name")
     .or(`first_name.ilike.%${trimmed}%,last_name.ilike.%${trimmed}%`)
@@ -82,8 +82,8 @@ export async function fetchStaffMembersAction() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
-    const { data: profiles, error } = await supabase
+    const db = createAdminDbClient();
+    const { data: profiles, error } = await db
       .from("profiles")
       .select("id, first_name, last_name, roles(name)")
       .order("first_name", { ascending: true });
@@ -132,8 +132,8 @@ export async function createTaskAction(data: {
     // Send Task Assignment Email
     if (assigned_to) {
       try {
-        const supabase = createAdminClient();
-        const { data: profile } = await supabase
+        const db = createAdminDbClient();
+        const { data: profile } = await db
           .from("profiles")
           .select("email, first_name, last_name")
           .eq("id", assigned_to)
@@ -141,7 +141,7 @@ export async function createTaskAction(data: {
 
         let assigneeEmail = profile?.email;
         if (!assigneeEmail) {
-          const { data: authUser } = await supabase.auth.admin.getUserById(assigned_to);
+          const { data: authUser } = await db.auth.admin.getUserById(assigned_to);
           assigneeEmail = authUser?.user?.email;
         }
 

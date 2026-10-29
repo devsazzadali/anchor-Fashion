@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { PurchaseOrdersClient } from "@/features/inventory/components/PurchaseOrdersClient";
 
 export const metadata: Metadata = {
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
 };
 
 export default async function PurchaseOrdersPage() {
-  const supabase = await createClient();
-  const { data: pos } = await supabase
+  const db = await createDbClient();
+  const { data: pos } = await db
     .from("procurement_orders")
     .select("*, supplier_profiles(company_name), warehouses(name)")
     .order("created_at", { ascending: false });

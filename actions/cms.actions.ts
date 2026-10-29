@@ -230,13 +230,13 @@ export async function uploadMedia(formData: FormData) {
     const buffer = Buffer.from(arrayBuffer);
     const mimeType = file.type || "application/octet-stream";
 
-    // Try Supabase storage upload first, fallback to data URI
+    // Try media storage upload first, fallback to data URI
     let fileUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
 
     try {
-      const { createAdminClient } = await import("@/lib/supabase/admin-client");
-      const adminSupabase = createAdminClient();
-      const { data: uploadData, error: uploadError } = await adminSupabase.storage
+      const { createAdminDbClient } = await import("@/lib/db/client");
+      const adminDb = createAdminDbClient();
+      const { data: uploadData, error: uploadError } = await adminDb.storage
         .from("media")
         .upload(fileName, buffer, {
           contentType: mimeType,
@@ -244,7 +244,7 @@ export async function uploadMedia(formData: FormData) {
         });
 
       if (!uploadError && uploadData) {
-        const { data: publicUrlData } = adminSupabase.storage.from("media").getPublicUrl(fileName);
+        const { data: publicUrlData } = adminDb.storage.from("media").getPublicUrl(fileName);
         if (publicUrlData?.publicUrl && !publicUrlData.publicUrl.startsWith("data:")) {
           fileUrl = publicUrlData.publicUrl;
         }
@@ -273,16 +273,16 @@ export async function deleteMedia(id: string, fileUrl?: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    // Try to remove from Supabase storage if it's not a data URI
+    // Try to remove from media storage if it's not a data URI
     if (fileUrl && !fileUrl.startsWith("data:") && !fileUrl.startsWith("blob:")) {
       try {
-        const { createAdminClient } = await import("@/lib/supabase/admin-client");
-        const supabase = createAdminClient();
+        const { createAdminDbClient } = await import("@/lib/db/client");
+        const db = createAdminDbClient();
         const url = new URL(fileUrl);
         const match = url.pathname.match(/\/media\/(.+)$/);
         if (match && match[1]) {
           const storagePath = decodeURIComponent(match[1]);
-          await supabase.storage.from("media").remove([storagePath]);
+          await db.storage.from("media").remove([storagePath]);
         }
       } catch (storageErr) {
         console.warn("Storage removal non-fatal:", storageErr);
@@ -401,69 +401,9 @@ export type PromoBanner = {
   bg_color: string | null;
 };
 
-const DEFAULT_PROMO_BANNER: FeaturedPromoBannerData = {
-  title: "Mid-Season Sale Up To 50% Off",
-  subtitle: "Limited Time Offer",
-  description:
-    "Elevate your wardrobe with our latest curated collection. Exclusive pieces designed for the modern individual who values both aesthetics and comfort.",
-  ctaText: "Shop The Sale",
-  ctaLink: "/categories/sale",
-  imageUrl: "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1600&q=80",
-};
-
-const DEFAULT_SLIDES: HeroSlide[] = [
-  {
-    id: "default-1",
-    image_url: "/images/home/hero-banner.png",
-    media_url: "/images/home/hero-banner.png",
-    image: "/images/home/hero-banner.png",
-    link_url: "/products?sort=newest",
-    cta_url: "/products?sort=newest",
-    ctaHref: "/products?sort=newest",
-    display_order: 0,
-    title: "Summer Collection",
-    headline: "Summer Collection",
-    subtitle: "New Arrivals",
-    subheadline: "New Arrivals",
-    cta_text: "Shop Now",
-    is_active: true,
-    placement: "hero",
-  },
-  {
-    id: "default-2",
-    image_url: "/images/home/hero-slide-2.png",
-    media_url: "/images/home/hero-slide-2.png",
-    image: "/images/home/hero-slide-2.png",
-    link_url: "/categories/ethnic",
-    cta_url: "/categories/ethnic",
-    ctaHref: "/categories/ethnic",
-    display_order: 1,
-    title: "Ethnic Wear",
-    headline: "Ethnic Wear",
-    subtitle: "Crafted for Elegance",
-    subheadline: "Crafted for Elegance",
-    cta_text: "Shop Now",
-    is_active: true,
-    placement: "hero",
-  },
-  {
-    id: "default-3",
-    image_url: "/images/home/hero-slide-3.png",
-    media_url: "/images/home/hero-slide-3.png",
-    image: "/images/home/hero-slide-3.png",
-    link_url: "/categories/summer",
-    cta_url: "/categories/summer",
-    ctaHref: "/categories/summer",
-    display_order: 2,
-    title: "Seasonal Essentials",
-    headline: "Seasonal Essentials",
-    subtitle: "Up to 40% Off",
-    subheadline: "Up to 40% Off",
-    cta_text: "Shop Now",
-    is_active: true,
-    placement: "hero",
-  },
-];
+// Phase 9 (no-hardcode rule): DEFAULT_SLIDES / DEFAULT_PROMO_BANNER were
+// removed — hero slides and the featured promo come ONLY from CMS banner
+// rows in the database; when none exist the sections render nothing.
 
 function isBannerActive(b: any, now: Date): boolean {
   if (b.is_active === false) return false;
@@ -522,31 +462,31 @@ export async function getHeroSlides(): Promise<HeroSlide[]> {
       .filter((b) => isBannerActive(b, now))
       .map(prismaRowToHeroSlide)
       .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
-    return slides.length > 0 ? slides : DEFAULT_SLIDES;
+    return slides;
   } catch {
-    return DEFAULT_SLIDES;
+    return [];
   }
 }
 
 // Public-facing promo banner
-export async function getFeaturedPromoBanner(): Promise<FeaturedPromoBannerData> {
+export async function getFeaturedPromoBanner(): Promise<FeaturedPromoBannerData | null> {
   try {
     const now = new Date();
     const banners = await cmsRepo.getBanners("promo");
     const promoBanner = banners.find((b) => isBannerActive(b, now));
-    if (!promoBanner) return DEFAULT_PROMO_BANNER;
-    const cleanPromoImage = saveBase64ImageLocally(promoBanner.image_url, `promo-${promoBanner.id}`) || promoBanner.image_url || DEFAULT_PROMO_BANNER.imageUrl;
+    if (!promoBanner) return null;
+    const cleanPromoImage = saveBase64ImageLocally(promoBanner.image_url, `promo-${promoBanner.id}`) || promoBanner.image_url || "";
     return {
       id: promoBanner.id,
-      title: promoBanner.title || DEFAULT_PROMO_BANNER.title,
-      subtitle: promoBanner.subtitle || DEFAULT_PROMO_BANNER.subtitle,
-      description: promoBanner.description || DEFAULT_PROMO_BANNER.description,
-      ctaText: promoBanner.cta_text || DEFAULT_PROMO_BANNER.ctaText,
-      ctaLink: promoBanner.link_url || DEFAULT_PROMO_BANNER.ctaLink,
+      title: promoBanner.title || "",
+      subtitle: promoBanner.subtitle || "",
+      description: promoBanner.description || null,
+      ctaText: promoBanner.cta_text || "",
+      ctaLink: promoBanner.link_url || "/products",
       imageUrl: cleanPromoImage,
     };
   } catch {
-    return DEFAULT_PROMO_BANNER;
+    return null;
   }
 }
 

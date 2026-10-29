@@ -1,32 +1,25 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
+import { verifyAdmin } from "@/lib/security/roles";
 
 /**
  * Admin-only API endpoint to save payment gateway credentials to the settings table.
  * The client-side PaymentProvidersForm POSTs here.
  */
 export async function POST(req: Request) {
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    // Verify admin session
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Verify admin session via the shared role guard. The previous check
+    // compared app_metadata.role to lowercase "admin"/"super_admin", but
+    // resolved roles are uppercase ("ADMIN"/"SUPER_ADMIN") — no real admin
+    // could ever pass, so saving payment settings always failed with 403.
+    try {
+      await verifyAdmin();
+    } catch (authErr: any) {
+      const status = authErr?.message === "Unauthorized" ? 401 : 403;
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    const isAdmin =
-      user.app_metadata?.role === "admin" ||
-      user.app_metadata?.role === "super_admin";
-    if (!isAdmin) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden" },
-        { status: 403 }
+        { success: false, error: authErr?.message || "Forbidden" },
+        { status }
       );
     }
 
@@ -70,7 +63,7 @@ export async function POST(req: Request) {
 
       let resolvedPass = pass;
       if (pass === "••••••••" || pass === "********" || pass === "") {
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from("settings")
           .select("value")
           .eq("key", "payment_sslcommerz")
@@ -102,7 +95,7 @@ export async function POST(req: Request) {
       };
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from("settings")
       .upsert(
         { key, value: finalValue, description: `Payment gateway configuration for ${key}` },

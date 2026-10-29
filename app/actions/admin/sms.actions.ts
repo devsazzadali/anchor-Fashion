@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { AlphaSmsService } from "@/lib/services/sms/alpha-sms.service";
+import { verifyStaff } from "@/lib/security/roles";
 import { SmsLog } from "@/types/sms.types";
 
 /**
@@ -12,15 +12,10 @@ export async function getOrderSmsLogsAction(
   orderId: string
 ): Promise<{ success: boolean; logs: SmsLog[]; error?: string }> {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    // Allow fetching logs for authenticated users
-    if (!user) {
-      return { success: false, logs: [], error: "Unauthorized" };
-    }
+    // Staff only: SMS logs contain customer phone numbers and message
+    // bodies for ANY order. Previously any signed-in customer could read
+    // them by guessing an order id, despite the "Admin/Staff only" label.
+    await verifyStaff();
 
     const logs = await AlphaSmsService.getOrderSmsLogs(orderId);
     return { success: true, logs };
@@ -38,14 +33,9 @@ export async function resendOrderConfirmationSmsAction(
   orderId: string
 ): Promise<{ success: boolean; error?: string; requestId?: string | null }> {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Unauthorized. Admin authentication required." };
-    }
+    // Admin/staff only: force-resending an order SMS costs money and can
+    // spam the customer; a plain authenticated session is not enough.
+    await verifyStaff();
 
     const result = await AlphaSmsService.sendOrderConfirmationSMS(orderId, {
       force: true,

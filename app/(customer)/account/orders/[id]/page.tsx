@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
@@ -25,19 +25,19 @@ export default async function OrderDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
+  const db = await createDbClient();
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?redirect=/account/orders");
   }
 
-  const adminSupabase = await createAdminClient();
+  const adminDb = await createAdminDbClient();
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-  let orderQuery = adminSupabase
+  let orderQuery = adminDb
     .from("orders")
     .select(
       `
@@ -59,22 +59,40 @@ export default async function OrderDetailsPage({
     notFound();
   }
 
-  const { data: orderAddresses } = await adminSupabase
-    .from("order_addresses")
-    .select("*")
-    .eq("order_id", order.id);
-
-  order.order_addresses = orderAddresses || [];
+  // There is no order_addresses table in this schema — the delivery address
+  // is stored as JSON on the order itself (orders.shipping_address).
+  const rawShip = (order as any).shipping_address || null;
+  const shippingAddress = rawShip
+    ? {
+        recipient_name:
+          [rawShip.first_name, rawShip.last_name]
+            .filter(Boolean)
+            .join(" ")
+            .trim() ||
+          rawShip.recipient_name ||
+          null,
+        first_name: rawShip.first_name || null,
+        last_name: rawShip.last_name || null,
+        phone: rawShip.phone || null,
+        email: rawShip.email || null,
+        address_line_1: rawShip.address_line_1 || "",
+        address_line_2: rawShip.address_line_2 || null,
+        city: rawShip.city || "",
+        postal_code: rawShip.postal_code || rawShip.zip || null,
+        zip: rawShip.zip || rawShip.postal_code || null,
+        country: rawShip.country || null,
+      }
+    : null;
 
   // Fetch any return requests for this order
-  const { data: orderReturns } = await adminSupabase
+  const { data: orderReturns } = await adminDb
     .from("returns")
     .select("*")
     .eq("order_id", order.id)
     .order("created_at", { ascending: false });
 
   // Fetch shipments
-  const { data: shipments } = await adminSupabase
+  const { data: shipments } = await adminDb
     .from("shipments")
     .select("*, courier_providers(name, logo_url)")
     .eq("order_id", order.id)
@@ -86,18 +104,27 @@ export default async function OrderDetailsPage({
     )
   );
 
-  // Ensure customer can only view their own orders
-  if (order.customer_id && order.customer_id !== user.id) {
-    const role = String(user.user_metadata?.role || user.app_metadata?.role || "").toUpperCase();
-    const isStaff = ["SUPERADMIN", "ADMIN", "MANAGER", "STAFF", "SUPPORT"].includes(role);
+  // Ensure customers can only view their own orders. The previous check was
+  // skipped entirely when customer_id was NULL, so any signed-in user could
+  // open guest/unattributed orders (full address + phone) by order number.
+  const isOwner =
+    order.customer_id === user.id || order.profile_id === user.id;
+  if (!isOwner) {
+    const { data: profile } = await adminDb
+      .from("profiles")
+      .select("roles(name)")
+      .eq("id", user.id)
+      .maybeSingle();
+    const roleName = String(
+      Array.isArray(profile?.roles)
+        ? profile?.roles[0]?.name
+        : (profile?.roles as any)?.name || ""
+    ).toUpperCase();
+    const isStaff = ["SUPERADMIN", "ADMIN", "MANAGER", "STAFF", "SUPPORT"].includes(roleName);
     if (!isStaff) {
       notFound();
     }
   }
-
-  const shippingAddress = order.order_addresses?.find(
-    (a: any) => a.address_type === "SHIPPING"
-  );
 
   const statusLower = (order.status || "").toLowerCase();
   const isDelivered =
@@ -301,12 +328,18 @@ export default async function OrderDetailsPage({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Shipping</span>
-                  <span>{formatCurrency(order.shipping_total ?? order.shipping_fee ?? 0)}</span>
+                  <span>{formatCurrency(order.shipping_fee ?? 0)}</span>
                 </div>
-                {Number(order.discount_total || order.discount_amount || 0) > 0 && (
+                {Number(order.vat_amount || 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">VAT</span>
+                    <span>{formatCurrency(order.vat_amount)}</span>
+                  </div>
+                )}
+                {Number(order.discount || 0) > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>Discount</span>
-                    <span>-{formatCurrency(order.discount_total || order.discount_amount || 0)}</span>
+                    <span>-{formatCurrency(order.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t pt-2 text-base font-bold">

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { ExpenseRepository } from "@/repositories/expense.repository";
 import { ExpenseFormSchema, ExpenseFormValues } from "@/schemas/finance.schema";
 import { Expense, ExpenseFilters, ExpenseSummary } from "@/types/finance.types";
@@ -51,8 +51,8 @@ export async function createExpenseAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {
-    const supabase = await createClient();
-    const userRes = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+    const db = await createDbClient();
+    const userRes = await db.auth.getUser().catch(() => ({ data: { user: null } }));
     const user = userRes?.data?.user;
 
     // Validate payload with Zod

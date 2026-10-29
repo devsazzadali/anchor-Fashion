@@ -61,7 +61,7 @@ export default function MonitoringDashboard() {
           lastChecked: "Just now",
         },
         {
-          name: "Supabase Database & Authentication",
+          name: "Neon Database & Authentication",
           status: isDbUp ? "operational" : "down",
           latency: isDbUp ? `${Math.max(12, duration - 15)}ms` : "N/A",
           lastChecked: "Just now",
@@ -90,7 +90,7 @@ export default function MonitoringDashboard() {
           lastChecked: "Just now",
         },
         {
-          name: "Supabase Database & Authentication",
+          name: "Neon Database & Authentication",
           status: "down",
           latency: "Unreachable",
           lastChecked: "Just now",
@@ -202,7 +202,7 @@ export default function MonitoringDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {services.find((s) => s.name.includes("Supabase"))?.status === "operational" ? "Connected" : "Degraded"}
+              {services.find((s) => s.name.includes("Neon"))?.status === "operational" ? "Connected" : "Degraded"}
             </div>
             <p className="text-xs text-muted-foreground">
               PostgreSQL cluster connection

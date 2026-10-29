@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import {
   AnalyticsEventSchema,
   DashboardSnapshotSchema,
@@ -18,14 +18,14 @@ export async function trackEvent(
 ): Promise<{ error?: string; success?: boolean }> {
   try {
     const parsedData = AnalyticsEventSchema.parse(data);
-    const supabase = await createClient();
+    const db = await createDbClient();
 
     // Check user auth context
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
-    const { error } = await supabase.from("analytics_events").insert({
+    const { error } = await db.from("analytics_events").insert({
       event_category: parsedData.event_category,
       event_action: parsedData.event_action,
       user_id: user?.id || parsedData.user_id || null,
@@ -50,9 +50,9 @@ export async function getDashboardSnapshot(
 ): Promise<{ data?: DashboardSnapshot | null; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("dashboard_snapshots")
       .select("*")
       .eq("dashboard_type", type)
@@ -77,9 +77,9 @@ export async function saveDashboardSnapshot(
   await verifyStaff();
   try {
     const parsedData = DashboardSnapshotSchema.parse(data);
-    const supabase = await createClient();
+    const db = await createDbClient();
 
-    const { error } = await supabase.from("dashboard_snapshots").insert({
+    const { error } = await db.from("dashboard_snapshots").insert({
       dashboard_type: parsedData.dashboard_type,
       timeframe: parsedData.timeframe,
       snapshot_data: parsedData.snapshot_data,
@@ -102,9 +102,9 @@ export async function getAnalyticsEvents(
 ): Promise<{ data?: AnalyticsEvent[]; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    let query = supabase
+    let query = db
       .from("analytics_events")
       .select("*")
       .order("created_at", { ascending: false })

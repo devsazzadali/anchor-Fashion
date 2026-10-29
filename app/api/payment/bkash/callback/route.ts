@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { BKashService } from "@/lib/services/payment/bkash.service";
 import { CartService } from "@/lib/services/cart.service";
 import { CouponService } from "@/services/coupon.service";
@@ -37,7 +37,7 @@ async function handleCallback(req: NextRequest) {
     );
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   const inventoryService = new InventoryService();
 
   // 1. Locate the Order and Payment Session
@@ -45,7 +45,7 @@ async function handleCallback(req: NextRequest) {
   let paymentSession: any = null;
 
   // Check payment_sessions by metadata paymentID
-  const { data: sessionData } = await supabase
+  const { data: sessionData } = await db
     .from("payment_sessions")
     .select("*, orders(*)")
     .filter("metadata->>paymentID", "eq", paymentID)
@@ -58,7 +58,7 @@ async function handleCallback(req: NextRequest) {
 
   // Fallback: lookup order directly by payment_intent_id
   if (!order) {
-    const { data: orderData } = await supabase
+    const { data: orderData } = await db
       .from("orders")
       .select("*")
       .eq("payment_intent_id", paymentID)
@@ -98,7 +98,7 @@ async function handleCallback(req: NextRequest) {
     try {
       // Release reserved inventory authoritatively in Neon DB & RPC
       await inventoryService.releaseOrderInventory(order.id);
-      await supabase.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
+      await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
       // Release coupon usage if applied
       await CouponService.releaseCoupon(order.id);
     } catch (releaseErr) {
@@ -110,24 +110,24 @@ async function handleCallback(req: NextRequest) {
       status: "cancelled",
       cancelled_at: new Date().toISOString(),
     };
-    const { error: cancelErr } = await supabase
+    const { error: cancelErr } = await db
       .from("orders")
       .update({ ...cancelPayload, payment_status: "FAILED" })
       .eq("id", order.id);
     if (cancelErr) {
-      await supabase.from("orders").update(cancelPayload).eq("id", order.id);
+      await db.from("orders").update(cancelPayload).eq("id", order.id);
     }
 
     // Update session status if exists
     if (paymentSession?.id) {
-      await supabase
+      await db
         .from("payment_sessions")
         .update({ status: status === "cancel" ? "cancelled" : "failed" })
         .eq("id", paymentSession.id);
     }
 
     // Record failed transaction log
-    await supabase.from("payment_transactions").insert({
+    await db.from("payment_transactions").insert({
       order_id: order.id,
       session_id: paymentSession?.id || null,
       provider_id: paymentSession?.provider_id || null,
@@ -158,16 +158,16 @@ async function handleCallback(req: NextRequest) {
 
         // Release inventory on unconfirmed execution
         await inventoryService.releaseOrderInventory(order.id);
-        await supabase.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
+        await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
         await CouponService.releaseCoupon(order.id);
 
         const failPayload: Record<string, any> = { status: "cancelled" };
-        const { error: failErr } = await supabase
+        const { error: failErr } = await db
           .from("orders")
           .update({ ...failPayload, payment_status: "FAILED" })
           .eq("id", order.id);
         if (failErr) {
-          await supabase.from("orders").update(failPayload).eq("id", order.id);
+          await db.from("orders").update(failPayload).eq("id", order.id);
         }
 
         return NextResponse.redirect(
@@ -184,16 +184,16 @@ async function handleCallback(req: NextRequest) {
         );
 
         await inventoryService.releaseOrderInventory(order.id);
-        await supabase.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
+        await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
         await CouponService.releaseCoupon(order.id);
 
         const mismatchPayload: Record<string, any> = { status: "cancelled" };
-        const { error: mismatchErr } = await supabase
+        const { error: mismatchErr } = await db
           .from("orders")
           .update({ ...mismatchPayload, payment_status: "FAILED" })
           .eq("id", order.id);
         if (mismatchErr) {
-          await supabase.from("orders").update(mismatchPayload).eq("id", order.id);
+          await db.from("orders").update(mismatchPayload).eq("id", order.id);
         }
 
         return NextResponse.redirect(
@@ -212,14 +212,14 @@ async function handleCallback(req: NextRequest) {
       const nowIso = new Date().toISOString();
 
       // Retrieve bKash provider ID
-      const { data: provider } = await supabase
+      const { data: provider } = await db
         .from("payment_providers")
         .select("id")
         .eq("code", "bkash")
         .maybeSingle();
 
       // 5. Update Payment Transactions (Idempotent insert/upsert)
-      await supabase.from("payment_transactions").insert({
+      await db.from("payment_transactions").insert({
         order_id: order.id,
         session_id: paymentSession?.id || null,
         provider_id: provider?.id || null,
@@ -234,7 +234,7 @@ async function handleCallback(req: NextRequest) {
 
       // Update payment session to completed
       if (paymentSession?.id) {
-        await supabase
+        await db
           .from("payment_sessions")
           .update({ status: "completed" })
           .eq("id", paymentSession.id);
@@ -246,14 +246,14 @@ async function handleCallback(req: NextRequest) {
           `[bKash Callback] Payment succeeded for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
         );
 
-        await supabase.from("orders").update({
+        await db.from("orders").update({
           payment_method: "BKASH",
           payment_status: "REFUND_PENDING",
           payment_intent_id: trxID,
           paid_at: nowIso,
         }).eq("id", order.id);
 
-        await supabase.from("order_status_history").insert({
+        await db.from("order_status_history").insert({
           order_id: order.id,
           status: "cancelled",
           notes: `Late payment callback captured TrxID ${trxID} for cancelled order. Marked for refund.`,
@@ -271,7 +271,7 @@ async function handleCallback(req: NextRequest) {
         paid_at: nowIso,
         payment_intent_id: trxID,
       };
-      const { error: captureErr } = await supabase
+      const { error: captureErr } = await db
         .from("orders")
         .update({
           ...capturePayload,
@@ -281,11 +281,11 @@ async function handleCallback(req: NextRequest) {
         .eq("id", order.id);
 
       if (captureErr) {
-        await supabase.from("orders").update(capturePayload).eq("id", order.id);
+        await db.from("orders").update(capturePayload).eq("id", order.id);
       }
 
       // Insert Order Status History
-      await supabase.from("order_status_history").insert({
+      await db.from("order_status_history").insert({
         order_id: order.id,
         status: "confirmed",
         notes: `Paid successfully via bKash. TrxID: ${trxID}`,
@@ -311,7 +311,7 @@ async function handleCallback(req: NextRequest) {
       try {
         let cartIdToClear: string | null = null;
         if (order.session_id) {
-          const { data: cart } = await supabase
+          const { data: cart } = await db
             .from("carts")
             .select("id")
             .eq("session_id", order.session_id)
@@ -319,7 +319,7 @@ async function handleCallback(req: NextRequest) {
           if (cart?.id) cartIdToClear = cart.id;
         }
         if (!cartIdToClear && order.user_id) {
-          const { data: userCart } = await supabase
+          const { data: userCart } = await db
             .from("carts")
             .select("id")
             .eq("user_id", order.user_id)

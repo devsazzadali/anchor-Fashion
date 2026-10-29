@@ -16,8 +16,8 @@ import {
   promotionSchema,
   PromotionFormValues,
 } from "@/validators/marketing.schema";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createDbClient } from "@/lib/db/client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 
 // --- Coupons Actions ---
@@ -229,17 +229,17 @@ export async function getCampaignById(id: string): Promise<Campaign | null> {
 
 async function resolveCurrentAdminUserId(): Promise<string> {
   try {
-    const supabase = await createClient();
+    const db = await createDbClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
     if (user?.id) return user.id;
   } catch (e) {
     // ignore
   }
 
   // Fallback to active admin profile in database
-  const adminSb = createAdminClient();
+  const adminSb = createAdminDbClient();
   const { data: prof } = await adminSb
     .from("profiles")
     .select("id")

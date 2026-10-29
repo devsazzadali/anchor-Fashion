@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export async function GET(
     await verifyStaff();
 
     const { courierId } = await params;
-    const adminSupabase = createAdminClient();
+    const adminDb = createAdminDbClient();
 
     // Look up courier code
     const isUuid =
@@ -22,7 +22,7 @@ export async function GET(
 
     let courierCode = courierId;
     if (isUuid) {
-      const { data: record } = await adminSupabase
+      const { data: record } = await adminDb
         .from("courier_providers")
         .select("code")
         .eq("id", courierId)
@@ -32,7 +32,7 @@ export async function GET(
       }
     }
 
-    const { data: logs, error: logsError } = await adminSupabase
+    const { data: logs, error: logsError } = await adminDb
       .from("courier_api_logs")
       .select("*")
       .eq("courier_code", courierCode)

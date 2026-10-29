@@ -9,7 +9,7 @@ import {
   returnFiltersSchema,
   submitCustomerReturnSchema,
 } from "@/schemas/shipping.schema";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   ReturnEligibilityResult,
   ReturnWithItems,
@@ -54,7 +54,7 @@ async function requireBranchAccess(returnId: string) {
   }
 
   if (user) {
-    const adminClient = createAdminClient();
+    const adminClient = createAdminDbClient();
     const { data: profile } = await adminClient
       .from("employee_profiles")
       .select("branch_id, roles")
@@ -237,14 +237,14 @@ export async function uploadReturnProofAction(
     }
 
     // 3. Upload to return_proofs storage bucket
-    const adminSupabase = createAdminClient();
+    const adminDb = createAdminDbClient();
     const timestamp = Date.now();
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
     const filePath = `${user.id}/${timestamp}_${sanitizedName}`;
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const { error: uploadErr } = await adminSupabase.storage
+    const { error: uploadErr } = await adminDb.storage
       .from("return_proofs")
       .upload(filePath, buffer, {
         contentType: file.type,
@@ -255,7 +255,7 @@ export async function uploadReturnProofAction(
       throw new Error(`Upload failed: ${uploadErr.message}`);
     }
 
-    const { data: publicData } = adminSupabase.storage
+    const { data: publicData } = adminDb.storage
       .from("return_proofs")
       .getPublicUrl(filePath);
 
@@ -383,7 +383,7 @@ export async function fetchReturnsAction(
     let branchId: string | undefined;
 
     if (user) {
-      const adminClient = createAdminClient();
+      const adminClient = createAdminDbClient();
       const { data: profile } = await adminClient
         .from("employee_profiles")
         .select("branch_id, roles")

@@ -4,7 +4,7 @@ import {
   getAvailableAgentsAction,
 } from "@/app/actions/support/ticket.actions";
 import { getCustomersAction } from "@/actions/crm.actions";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { TicketsClient } from "./TicketsClient";
 
 export const metadata: Metadata = {
@@ -15,8 +15,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function TicketManagementPage() {
-  const supabase = await createClient();
-  const { data: authData } = await supabase.auth.getUser();
+  const db = await createDbClient();
+  const { data: authData } = await db.auth.getUser();
   const currentUserId = authData?.user?.id;
 
   const [ticketsRes, agentsRes, customersRes] = await Promise.all([

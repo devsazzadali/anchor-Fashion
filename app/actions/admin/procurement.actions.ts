@@ -1,14 +1,14 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
 export async function getSupplierProfiles() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminDbClient();
+  const { data, error } = await db
     .from("supplier_profiles")
     .select("id, company_name, contact_person, email, phone, status")
     .order("company_name", { ascending: true });
@@ -39,14 +39,14 @@ export async function createSupplierProfileAction(data: {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const cleanCompany = data.company_name.trim();
     const cleanStatus = (data.status || "ACTIVE").toUpperCase();
     const cleanEmail = data.email?.trim() ? data.email.trim().toLowerCase() : null;
 
     // Check duplicate email beforehand to provide helpful message
     if (cleanEmail) {
-      const { data: existingSupplier } = await supabase
+      const { data: existingSupplier } = await db
         .from("supplier_profiles")
         .select("company_name, email")
         .ilike("email", cleanEmail)
@@ -60,7 +60,7 @@ export async function createSupplierProfileAction(data: {
       }
     }
 
-    const { data: supplier, error } = await supabase
+    const { data: supplier, error } = await db
       .from("supplier_profiles")
       .insert({
         company_name: cleanCompany,
@@ -85,7 +85,7 @@ export async function createSupplierProfileAction(data: {
 
     // Also sync into `suppliers` table for compatibility
     try {
-      await supabase.from("suppliers").upsert({
+      await db.from("suppliers").upsert({
         id: supplier.id,
         name: cleanCompany,
         contact_email: cleanEmail,
@@ -123,7 +123,7 @@ export async function updateSupplierProfileAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const cleanEmail =
       data.email !== undefined
         ? data.email?.trim()
@@ -133,7 +133,7 @@ export async function updateSupplierProfileAction(
 
     // Check duplicate email across other suppliers
     if (cleanEmail) {
-      const { data: existingSupplier } = await supabase
+      const { data: existingSupplier } = await db
         .from("supplier_profiles")
         .select("id, company_name, email")
         .ilike("email", cleanEmail)
@@ -159,7 +159,7 @@ export async function updateSupplierProfileAction(
       updatePayload.status = data.status.toUpperCase();
     }
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await db
       .from("supplier_profiles")
       .update(updatePayload)
       .eq("id", id)
@@ -178,7 +178,7 @@ export async function updateSupplierProfileAction(
 
     // Sync to suppliers table as well
     try {
-      await supabase.from("suppliers").update({
+      await db.from("suppliers").update({
         name: data.company_name?.trim(),
         contact_email: cleanEmail,
         contact_phone: data.phone?.trim(),
@@ -200,8 +200,8 @@ export async function deleteSupplierProfileAction(id: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
-    const { error } = await supabase
+    const db = createAdminDbClient();
+    const { error } = await db
       .from("supplier_profiles")
       .delete()
       .eq("id", id);
@@ -209,7 +209,7 @@ export async function deleteSupplierProfileAction(id: string) {
     if (error) return { success: false, error: error.message };
 
     try {
-      await supabase.from("suppliers").delete().eq("id", id);
+      await db.from("suppliers").delete().eq("id", id);
     } catch {}
 
     try {
@@ -225,8 +225,8 @@ export async function deleteSupplierProfileAction(id: string) {
 export async function getWarehouses() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminDbClient();
+  const { data, error } = await db
     .from("warehouses")
     .select("id, name, warehouse_code, is_active")
     .order("name", { ascending: true });
@@ -249,8 +249,8 @@ export async function getWarehouses() {
 export async function getVariants() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminDbClient();
+  const { data, error } = await db
     .from("variants")
     .select("id, sku, price_override, sale_price, attributes, product:products(id, name, base_price, cost_price)")
     .limit(300);
@@ -296,7 +296,7 @@ export async function createProcurementOrder(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const validItems = (items || []).filter(
       (i) => i.variant_id && Number(i.quantity_ordered) > 0 && Number(i.unit_cost) >= 0
@@ -328,7 +328,7 @@ export async function createProcurementOrder(
     const poNumber = poData.po_number || `PO-${Date.now().toString().slice(-6)}`;
 
     // 3. Insert Procurement Order with authoritative grand total
-    const { data: po, error: poError } = await supabase
+    const { data: po, error: poError } = await db
       .from("procurement_orders")
       .insert({
         po_number: poNumber,
@@ -353,13 +353,13 @@ export async function createProcurementOrder(
       total_cost: item.total_cost,
     }));
 
-    const { error: itemsError } = await supabase
+    const { error: itemsError } = await db
       .from("procurement_items")
       .insert(itemsToInsert);
 
     if (itemsError) {
       console.warn("Could not insert with total_cost column, retrying with base columns:", itemsError);
-      await supabase.from("procurement_items").insert(
+      await db.from("procurement_items").insert(
         processedItems.map((item) => ({
           po_id: po.id,
           variant_id: item.variant_id,
@@ -390,8 +390,8 @@ export async function getProcurementOrderDetails(poId: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
-    const { data: po, error: poErr } = await supabase
+    const db = createAdminDbClient();
+    const { data: po, error: poErr } = await db
       .from("procurement_orders")
       .select("*, supplier_profiles(*), warehouses(*)")
       .eq("id", poId)
@@ -399,7 +399,7 @@ export async function getProcurementOrderDetails(poId: string) {
 
     if (poErr) return { success: false, error: poErr.message };
 
-    const { data: items } = await supabase
+    const { data: items } = await db
       .from("procurement_items")
       .select("*, variants(id, sku, name)")
       .eq("po_id", poId);
@@ -423,8 +423,8 @@ export async function updateProcurementOrderStatus(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
-    const { error } = await supabase
+    const db = createAdminDbClient();
+    const { error } = await db
       .from("procurement_orders")
       .update({ status, updated_at: new Date().toISOString() })
       .eq("id", poId);
@@ -443,10 +443,10 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Fetch PO and items
-    const { data: po, error: poErr } = await supabase
+    const { data: po, error: poErr } = await db
       .from("procurement_orders")
       .select("*, procurement_items(*)")
       .eq("id", poId)
@@ -476,7 +476,7 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
       const qtyReceived = Number(item.quantity_ordered) || 0;
       if (!variantId || qtyReceived <= 0) continue;
 
-      const { data: existingLevel } = await supabase
+      const { data: existingLevel } = await db
         .from("inventory_levels")
         .select("id, quantity_available")
         .eq("variant_id", variantId)
@@ -487,7 +487,7 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
       const newQty = previousQty + qtyReceived;
 
       if (existingLevel) {
-        await supabase
+        await db
           .from("inventory_levels")
           .update({
             quantity_available: newQty,
@@ -495,7 +495,7 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
           })
           .eq("id", existingLevel.id);
       } else {
-        await supabase.from("inventory_levels").insert({
+        await db.from("inventory_levels").insert({
           variant_id: variantId,
           warehouse_id: destinationWarehouseId,
           quantity_available: newQty,
@@ -505,7 +505,7 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
 
       // Record stock movement
       try {
-        await supabase.from("stock_movements").insert({
+        await db.from("stock_movements").insert({
           variant_id: variantId,
           warehouse_id: destinationWarehouseId,
           quantity_change: qtyReceived,
@@ -519,7 +519,7 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
     }
 
     // 3. Mark PO as DELIVERED / FULFILLED
-    await supabase
+    await db
       .from("procurement_orders")
       .update({
         status: "DELIVERED",

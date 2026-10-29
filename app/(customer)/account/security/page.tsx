@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { ChangePassword } from "@/components/customer/ChangePassword";
 import { SecuritySettings } from "@/components/customer/SecuritySettings";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { redirect } from "next/navigation";
 import {
   fetchLoginHistoryAction,
@@ -14,10 +14,10 @@ export const metadata: Metadata = {
 };
 
 export default async function SecurityPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?redirect=/account/security");

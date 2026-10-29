@@ -2,7 +2,7 @@
 
 import { InventoryService } from "@/services/inventory.service";
 import { InventoryLevel } from "@/types/inventory.types";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -113,8 +113,8 @@ export async function receivePurchase(
   try {
     // Basic implementation that just adjusts stock upwards for received items
     const service = new InventoryService();
-    const { createAdminClient } = require("@/lib/supabase/admin-client");
-    const supabase = createAdminClient();
+    const { createAdminDbClient } = require("@/lib/db/client");
+    const db = createAdminDbClient();
 
     for (const item of items) {
       // Find current level or create
@@ -129,7 +129,7 @@ export async function receivePurchase(
         levels.reserved === 0
       ) {
         // Need to create a level first if it doesn't exist
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from("inventory_levels")
           .select("id")
           .eq("variant_id", item.variantId)
@@ -145,7 +145,7 @@ export async function receivePurchase(
           );
         } else {
           // It doesn't exist, this is complex for MVP, so we just use adjustStock assuming it exists or insert
-          const { error: insertError } = await supabase
+          const { error: insertError } = await db
             .from("inventory_levels")
             .insert({
               variant_id: item.variantId,
@@ -156,7 +156,7 @@ export async function receivePurchase(
           if (insertError) throw insertError;
 
           try {
-            await supabase.from("stock_movements").insert({
+            await db.from("stock_movements").insert({
               variant_id: item.variantId,
               warehouse_id: item.warehouseId,
               quantity_change: item.quantity,
@@ -170,7 +170,7 @@ export async function receivePurchase(
         }
       } else {
         // Get inventory_id and adjust
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from("inventory_levels")
           .select("id, quantity_available, quantity_reserved")
           .eq("variant_id", item.variantId)
@@ -189,7 +189,7 @@ export async function receivePurchase(
     }
 
     // Update PO status to DELIVERED
-    await supabase
+    await db
       .from("procurement_orders")
       .update({ status: "DELIVERED" })
       .eq("id", poId);
@@ -213,18 +213,18 @@ export async function addStockAction(data: {
     if (!data.quantity || data.quantity <= 0) {
       return { success: false, error: "Quantity must be greater than zero" };
     }
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Verify variant and warehouse exist
     const [{ data: variant }, { data: warehouse }] = await Promise.all([
-      supabase.from("variants").select("id").eq("id", data.variantId).maybeSingle(),
-      supabase.from("warehouses").select("id").eq("id", data.warehouseId).maybeSingle(),
+      db.from("variants").select("id").eq("id", data.variantId).maybeSingle(),
+      db.from("warehouses").select("id").eq("id", data.warehouseId).maybeSingle(),
     ]);
 
     if (!variant) return { success: false, error: "Product variant not found" };
     if (!warehouse) return { success: false, error: "Warehouse not found" };
 
-    const { data: existing, error: fetchErr } = await supabase
+    const { data: existing, error: fetchErr } = await db
       .from("inventory_levels")
       .select("id, quantity_available")
       .eq("variant_id", data.variantId)
@@ -238,7 +238,7 @@ export async function addStockAction(data: {
     let inventoryId: string;
 
     if (existing) {
-      const { error: updateErr } = await supabase
+      const { error: updateErr } = await db
         .from("inventory_levels")
         .update({
           quantity_available: newQuantity,
@@ -248,7 +248,7 @@ export async function addStockAction(data: {
       if (updateErr) throw updateErr;
       inventoryId = existing.id;
     } else {
-      const { data: inserted, error: insertErr } = await supabase
+      const { data: inserted, error: insertErr } = await db
         .from("inventory_levels")
         .insert({
           variant_id: data.variantId,
@@ -264,7 +264,7 @@ export async function addStockAction(data: {
 
     // Record stock movement
     try {
-      await supabase.from("stock_movements").insert({
+      await db.from("stock_movements").insert({
         variant_id: data.variantId,
         warehouse_id: data.warehouseId,
         quantity_change: data.quantity,
@@ -349,10 +349,10 @@ export async function createStockInwardAction(
       };
     }
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Verify warehouse exists
-    const { data: warehouse, error: whErr } = await supabase
+    const { data: warehouse, error: whErr } = await db
       .from("warehouses")
       .select("id, name, is_active")
       .eq("id", data.warehouseId)
@@ -390,7 +390,7 @@ export async function createStockInwardAction(
       const lineCost = Number((qty * cost).toFixed(2));
 
       // Fetch existing inventory level
-      const { data: existing, error: fetchErr } = await supabase
+      const { data: existing, error: fetchErr } = await db
         .from("inventory_levels")
         .select("id, quantity_available")
         .eq("variant_id", item.variantId)
@@ -403,7 +403,7 @@ export async function createStockInwardAction(
       const newQuantity = previousQuantity + qty;
 
       if (existing) {
-        const { error: updateErr } = await supabase
+        const { error: updateErr } = await db
           .from("inventory_levels")
           .update({
             quantity_available: newQuantity,
@@ -412,7 +412,7 @@ export async function createStockInwardAction(
           .eq("id", existing.id);
         if (updateErr) throw updateErr;
       } else {
-        const { error: insertErr } = await supabase
+        const { error: insertErr } = await db
           .from("inventory_levels")
           .insert({
             variant_id: item.variantId,
@@ -426,13 +426,13 @@ export async function createStockInwardAction(
       // Optionally update product cost price
       if (item.updateCostPrice && cost > 0) {
         try {
-          const { data: vData } = await supabase
+          const { data: vData } = await db
             .from("variants")
             .select("product_id")
             .eq("id", item.variantId)
             .maybeSingle();
           if (vData?.product_id) {
-            await supabase
+            await db
               .from("products")
               .update({
                 cost_price: cost,
@@ -453,7 +453,7 @@ export async function createStockInwardAction(
       }`;
 
       try {
-        await supabase.from("stock_movements").insert({
+        await db.from("stock_movements").insert({
           variant_id: item.variantId,
           warehouse_id: data.warehouseId,
           quantity_change: qty,
@@ -547,11 +547,11 @@ export async function recordManualMovementAction(data: {
       return { success: true };
     }
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const isPositive = ["RECEIVE", "IN", "RETURN"].includes(data.movementType);
     const delta = isPositive ? Math.abs(data.quantity) : -Math.abs(data.quantity);
 
-    const { data: existing, error: fetchErr } = await supabase
+    const { data: existing, error: fetchErr } = await db
       .from("inventory_levels")
       .select("id, quantity_available")
       .eq("variant_id", data.variantId)
@@ -571,7 +571,7 @@ export async function recordManualMovementAction(data: {
     }
 
     if (existing) {
-      const { error: updateErr } = await supabase
+      const { error: updateErr } = await db
         .from("inventory_levels")
         .update({
           quantity_available: newQuantity,
@@ -583,7 +583,7 @@ export async function recordManualMovementAction(data: {
       if (delta < 0) {
         return { success: false, error: "No existing inventory found to deduct stock from." };
       }
-      const { error: insertErr } = await supabase
+      const { error: insertErr } = await db
         .from("inventory_levels")
         .insert({
           variant_id: data.variantId,
@@ -595,7 +595,7 @@ export async function recordManualMovementAction(data: {
     }
 
     try {
-      await supabase.from("stock_movements").insert({
+      await db.from("stock_movements").insert({
         variant_id: data.variantId,
         warehouse_id: data.warehouseId,
         quantity_change: delta,

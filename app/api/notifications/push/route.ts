@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server"; // Using the authenticated client helper if available, or direct
+import { createDbClient } from "@/lib/db/client"; // Using the authenticated client helper if available, or direct
 
 // Assuming we get the user from auth session
 export async function POST(req: Request) {
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = await db.auth.getSession();
 
     if (!session) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { error } = await supabase.from("push_subscriptions").upsert(
+    const { error } = await db.from("push_subscriptions").upsert(
       {
         user_id: session.user.id,
         endpoint,
@@ -56,11 +56,11 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = await db.auth.getSession();
 
     if (!session) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -72,7 +72,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ message: "Invalid data" }, { status: 400 });
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from("push_subscriptions")
       .delete()
       .eq("user_id", session.user.id)

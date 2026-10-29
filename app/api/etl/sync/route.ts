@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Perform the ETL materialization
-    // In a real scenario, this would trigger a complex dbt transformation or complex Supabase RPC.
+    // In a real scenario, this would trigger a complex dbt transformation or complex database function.
     // Here we simulate the pipeline routing based on sync type.
     console.warn(
       `[ETL] Starting sync for type: ${syncType} on dateKey: ${dateKey}`

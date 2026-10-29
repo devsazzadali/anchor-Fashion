@@ -9,11 +9,13 @@ export const metadata: Metadata = {
 export default async function ExecutiveDashboardPage() {
   const { data, error } = await getDashboardSnapshot("executive", "daily");
 
+  // No fabricated fallback figures: when no live snapshot exists (or the
+  // caller is not staff), show honest empty placeholders.
   const stats = data?.snapshot_data || {
-    totalRevenue: "$2.4M",
-    growth: "+12%",
-    activeUsers: "14,200",
-    salesVolume: "8,430",
+    totalRevenue: "—",
+    growth: "—",
+    activeUsers: "—",
+    salesVolume: "—",
   };
 
   return (

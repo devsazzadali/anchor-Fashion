@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { getPickListsAction, getPickersAction } from "@/actions/admin/fulfillment.actions";
 import { PickListsClient } from "@/features/fulfillment/components/PickListsClient";
 
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function PickListsPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
 
   const [
     { count: pendingCount },
@@ -17,13 +17,13 @@ export default async function PickListsPage() {
     pickersRes,
     { data: warehouses },
   ] = await Promise.all([
-    supabase
+    db
       .from("orders")
       .select("*", { count: "exact", head: true })
       .in("status", ["confirmed", "paid", "preparing", "ready_for_shipment", "pending_payment"]),
     getPickListsAction(),
     getPickersAction(),
-    supabase.from("warehouses").select("id, name, warehouse_code").eq("is_active", true).order("name"),
+    db.from("warehouses").select("id, name, warehouse_code").eq("is_active", true).order("name"),
   ]);
 
   const formattedWarehouses = (warehouses || []).map((w: any) => ({

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { ReportRepository } from "@/repositories/report.repository";
 import {
   CustomReportConfigSchema,
@@ -22,10 +22,10 @@ export async function getSavedReportsAction(): Promise<{
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {
-    const supabase = await createClient();
+    const db = await createDbClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
     const reports = await reportRepository.getSavedReports(user?.id);
     return { success: true, data: reports };
@@ -70,10 +70,10 @@ export async function saveReportAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {
-    const supabase = await createClient();
+    const db = await createDbClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
     // Validate config with Zod
     const validated = CustomReportConfigSchema.parse(input);

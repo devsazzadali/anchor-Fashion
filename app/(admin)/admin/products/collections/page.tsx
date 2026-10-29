@@ -1,6 +1,6 @@
 import { CollectionRepository } from "@/lib/repositories/catalog/collection.repository";
 import { CollectionsClientPage } from "@/features/admin/components/catalog/CollectionsClientPage";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 
 export const metadata = {
   title: "Collections | Catalog | Anchor Fashion Enterprise",
@@ -9,12 +9,12 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminCollectionsPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
 
   // Fetch all collections and active available products in parallel
   const [collections, { data: products }] = await Promise.all([
     CollectionRepository.getCollections(false),
-    supabase
+    db
       .from("products")
       .select("id, name, slug, base_price, product_media(url, is_primary)")
       .is("deleted_at", null)

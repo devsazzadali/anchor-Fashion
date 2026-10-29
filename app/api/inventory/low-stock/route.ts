@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 
 export async function GET(request: NextRequest) {
@@ -7,9 +7,9 @@ export async function GET(request: NextRequest) {
     await verifyStaff();
     const { searchParams } = new URL(request.url);
     const warehouseId = searchParams.get("warehouse_id") || undefined;
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    let query = supabase
+    let query = db
       .from("inventory_levels")
       .select(
         `*,

@@ -11,7 +11,7 @@ import Link from "next/link";
 import { Metadata } from "next";
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +41,8 @@ export default async function CheckoutFailedPage({
   let paymentMethod = method ? method.toUpperCase() : "SSLCOMMERZ";
   if (order_id) {
     try {
-      const supabase = createAdminClient();
-      const { data: order } = await supabase
+      const db = createAdminDbClient();
+      const { data: order } = await db
         .from("orders")
         .select("payment_method")
         .eq("id", order_id)

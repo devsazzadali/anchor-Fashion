@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 
 /**
- * Webhook receiver for Supabase Database Webhooks.
+ * Webhook receiver for CMS database events.
  * When a CMS item (Page, Blog, Menu) is published or updated,
  * this endpoint clears the Next.js static cache for that specific entity.
  */
@@ -10,8 +10,11 @@ export async function POST(req: Request) {
   try {
     const payload = await req.json();
 
+    // Fail closed (same pattern as the cron/ETL routes): previously the
+    // check only ran when CMS_WEBHOOK_SECRET was set, so with no secret
+    // configured anyone could purge CMS cache entries at will.
     const authHeader = req.headers.get("Authorization");
-    if (process.env.CMS_WEBHOOK_SECRET && authHeader !== `Bearer ${process.env.CMS_WEBHOOK_SECRET}`) {
+    if (!process.env.CMS_WEBHOOK_SECRET || authHeader !== `Bearer ${process.env.CMS_WEBHOOK_SECRET}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

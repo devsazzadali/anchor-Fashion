@@ -1,7 +1,7 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
+import { createDbClient } from "@/lib/db/client";
 import { verifyAdmin, verifySelfOrStaff } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
@@ -18,10 +18,10 @@ export type UserData = {
 export async function getUsersByRoleAction(roleNames: string[]) {
   try {
     await verifyAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Get roles
-    const { data: roles, error: rolesError } = await supabase
+    const { data: roles, error: rolesError } = await db
       .from("roles")
       .select("*")
       .in("name", roleNames);
@@ -32,7 +32,7 @@ export async function getUsersByRoleAction(roleNames: string[]) {
     const roleIds = roles.map((r: any) => r.id);
 
     // 2. Get profiles
-    const { data: profiles, error: profilesError } = await supabase
+    const { data: profiles, error: profilesError } = await db
       .from("profiles")
       .select("*, roles(*)")
       .in("role_id", roleIds);
@@ -40,7 +40,7 @@ export async function getUsersByRoleAction(roleNames: string[]) {
     if (profilesError) throw profilesError;
 
     // 3. Get auth users (admin API) to get emails
-    const authRes = await supabase.auth.admin.listUsers();
+    const authRes = await db.auth.admin.listUsers();
     const users = authRes?.data?.users || [];
 
     // Merge data
@@ -90,10 +90,10 @@ export async function createUserAction(data: {
 }) {
   try {
     await verifyAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Find role or create fallback if missing
-    let { data: role } = await supabase
+    let { data: role } = await db
       .from("roles")
       .select("id, name")
       .eq("name", data.roleName)
@@ -101,7 +101,7 @@ export async function createUserAction(data: {
 
     if (!role) {
       // If role name like STAFF does not exist, check if there is an existing role or create it
-      const { data: newRole, error: createRoleErr } = await supabase
+      const { data: newRole, error: createRoleErr } = await db
         .from("roles")
         .insert({
           name: data.roleName,
@@ -114,7 +114,7 @@ export async function createUserAction(data: {
         role = newRole;
       } else {
         // Fallback to finding by general staff or marketing
-        const { data: fallbackRole } = await supabase
+        const { data: fallbackRole } = await db
           .from("roles")
           .select("id, name")
           .in("name", ["STAFF", "SUPPORT", "MARKETING"])
@@ -135,7 +135,7 @@ export async function createUserAction(data: {
 
     // 3. Create auth user with complete user_metadata
     const { data: authData, error: authError } =
-      await supabase.auth.admin.createUser({
+      await db.auth.admin.createUser({
         email: data.email,
         password: tempPassword,
         email_confirm: true,
@@ -154,7 +154,7 @@ export async function createUserAction(data: {
     if (!authData.user) throw new Error("Failed to create user in Auth");
 
     // Explicitly update metadata to ensure JWT synchronization
-    await supabase.auth.admin.updateUserById(authData.user.id, {
+    await db.auth.admin.updateUserById(authData.user.id, {
       user_metadata: {
         role: data.roleName,
         first_name: data.firstName,
@@ -167,7 +167,7 @@ export async function createUserAction(data: {
     });
 
     // 4. Create / update profile record
-    const { error: profileError } = await supabase.from("profiles").upsert(
+    const { error: profileError } = await db.from("profiles").upsert(
       {
         id: authData.user.id,
         first_name: data.firstName,
@@ -204,11 +204,11 @@ export async function toggleUserStatusAction(userId: string, currentStatus: stri
     if (adminUser.id === userId) {
       return { success: false, error: "You cannot change your own status." };
     }
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const newActiveState = currentStatus !== "Active";
 
     // 1. Update profiles table
-    const { error: profErr } = await supabase
+    const { error: profErr } = await db
       .from("profiles")
       .update({ is_active: newActiveState })
       .eq("id", userId);
@@ -217,9 +217,9 @@ export async function toggleUserStatusAction(userId: string, currentStatus: stri
 
     // 2. Ban/unban in auth
     if (!newActiveState) {
-      await supabase.auth.admin.updateUserById(userId, { ban_duration: "876000h" });
+      await db.auth.admin.updateUserById(userId, { ban_duration: "876000h" });
     } else {
-      await supabase.auth.admin.updateUserById(userId, { ban_duration: "none" });
+      await db.auth.admin.updateUserById(userId, { ban_duration: "none" });
     }
 
     revalidatePath("/admin/users/admins");
@@ -237,10 +237,10 @@ export async function toggleUserStatusAction(userId: string, currentStatus: stri
 export async function assignUserRoleAction(userId: string, roleName: string) {
   try {
     await verifyAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Find role by name
-    const { data: role, error: roleErr } = await supabase
+    const { data: role, error: roleErr } = await db
       .from("roles")
       .select("id, name")
       .eq("name", roleName)
@@ -251,7 +251,7 @@ export async function assignUserRoleAction(userId: string, roleName: string) {
     }
 
     // 2. Update profile
-    const { error: profErr } = await supabase
+    const { error: profErr } = await db
       .from("profiles")
       .update({ role_id: role.id })
       .eq("id", userId);
@@ -259,7 +259,7 @@ export async function assignUserRoleAction(userId: string, roleName: string) {
     if (profErr) throw profErr;
 
     // 3. Update auth metadata
-    await supabase.auth.admin.updateUserById(userId, {
+    await db.auth.admin.updateUserById(userId, {
       user_metadata: { role: role.name },
       app_metadata: { role: role.name },
     });
@@ -282,9 +282,9 @@ export async function updateUserProfileAction(
 ) {
   try {
     await verifySelfOrStaff(userId);
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error: profErr } = await supabase
+    const { error: profErr } = await db
       .from("profiles")
       .update({
         first_name: data.firstName,
@@ -296,7 +296,7 @@ export async function updateUserProfileAction(
     if (profErr) throw profErr;
 
     // Sync auth metadata
-    await supabase.auth.admin.updateUserById(userId, {
+    await db.auth.admin.updateUserById(userId, {
       user_metadata: {
         first_name: data.firstName,
         last_name: data.lastName,
@@ -319,8 +319,8 @@ export async function updateUserProfileAction(
 export async function getAllAvailableRolesAction() {
   try {
     await verifyAdmin();
-    const supabase = createAdminClient();
-    const { data: roles, error } = await supabase
+    const db = createAdminDbClient();
+    const { data: roles, error } = await db
       .from("roles")
       .select("id, name, description")
       .order("name", { ascending: true });
@@ -354,14 +354,14 @@ export async function updateUserPasswordAction(
       return { success: false, error: "Password must be at least 6 characters long." };
     }
 
-    const adminClient = createAdminClient();
+    const adminClient = createAdminDbClient();
 
     if (!targetUserId) {
-      const supabase = await createClient();
+      const db = await createDbClient();
       const {
         data: { user },
         error: userError,
-      } = await supabase.auth.getUser();
+      } = await db.auth.getUser();
 
       if (userError || !user) {
         return { success: false, error: "Authentication required. Please log in again." };
@@ -369,7 +369,7 @@ export async function updateUserPasswordAction(
       targetUserId = user.id;
 
       // Try updating via the user session client first so auth session cookies are updated and not revoked
-      const { error: sessionUpdateErr } = await supabase.auth.updateUser({
+      const { error: sessionUpdateErr } = await db.auth.updateUser({
         password: newPassword.trim(),
       });
 

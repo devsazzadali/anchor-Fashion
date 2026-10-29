@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { SSLCommerzService } from "@/lib/services/payment/sslcommerz.service";
 import { CartService } from "@/lib/services/cart.service";
 import { CouponService } from "@/services/coupon.service";
@@ -58,7 +58,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
   const orderIdFromCustom = payload.value_a;
   const action = actionParam || (status === "VALID" || status === "VALIDATED" ? "success" : status === "CANCELLED" ? "cancel" : "fail");
 
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   const inventoryService = new InventoryService();
 
   // 1. Locate Order and Payment Session
@@ -67,7 +67,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
   // Try lookup by custom parameter value_a (order.id)
   if (orderIdFromCustom) {
-    const { data: orderById } = await supabase
+    const { data: orderById } = await db
       .from("orders")
       .select("*")
       .eq("id", orderIdFromCustom)
@@ -79,7 +79,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
   // Lookup in payment_sessions by tran_id
   if (tranId) {
-    const { data: sessionData } = await supabase
+    const { data: sessionData } = await db
       .from("payment_sessions")
       .select("*, orders(*)")
       .filter("metadata->>tran_id", "eq", tranId)
@@ -95,7 +95,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
   // Fallback lookup order directly by payment_intent_id or order_number
   if (!order && tranId) {
-    const { data: orderByIntent } = await supabase
+    const { data: orderByIntent } = await db
       .from("orders")
       .select("*")
       .or(`payment_intent_id.eq.${tranId},order_number.eq.${tranId}`)
@@ -116,7 +116,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
   // If session wasn't located yet, find session for this order
   if (!paymentSession) {
-    const { data: sessionByOrder } = await supabase
+    const { data: sessionByOrder } = await db
       .from("payment_sessions")
       .select("*")
       .eq("order_id", order.id)
@@ -152,7 +152,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
     try {
       // Release reserved inventory authoritatively in Neon DB & RPC
       await inventoryService.releaseOrderInventory(order.id);
-      await supabase.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
+      await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
       // Release coupon usage if applied
       await CouponService.releaseCoupon(order.id);
     } catch (releaseErr) {
@@ -164,24 +164,24 @@ async function handleSSLCommerzCallback(req: NextRequest) {
       status: "cancelled",
       cancelled_at: new Date().toISOString(),
     };
-    const { error: cancelErr } = await supabase
+    const { error: cancelErr } = await db
       .from("orders")
       .update({ ...cancelPayload, payment_status: "FAILED" })
       .eq("id", order.id);
     if (cancelErr) {
-      await supabase.from("orders").update(cancelPayload).eq("id", order.id);
+      await db.from("orders").update(cancelPayload).eq("id", order.id);
     }
 
     // Update payment session status
     if (paymentSession?.id) {
-      await supabase
+      await db
         .from("payment_sessions")
         .update({ status: isCancel ? "cancelled" : "failed" })
         .eq("id", paymentSession.id);
     }
 
     // Record transaction audit log
-    await supabase.from("payment_transactions").insert({
+    await db.from("payment_transactions").insert({
       order_id: order.id,
       session_id: paymentSession?.id || null,
       provider_id: paymentSession?.provider_id || null,
@@ -223,10 +223,10 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         );
 
         await inventoryService.releaseOrderInventory(order.id);
-        await supabase.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
+        await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
         await CouponService.releaseCoupon(order.id);
 
-        await supabase
+        await db
           .from("orders")
           .update({ status: "cancelled", payment_status: "FAILED" })
           .eq("id", order.id);
@@ -246,10 +246,10 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         );
 
         await inventoryService.releaseOrderInventory(order.id);
-        await supabase.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
+        await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
         await CouponService.releaseCoupon(order.id);
 
-        await supabase
+        await db
           .from("orders")
           .update({ status: "cancelled", payment_status: "FAILED" })
           .eq("id", order.id);
@@ -272,10 +272,10 @@ async function handleSSLCommerzCallback(req: NextRequest) {
           `[SSLCommerz Callback] Security Alert: Currency mismatch! Gateway: ${verifiedCurrency}, Order: ${expectedCurrency}`
         );
 
-        await supabase.rpc("release_order_inventory", { p_order_id: order.id });
+        await db.rpc("release_order_inventory", { p_order_id: order.id });
         await CouponService.releaseCoupon(order.id);
 
-        await supabase
+        await db
           .from("orders")
           .update({ status: "cancelled", payment_status: "FAILED" })
           .eq("id", order.id);
@@ -297,14 +297,14 @@ async function handleSSLCommerzCallback(req: NextRequest) {
       const nowIso = new Date().toISOString();
 
       // Retrieve SSLCommerz provider ID
-      const { data: provider } = await supabase
+      const { data: provider } = await db
         .from("payment_providers")
         .select("id")
         .eq("code", "sslcommerz")
         .maybeSingle();
 
       // 5. Update Payment Transactions (Idempotent insert)
-      await supabase.from("payment_transactions").insert({
+      await db.from("payment_transactions").insert({
         order_id: order.id,
         session_id: paymentSession?.id || null,
         provider_id: provider?.id || null,
@@ -319,7 +319,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
       // Update payment session to completed
       if (paymentSession?.id) {
-        await supabase
+        await db
           .from("payment_sessions")
           .update({
             status: "completed",
@@ -339,14 +339,14 @@ async function handleSSLCommerzCallback(req: NextRequest) {
           `[SSLCommerz Callback] Payment succeeded for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
         );
 
-        await supabase.from("orders").update({
+        await db.from("orders").update({
           payment_method: "SSLCOMMERZ",
           payment_status: "REFUND_PENDING",
           payment_intent_id: confirmedTrxId,
           paid_at: nowIso,
         }).eq("id", order.id);
 
-        await supabase.from("order_status_history").insert({
+        await db.from("order_status_history").insert({
           order_id: order.id,
           status: "cancelled",
           notes: `Late payment callback captured TrxID ${confirmedTrxId} for cancelled order. Marked for refund.`,
@@ -366,7 +366,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         payment_intent_id: confirmedTrxId,
       };
 
-      const { error: captureErr } = await supabase
+      const { error: captureErr } = await db
         .from("orders")
         .update({
           ...capturePayload,
@@ -376,11 +376,11 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         .eq("id", order.id);
 
       if (captureErr) {
-        await supabase.from("orders").update(capturePayload).eq("id", order.id);
+        await db.from("orders").update(capturePayload).eq("id", order.id);
       }
 
       // Insert Order Status History
-      await supabase.from("order_status_history").insert({
+      await db.from("order_status_history").insert({
         order_id: order.id,
         status: "confirmed",
         notes: `Paid successfully via SSLCommerz (${valRes.card_type || "Cards/Mobile Banking"}). TrxID: ${confirmedTrxId}, ValID: ${valId}`,
@@ -406,7 +406,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
       try {
         let cartIdToClear: string | null = null;
         if (order.session_id) {
-          const { data: cart } = await supabase
+          const { data: cart } = await db
             .from("carts")
             .select("id")
             .eq("session_id", order.session_id)
@@ -414,7 +414,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
           if (cart?.id) cartIdToClear = cart.id;
         }
         if (!cartIdToClear && order.user_id) {
-          const { data: userCart } = await supabase
+          const { data: userCart } = await db
             .from("carts")
             .select("id")
             .eq("user_id", order.user_id)

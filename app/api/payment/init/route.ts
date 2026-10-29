@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { BKashService } from "@/lib/services/payment/bkash.service";
 import { SSLCommerzService } from "@/lib/services/payment/sslcommerz.service";
 
@@ -27,10 +27,10 @@ export async function GET(req: Request) {
     );
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   try {
     // 1. Fetch the order
-    const { data: order, error: orderError } = await supabase
+    const { data: order, error: orderError } = await db
       .from("orders")
       .select(
         "id, order_number, grand_total, customer_id, payment_method, status"
@@ -50,7 +50,7 @@ export async function GET(req: Request) {
     }
 
     // Fetch address details for accurate customer phone, name, email
-    const { data: shippingAddr } = await supabase
+    const { data: shippingAddr } = await db
       .from("order_addresses")
       .select("*")
       .eq("order_id", order.id)
@@ -103,7 +103,7 @@ export async function GET(req: Request) {
         });
 
         // Store payment session & intent
-        const { data: provider } = await supabase
+        const { data: provider } = await db
           .from("payment_providers")
           .select("id")
           .eq("code", "bkash")
@@ -111,7 +111,7 @@ export async function GET(req: Request) {
 
         const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
-        await supabase.from("payment_sessions").insert({
+        await db.from("payment_sessions").insert({
           provider_id: provider?.id || null,
           order_id: order.id,
           amount: totalAmount,
@@ -125,7 +125,7 @@ export async function GET(req: Request) {
           },
         });
 
-        await supabase
+        await db
           .from("orders")
           .update({
             payment_intent_id: paymentData.paymentID,
@@ -193,7 +193,7 @@ export async function GET(req: Request) {
         });
 
         // Store payment session & intent
-        const { data: provider } = await supabase
+        const { data: provider } = await db
           .from("payment_providers")
           .select("id")
           .eq("code", "sslcommerz")
@@ -201,7 +201,7 @@ export async function GET(req: Request) {
 
         const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
-        await supabase.from("payment_sessions").insert({
+        await db.from("payment_sessions").insert({
           provider_id: provider?.id || null,
           order_id: order.id,
           amount: totalAmount,
@@ -219,7 +219,7 @@ export async function GET(req: Request) {
         const updatePayload: Record<string, any> = {
           payment_intent_id: tranId,
         };
-        const { error: updErr } = await supabase
+        const { error: updErr } = await db
           .from("orders")
           .update({
             ...updatePayload,
@@ -229,7 +229,7 @@ export async function GET(req: Request) {
           .eq("id", order.id);
 
         if (updErr) {
-          await supabase.from("orders").update(updatePayload).eq("id", order.id);
+          await db.from("orders").update(updatePayload).eq("id", order.id);
         }
 
         return NextResponse.redirect(paymentData.GatewayPageURL!);
@@ -242,7 +242,7 @@ export async function GET(req: Request) {
     }
 
     // 5. Fetch gateway credentials for other methods (Stripe, PayPal, etc.)
-    const { data: settingsRow } = await supabase
+    const { data: settingsRow } = await db
       .from("settings")
       .select("value")
       .eq("key", `payment_${method.toLowerCase()}`)

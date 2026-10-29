@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AlphaSmsService } from "@/lib/services/sms/alpha-sms.service";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createDbClient } from "@/lib/db/client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 /**
  * GET /api/orders/:orderId/sms-logs
@@ -19,8 +19,8 @@ export async function GET(
 
     let user: any = null;
     try {
-      const supabase = await createClient();
-      const { data, error: authError } = await supabase.auth.getUser();
+      const db = await createDbClient();
+      const { data, error: authError } = await db.auth.getUser();
       if (!authError && data?.user) {
         user = data.user;
       }
@@ -32,8 +32,8 @@ export async function GET(
       const authHeader = req.headers.get("authorization");
       if (authHeader?.startsWith("Bearer ")) {
         const token = authHeader.replace("Bearer ", "").trim();
-        const adminSupabase = createAdminClient();
-        const { data: tokenData } = await adminSupabase.auth.getUser(token);
+        const adminDb = createAdminDbClient();
+        const { data: tokenData } = await adminDb.auth.getUser(token);
         if (tokenData?.user) {
           user = tokenData.user;
         }
@@ -44,8 +44,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const adminSupabase = createAdminClient();
-    const { data: order } = await adminSupabase
+    const adminDb = createAdminDbClient();
+    const { data: order } = await adminDb
       .from("orders")
       .select("id, customer_id, created_by")
       .eq("id", orderId)

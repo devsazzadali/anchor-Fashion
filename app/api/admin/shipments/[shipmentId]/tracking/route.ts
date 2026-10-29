@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -13,10 +13,10 @@ export async function GET(
     await verifyStaff();
 
     const { shipmentId } = await params;
-    const adminSupabase = createAdminClient();
+    const adminDb = createAdminDbClient();
 
     // 1. Fetch shipment
-    const { data: shipment, error: shipError } = await adminSupabase
+    const { data: shipment, error: shipError } = await adminDb
       .from("shipments")
       .select("*, order:order_id(order_number, id, grand_total, payment_method)")
       .eq("id", shipmentId)
@@ -30,7 +30,7 @@ export async function GET(
     }
 
     // 2. Fetch existing tracking events
-    const { data: events } = await adminSupabase
+    const { data: events } = await adminDb
       .from("shipment_tracking_events")
       .select("*")
       .eq("shipment_id", shipmentId)
@@ -54,7 +54,7 @@ export async function GET(
           if (liveTracking.currentStatusNormalized !== "unknown") {
             // Update shipment status if changed
             if (liveTracking.currentStatusNormalized !== shipment.status) {
-              await adminSupabase
+              await adminDb
                 .from("shipments")
                 .update({
                   status: liveTracking.currentStatusNormalized,

@@ -1,9 +1,6 @@
 import { Metadata } from "next";
 import { StatCards } from "@/components/manager/dashboard/StatCards";
 import { RecentOrdersTable } from "@/components/manager/dashboard/RecentOrdersTable";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-import Link from "next/link";
 import { RevenueChart } from "@/components/manager/dashboard/RevenueChart";
 import { InventoryAlerts } from "@/components/manager/dashboard/InventoryAlerts";
 import { TasksWidget } from "@/components/manager/dashboard/TasksWidget";
@@ -78,14 +75,6 @@ export default async function ManagerDashboardPage() {
           <p className="mt-1 text-muted-foreground">
             Welcome back. Here is what is happening with your store today.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button asChild>
-            <Link href="/manager/orders/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Order
-            </Link>
-          </Button>
         </div>
       </div>
 

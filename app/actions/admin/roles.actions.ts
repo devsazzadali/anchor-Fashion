@@ -1,28 +1,28 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifySuperAdmin } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
 export async function fetchRolesAction() {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Fetch roles
-    const { data: roles, error: rolesErr } = await supabase.from("roles").select("*");
+    const { data: roles, error: rolesErr } = await db.from("roles").select("*");
     if (rolesErr) throw rolesErr;
 
     // Fetch all permissions
-    const { data: allPermissions, error: permErr } = await supabase.from("permissions").select("*");
+    const { data: allPermissions, error: permErr } = await db.from("permissions").select("*");
     if (permErr) throw permErr;
 
     // Fetch role_permissions
-    const { data: rolePerms, error: rolePermsErr } = await supabase.from("role_permissions").select("*");
+    const { data: rolePerms, error: rolePermsErr } = await db.from("role_permissions").select("*");
     if (rolePermsErr) throw rolePermsErr;
 
     // Fetch counts from profiles per role
-    const { data: profiles, error: profErr } = await supabase.from("profiles").select("role_id");
+    const { data: profiles, error: profErr } = await db.from("profiles").select("role_id");
     if (profErr) throw profErr;
 
     const formattedRoles = (roles || []).map((role: any) => {
@@ -61,15 +61,15 @@ export async function fetchRolesAction() {
 export async function toggleRolePermissionAction(roleId: string, permissionId: string, enable: boolean) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     if (enable) {
-      await supabase.from("role_permissions").insert({
+      await db.from("role_permissions").insert({
         role_id: roleId,
         permission_id: permissionId
       });
     } else {
-      await supabase.from("role_permissions")
+      await db.from("role_permissions")
         .delete()
         .eq("role_id", roleId)
         .eq("permission_id", permissionId);
@@ -86,9 +86,9 @@ export async function toggleRolePermissionAction(roleId: string, permissionId: s
 export async function createRoleAction(data: { name: string, description: string }) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     
-    const { error } = await supabase.from("roles").insert({
+    const { error } = await db.from("roles").insert({
       name: data.name,
       description: data.description,
     });
@@ -109,9 +109,9 @@ export async function updateRoleAction(
 ) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error } = await supabase
+    const { error } = await db
       .from("roles")
       .update({ name: data.name, description: data.description })
       .eq("id", id);
@@ -129,10 +129,10 @@ export async function updateRoleAction(
 export async function deleteRoleAction(id: string) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Check if role has users assigned
-    const { count } = await supabase
+    const { count } = await db
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("role_id", id);
@@ -145,9 +145,9 @@ export async function deleteRoleAction(id: string) {
     }
 
     // Delete role_permissions first (FK constraint)
-    await supabase.from("role_permissions").delete().eq("role_id", id);
+    await db.from("role_permissions").delete().eq("role_id", id);
 
-    const { error } = await supabase.from("roles").delete().eq("id", id);
+    const { error } = await db.from("roles").delete().eq("id", id);
     if (error) throw error;
 
     revalidatePath("/admin/users/roles");

@@ -6,7 +6,7 @@ import {
   paymentInitializeSchema,
   refundRequestSchema,
 } from "@/validations/payment.schema";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyManager, verifyAdmin } from "@/lib/security/roles";
 
@@ -59,8 +59,8 @@ export async function toggleProviderStatusAction(
 ) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyAdmin();
-  const supabase = await createAdminClient();
-  const { error } = await supabase
+  const db = await createAdminDbClient();
+  const { error } = await db
     .from("payment_providers")
     .update({ status })
     .eq("id", providerId);

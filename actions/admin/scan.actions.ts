@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -13,10 +13,10 @@ export async function lookupBarcodeAction(query: string) {
       return { success: false, error: "Please enter a barcode or SKU to search." };
     }
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Search variant by barcode or SKU
-    let { data: variant, error: varError } = await supabase
+    let { data: variant, error: varError } = await db
       .from("variants")
       .select(`
         id,
@@ -50,7 +50,7 @@ export async function lookupBarcodeAction(query: string) {
 
     if (!variant) {
       // Try searching product SKU if variant not directly matched
-      const { data: product } = await supabase
+      const { data: product } = await db
         .from("products")
         .select("id, name, slug, base_price, sku")
         .ilike("sku", `%${trimmed}%`)
@@ -58,7 +58,7 @@ export async function lookupBarcodeAction(query: string) {
         .maybeSingle();
 
       if (product) {
-        const { data: firstVariant } = await supabase
+        const { data: firstVariant } = await db
           .from("variants")
           .select(`
             id,
@@ -95,7 +95,7 @@ export async function lookupBarcodeAction(query: string) {
     }
 
     // Fetch all active warehouses for quick adjustment dropdown
-    const { data: rawWarehouses } = await supabase
+    const { data: rawWarehouses } = await db
       .from("warehouses")
       .select("id, name, warehouse_code")
       .eq("is_active", true);
@@ -144,10 +144,10 @@ export async function adjustScannedStockAction({
       return { success: false, error: "Adjustment quantity cannot be zero." };
     }
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Fetch current inventory level
-    const { data: currentLevel } = await supabase
+    const { data: currentLevel } = await db
       .from("inventory_levels")
       .select("id, quantity_available, quantity_reserved")
       .eq("variant_id", variantId)
@@ -168,7 +168,7 @@ export async function adjustScannedStockAction({
 
     // 2. Upsert inventory level
     if (currentLevel?.id) {
-      const { error: updErr } = await supabase
+      const { error: updErr } = await db
         .from("inventory_levels")
         .update({
           quantity_available: newQty,
@@ -178,7 +178,7 @@ export async function adjustScannedStockAction({
 
       if (updErr) throw updErr;
     } else {
-      const { error: insErr } = await supabase.from("inventory_levels").insert({
+      const { error: insErr } = await db.from("inventory_levels").insert({
         variant_id: variantId,
         warehouse_id: warehouseId,
         quantity_available: newQty,
@@ -192,7 +192,7 @@ export async function adjustScannedStockAction({
     // 3. Record stock movement
     const actualDelta = newQty - prevQty;
     try {
-      await supabase.from("stock_movements").insert({
+      await db.from("stock_movements").insert({
         variant_id: variantId,
         warehouse_id: warehouseId,
         quantity_change: actualDelta,

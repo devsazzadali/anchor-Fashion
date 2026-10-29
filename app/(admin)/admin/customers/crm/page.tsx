@@ -1,5 +1,5 @@
 import React from "react";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   Card,
   CardContent,
@@ -13,10 +13,10 @@ export const metadata = {
 };
 
 export default async function CRMDashboardPage() {
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   
   // Fetch Segments
-  const { data: segments } = await supabase
+  const { data: segments } = await db
     .from("customer_segments")
     .select("*")
     .order("created_at", { ascending: false });

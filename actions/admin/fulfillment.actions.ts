@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -8,8 +8,8 @@ export async function getPickListsAction() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
-    const { data: lists, error } = await supabase
+    const db = createAdminDbClient();
+    const { data: lists, error } = await db
       .from("pick_lists")
       .select(`
         *,
@@ -27,7 +27,7 @@ export async function getPickListsAction() {
     const userIds = [...new Set((lists || []).map((l: any) => l.assigned_to).filter(Boolean))];
     const profileMap: Record<string, string> = {};
     if (userIds.length > 0) {
-      const { data: profiles } = await supabase
+      const { data: profiles } = await db
         .from("profiles")
         .select("id, first_name, last_name, email")
         .in("id", userIds);
@@ -68,8 +68,8 @@ export async function getPickersAction() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("profiles")
       .select("id, first_name, last_name, email")
       .eq("is_active", true)
@@ -93,10 +93,10 @@ export async function generatePickListFromOrdersAction(warehouseId?: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Find eligible orders using authoritative Postgres order_status enum values
-    const query = supabase
+    const query = db
       .from("orders")
       .select("id, order_number, status, order_items(id, variant_id, quantity)")
       .in("status", ["confirmed", "paid", "preparing", "ready_for_shipment", "pending_payment"])
@@ -108,7 +108,7 @@ export async function generatePickListFromOrdersAction(warehouseId?: string) {
     // Determine target warehouse
     let targetWarehouseId = warehouseId;
     if (!targetWarehouseId) {
-      const { data: defaultWh } = await supabase
+      const { data: defaultWh } = await db
         .from("warehouses")
         .select("id")
         .eq("is_active", true)
@@ -146,7 +146,7 @@ export async function generatePickListFromOrdersAction(warehouseId?: string) {
 
     // Fallback: If no orders or order items exist, pick sample catalog variants
     if (itemsToInsert.length === 0) {
-      const { data: sampleVariants } = await supabase.from("variants").select("id").limit(3);
+      const { data: sampleVariants } = await db.from("variants").select("id").limit(3);
       if (sampleVariants && sampleVariants.length > 0) {
         itemsToInsert = sampleVariants.map((v: any) => ({
           variant_id: v.id,
@@ -160,7 +160,7 @@ export async function generatePickListFromOrdersAction(warehouseId?: string) {
     const pickListNumber = `PL-${Date.now().toString().slice(-6)}`;
 
     // 3. Create pick list record respecting schema constraint (pick_type: 'WAVE'|'BATCH', status: 'PENDING')
-    const { data: newPickList, error: plErr } = await supabase
+    const { data: newPickList, error: plErr } = await db
       .from("pick_lists")
       .insert({
         list_number: pickListNumber,
@@ -185,7 +185,7 @@ export async function generatePickListFromOrdersAction(warehouseId?: string) {
         is_picked: false,
       }));
 
-      const { error: itemErr } = await supabase.from("pick_list_items").insert(formattedItems);
+      const { error: itemErr } = await db.from("pick_list_items").insert(formattedItems);
       if (itemErr) {
         console.warn("Error inserting pick list items:", itemErr);
       }
@@ -206,8 +206,8 @@ export async function assignPickerAction(pickListId: string, pickerId: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
-    const { error } = await supabase
+    const db = createAdminDbClient();
+    const { error } = await db
       .from("pick_lists")
       .update({
         assigned_to: pickerId || null,
@@ -233,7 +233,7 @@ export async function updatePickListStatusAction(
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Map UI status variants to DB check constraint ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')
     let dbStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" = "PENDING";
@@ -256,13 +256,13 @@ export async function updatePickListStatusAction(
 
     if (dbStatus === "COMPLETED") {
       updates.completed_at = new Date().toISOString();
-      await supabase
+      await db
         .from("pick_list_items")
         .update({ is_picked: true, picked_at: new Date().toISOString() })
         .eq("pick_list_id", pickListId);
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from("pick_lists")
       .update(updates)
       .eq("id", pickListId);

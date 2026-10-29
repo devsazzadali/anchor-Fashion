@@ -37,7 +37,7 @@ export default async function AdminWarehousesPage() {
             </Button>
           </Link>
           <Button size="sm" className="flex items-center gap-1" asChild>
-            <Link href="/admin/shipping/warehouses/new">
+            <Link href="/admin/inventory/warehouses">
               <Plus className="h-4 w-4" /> New Warehouse
             </Link>
           </Button>
@@ -69,7 +69,7 @@ export default async function AdminWarehousesPage() {
                       <Warehouse className="h-8 w-8 text-muted-foreground/50" />
                       <p>No warehouses found.</p>
                       <Button variant="link" asChild className="h-auto p-0 text-sm">
-                        <Link href="/admin/shipping/warehouses/new">
+                        <Link href="/admin/inventory/warehouses">
                           Add your first warehouse
                         </Link>
                       </Button>

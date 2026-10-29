@@ -97,7 +97,7 @@ export function ShippingSettingsClient({ zones }: ShippingSettingsClientProps) {
             <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-lg text-muted-foreground gap-3">
               <AlertCircle className="h-8 w-8 opacity-40" />
               <p className="text-sm">
-                No delivery zones found. Run the shipping fulfillment migration in Supabase first.
+                No delivery zones found. Run the shipping fulfillment migration in the database first.
               </p>
             </div>
           ) : (

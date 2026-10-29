@@ -6,7 +6,9 @@ import { getServerSession, resolveUserRole } from "@/lib/auth/server";
 
 const dashboardRepo = new DashboardRepository();
 
-async function verifyAdmin() {
+async function verifyStaffAccess() {
+  // NOTE: despite this file's history, the check is staff-level (any staff
+  // role) — the manager dashboard legitimately consumes these actions.
   const { user } = await getServerSession();
   if (!user) {
     throw new Error("Unauthorized");
@@ -20,7 +22,7 @@ async function verifyAdmin() {
 
 export async function fetchDashboardRevenueAction(days = 7) {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const rawData = await dashboardRepo.getDailyRevenue(days);
     const data = rawData || [];
 
@@ -44,7 +46,7 @@ export async function fetchDashboardRevenueAction(days = 7) {
 
 export async function fetchDashboardKPIsAction() {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const data = await dashboardRepo.getDashboardKPIs();
     return { success: true, data };
   } catch (error: any) {
@@ -55,7 +57,7 @@ export async function fetchDashboardKPIsAction() {
 
 export async function fetchOperationalMetricsAction() {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const data = await dashboardRepo.getOperationalMetrics();
     return { success: true, data };
   } catch (error: any) {
@@ -66,7 +68,7 @@ export async function fetchOperationalMetricsAction() {
 
 export async function fetchTopSellersAction() {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const data = await dashboardRepo.getTopSellers();
     return { success: true, data };
   } catch (error: any) {
@@ -77,7 +79,7 @@ export async function fetchTopSellersAction() {
 
 export async function fetchRevenueByCategoryAction() {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const data = await dashboardRepo.getRevenueByCategory();
     return { success: true, data };
   } catch (error: any) {
@@ -88,7 +90,7 @@ export async function fetchRevenueByCategoryAction() {
 
 export async function fetchRecentCustomersAction() {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const data = await dashboardRepo.getRecentCustomers();
     return { success: true, data };
   } catch (error: any) {
@@ -99,7 +101,7 @@ export async function fetchRecentCustomersAction() {
 
 export async function fetchUserLocationsAction() {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const data = await dashboardRepo.getUserLocations();
     return { success: true, data };
   } catch (error: any) {
@@ -110,7 +112,7 @@ export async function fetchUserLocationsAction() {
 
 export async function fetchDealOfTheDayAction() {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const data = await dashboardRepo.getDealOfTheDay();
     return { success: true, data };
   } catch (error: any) {
@@ -121,7 +123,7 @@ export async function fetchDealOfTheDayAction() {
 
 export async function fetchRecentOrdersAction() {
   try {
-    await verifyAdmin();
+    await verifyStaffAccess();
     const data = await dashboardRepo.getRecentOrders();
     return { success: true, data };
   } catch (error: any) {

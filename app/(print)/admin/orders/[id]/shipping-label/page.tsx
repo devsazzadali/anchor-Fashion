@@ -1,7 +1,7 @@
 import React from "react";
 import { getOrderDetailsAction } from "@/app/actions/oms/order.actions";
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { STAFF_ROLES } from "@/lib/constants/auth";
 import { ClientBarcode } from "@/components/ui/ClientBarcode";
 import { ClientQRCode } from "@/components/ui/ClientQRCode";
@@ -9,8 +9,8 @@ import { AutoPrint } from "@/components/print/auto-print";
 
 export default async function AdminPrintShippingLabelPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const db = await createDbClient();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?next=/admin");
@@ -18,13 +18,16 @@ export default async function AdminPrintShippingLabelPage(props: { params: Promi
 
   let role = user.user_metadata?.role || user.app_metadata?.role;
   if (!role) {
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from("profiles")
       .select("roles(name)")
       .eq("id", user.id)
       .single();
     role = (profile?.roles as any)?.name || "CUSTOMER";
   }
+
+  // Canonical role names are UPPERCASE; normalize before the allow-list check.
+  role = String(role || "").toUpperCase().trim();
 
   if (!STAFF_ROLES.includes(role)) {
     redirect("/account/profile");
@@ -37,7 +40,7 @@ export default async function AdminPrintShippingLabelPage(props: { params: Promi
   const order = result.data as any;
 
   // Fetch the active shipment for this order
-  const { data: shipments } = await supabase
+  const { data: shipments } = await db
     .from("shipments")
     .select("*, courier_providers(name)")
     .eq("order_id", order.id)
