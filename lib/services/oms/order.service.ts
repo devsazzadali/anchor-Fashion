@@ -233,6 +233,36 @@ export class OrderService {
       console.error("Error fetching order addresses:", err);
     }
 
+    // 3. Fallback to the address JSON persisted on the order itself.
+    // Prisma checkout orders store the shipping/billing address as JSON on
+    // the order row (orders.shipping_address / billing_address); they have
+    // no order_addresses / addresses rows and their shipping_address_id is
+    // always null, so without this fallback every checkout order rendered
+    // "No shipping address recorded" in admin and a blank address on the
+    // invoice. BUG FIX: use the persisted JSON, normalized to the shape
+    // the admin detail + invoice renderers expect.
+    const normalizePersistedAddress = (a: any) => {
+      if (!a || typeof a !== "object") return null;
+      return {
+        ...a,
+        recipient_name:
+          a.recipient_name ||
+          [a.first_name, a.last_name].filter(Boolean).join(" ") ||
+          null,
+        zip: a.zip || a.postal_code || null,
+      };
+    };
+    if (!shippingAddress) {
+      shippingAddress = normalizePersistedAddress(
+        (order as any).shipping_address
+      );
+    }
+    if (!billingAddress) {
+      billingAddress =
+        normalizePersistedAddress((order as any).billing_address) ||
+        shippingAddress;
+    }
+
     // Fetch manual payment transaction if available
     let manualPayment = null;
     try {

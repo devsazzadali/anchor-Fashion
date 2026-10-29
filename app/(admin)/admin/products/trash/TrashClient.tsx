@@ -20,6 +20,7 @@ import {
   purgeExpiredTrashAction,
   restoreAdminProductAction,
 } from "@/lib/actions/admin/products.actions";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 export interface TrashedProductRow {
   id: string;
@@ -44,18 +45,24 @@ export default function TrashClient({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmRow, setConfirmRow] = useState<TrashedProductRow | null>(null);
 
   const run = (id: string | null, fn: () => Promise<any>, okMsg: string) => {
     setBusyId(id);
     startTransition(async () => {
-      const res: any = await fn();
-      setBusyId(null);
-      if (res?.success === false || res?.error) {
-        toast.error(res.error || "Action failed");
-        return;
+      try {
+        const res: any = await fn();
+        if (res?.success === false || res?.error) {
+          toast.error(res.error || "Action failed");
+          return;
+        }
+        toast.success(okMsg);
+        router.refresh();
+      } catch (err: any) {
+        toast.error(err?.message || "Action failed");
+      } finally {
+        setBusyId(null);
       }
-      toast.success(okMsg);
-      router.refresh();
     });
   };
 
@@ -170,22 +177,7 @@ export default function TrashClient({
                       size="sm"
                       variant="destructive"
                       disabled={pending && busyId === row.id}
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            `Permanently delete "${row.name}"? This cannot be undone.`
-                          )
-                        )
-                          return;
-                        run(
-                          row.id,
-                          () =>
-                            permanentlyDeleteAdminProductAction({
-                              id: row.id,
-                            }),
-                          "Product permanently deleted"
-                        );
-                      }}
+                      onClick={() => setConfirmRow(row)}
                     >
                       <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                       Delete forever
@@ -197,6 +189,34 @@ export default function TrashClient({
           </TableBody>
         </Table>
       </div>
+
+      {/* BUG FIX: replaces window.confirm() — native confirm dialogs are
+          silently auto-dismissed by some browsers/webviews, which made
+          "Delete forever" a no-op. Uses the shared in-app ConfirmDialog. */}
+      <ConfirmDialog
+        open={!!confirmRow}
+        title="Delete permanently?"
+        description={
+          confirmRow
+            ? `Permanently delete "${confirmRow.name}"? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete forever"
+        cancelLabel="Cancel"
+        variant="destructive"
+        isLoading={pending && !!confirmRow && busyId === confirmRow.id}
+        onConfirm={() => {
+          if (!confirmRow) return;
+          const row = confirmRow;
+          setConfirmRow(null);
+          run(
+            row.id,
+            () => permanentlyDeleteAdminProductAction({ id: row.id }),
+            "Product permanently deleted"
+          );
+        }}
+        onCancel={() => setConfirmRow(null)}
+      />
     </div>
   );
 }

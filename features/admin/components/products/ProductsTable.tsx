@@ -115,6 +115,7 @@ export function ProductsTable({
       labels = vars.map((v: any) => ({
         productName: prodName,
         sku: v.sku || prodSku,
+        styleCode: prodSku,
         barcode: v.barcode || prodBarcode,
         color: (v.attributes as any)?.Color || "",
         size: (v.attributes as any)?.Size || "",
@@ -125,6 +126,7 @@ export function ProductsTable({
         {
           productName: prodName,
           sku: prodSku,
+          styleCode: prodSku,
           barcode: prodBarcode,
           price: prodPrice,
         },

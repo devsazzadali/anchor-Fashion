@@ -529,6 +529,9 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
         return {
           productName: attrStr ? `${name} (${attrStr})` : name,
           sku: v.sku || baseSku,
+          styleCode: baseSku,
+          color,
+          size,
           barcode: v.barcode || baseBarcode || v.sku || baseSku,
           // Sticker prints "(Inc.VAT)" — the price must be VAT-inclusive.
           price: priceWithVat(Number(v.priceOverride ?? basePrice), vatPct),

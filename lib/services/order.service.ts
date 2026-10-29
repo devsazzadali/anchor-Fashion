@@ -174,12 +174,35 @@ export class OrderService {
       subtotal > 0 && !addressZone
         ? await this.zoneFeeForMethod(shippingMethod)
         : null;
-    const shipping_fee =
+    const zone_shipping_fee =
       subtotal > 0
         ? addressZone?.rate ??
           zoneFee ??
           (this.SHIPPING_FEES[shippingMethod ?? "home_delivery"] ?? 100)
         : 0;
+
+    // Free-shipping threshold (Settings → Store Info, advertised in the
+    // announcement bar and the cart's progress meter): when the merchandise
+    // subtotal reaches the configured threshold, delivery is free. The
+    // delivery zone is still resolved and recorded on the order by
+    // placeOrder — only the fee is waived. BUG FIX: this threshold was
+    // previously never consulted here, so qualifying orders were charged
+    // the full zone fee at checkout.
+    let shipping_fee = zone_shipping_fee;
+    if (zone_shipping_fee > 0) {
+      try {
+        const { getStoreInfo } = await import(
+          "@/lib/actions/settings.actions"
+        );
+        const info = await getStoreInfo();
+        const threshold = parseFloat(info?.free_shipping_threshold ?? "") || 0;
+        if (threshold > 0 && subtotal >= threshold) {
+          shipping_fee = 0;
+        }
+      } catch {
+        // Settings unreadable — fall through with the zone fee.
+      }
+    }
 
     // Coupon applied to the checkout session (see resolveSessionCoupon).
     const coupon = await this.resolveSessionCoupon(cartId, userId, subtotal, sessionId);

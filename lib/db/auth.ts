@@ -203,36 +203,87 @@ export const dbAuth = {
       userData: any
     ): Promise<{ data: { user: any }; error: { message: string } | null }> => {
       try {
-        // 1. Synchronize credentials with Neon Auth if password provided
+        const email = String(userData.email || "").trim().toLowerCase();
+        const fullName =
+          `${
+            userData.user_metadata?.first_name || userData.first_name || ""
+          } ${
+            userData.user_metadata?.last_name || userData.last_name || ""
+          }`.trim() || email.split("@")[0];
+
+        // 1. Provision the Neon Auth identity FIRST (BUG FIX: the previous
+        // implementation POSTed to sign-up/email WITHOUT an Origin header —
+        // Better Auth rejects such calls — and never checked the response,
+        // so auth creation failed silently and only a shell `profiles` row
+        // was created; admin-created users could never log in. This now
+        // follows the proven pattern in lib/services/auth/account-claim.service.ts:
+        // explicit Origin/Referer, response checked, auth id captured.)
+        let authUserId: string | null = null;
         if (userData.password) {
-          try {
-            const baseUrl = process.env.NEON_AUTH_BASE_URL;
-            if (!baseUrl) {
-              throw new Error("NEON_AUTH_BASE_URL is not configured");
+          const baseUrl = process.env.NEON_AUTH_BASE_URL;
+          if (!baseUrl) {
+            return {
+              data: { user: null },
+              error: { message: "NEON_AUTH_BASE_URL is not configured" },
+            };
+          }
+          const appOrigin = (
+            process.env.NEXT_PUBLIC_APP_URL || "https://anchorfashion.com"
+          ).replace(/\/+$/, "");
+          const res = await fetch(`${baseUrl}/sign-up/email`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Origin: appOrigin,
+              Referer: `${appOrigin}/admin/users`,
+            },
+            body: JSON.stringify({
+              email,
+              password: userData.password,
+              name: fullName,
+            }),
+          });
+          const json: any = await res.json().catch(() => ({}));
+          if (res.ok) {
+            authUserId = json?.user?.id || json?.data?.user?.id || null;
+          } else {
+            const code = String(json?.code || "");
+            const alreadyExists =
+              code.includes("USER_ALREADY_EXISTS") ||
+              /already exists/i.test(String(json?.message || ""));
+            if (!alreadyExists) {
+              // Real failure: surface it and do NOT create a shell profile.
+              return {
+                data: { user: null },
+                error: {
+                  message:
+                    json?.message || "Failed to create the auth user",
+                },
+              };
             }
-            const fullName = `${
-              userData.user_metadata?.first_name ||
-              userData.first_name ||
-              ""
-            } ${
-              userData.user_metadata?.last_name ||
-              userData.last_name ||
-              ""
-            }`.trim();
-            await fetch(`${baseUrl}/sign-up/email`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                email: userData.email,
-                password: userData.password,
-                name: fullName || userData.email?.split("@")[0],
-              }),
-            });
-          } catch (neonAuthErr) {
-            console.warn(
-              "[polyfill.createUser] Neon Auth sync note:",
-              neonAuthErr
-            );
+            // Email already has an auth identity — link to it below instead
+            // of duplicating.
+          }
+          if (!authUserId) {
+            // Resolve the auth user id from the shared Neon database.
+            try {
+              const rows: any[] = await prisma.$queryRawUnsafe(
+                `SELECT id FROM neon_auth."user" WHERE lower(email) = lower($1) LIMIT 1`,
+                email
+              );
+              authUserId = rows?.[0]?.id ? String(rows[0].id) : null;
+            } catch {
+              // neon_auth schema not readable from this connection — fall through.
+            }
+          }
+          if (!authUserId) {
+            return {
+              data: { user: null },
+              error: {
+                message:
+                  "The auth user could not be provisioned; no profile was created.",
+              },
+            };
           }
         }
 
@@ -246,10 +297,26 @@ export const dbAuth = {
           if (roleRecord) roleId = roleRecord.id;
         }
 
-        // 3. Upsert profile in Neon DB
-        const existing = await prisma.profile.findFirst({
-          where: { email: userData.email },
+        // 3. Upsert profile in Neon DB, bound to the auth identity: the
+        // profile id MUST equal the Neon Auth user id, otherwise the
+        // signed-in user never resolves to this profile/role. A pre-existing
+        // shell profile for the same email (created by the old broken flow)
+        // is rebound to the auth id — referencing FKs are ON UPDATE CASCADE,
+        // the same mechanism account-claim.service.ts relies on.
+        let existing = await prisma.profile.findFirst({
+          where: { email: { equals: email, mode: "insensitive" } },
         });
+
+        if (existing && authUserId && existing.id !== authUserId) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE profiles SET id = $1::uuid WHERE id = $2::uuid`,
+            authUserId,
+            existing.id
+          );
+          existing = await prisma.profile.findFirst({
+            where: { email: { equals: email, mode: "insensitive" } },
+          });
+        }
 
         let p;
         if (existing) {
@@ -272,7 +339,8 @@ export const dbAuth = {
         } else {
           p = await prisma.profile.create({
             data: {
-              email: userData.email,
+              ...(authUserId ? { id: authUserId } : {}),
+              email,
               firstName:
                 userData.user_metadata?.first_name ||
                 userData.first_name ||
@@ -293,13 +361,10 @@ export const dbAuth = {
           error: null,
         };
       } catch (e: any) {
+        // Never fabricate a user id on failure — callers must see the error
+        // and no shell profile may be left behind.
         return {
-          data: {
-            user: {
-              id: userData?.id || "user-" + Date.now(),
-              email: userData?.email,
-            },
-          },
+          data: { user: null },
           error: { message: e?.message || "Failed to create user" },
         };
       }

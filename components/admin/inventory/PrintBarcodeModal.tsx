@@ -594,11 +594,7 @@ export function PrintBarcodeModal({
                 <div
                   id="printable-barcode-sheet"
                   className={`bg-white text-black p-3 rounded-xl shadow-sm border border-zinc-200 ${
-                    isThermal
-                      ? "flex flex-wrap gap-3 justify-center"
-                      : paperMode === "a4_3col"
-                      ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2"
-                      : "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5"
+                    isThermal ? "flex flex-wrap gap-3 justify-center" : ""
                   }`}
                 >
                   {/* Dynamic CSS strictly for printing */}
@@ -687,84 +683,109 @@ export function PrintBarcodeModal({
                     className={
                       isThermal
                         ? "flex flex-wrap gap-3 justify-center w-full"
-                        : "print-a4-container w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"
+                        : `print-a4-container w-full grid gap-2 ${
+                            paperMode === "a4_3col"
+                              ? "grid-cols-2 md:grid-cols-3"
+                              : "grid-cols-2 md:grid-cols-4"
+                          }`
                     }
                   >
-                    {printableStickers.map(({ label: lbl }, sIdx) => (
+                    {printableStickers.map(({ label: lbl }, sIdx) => {
+                      // Some callers bake "(Color - Size)" into the product
+                      // name; that pair belongs in the bottom row, so show the
+                      // clean name up top and reuse the parsed values when the
+                      // label has no explicit color/size fields.
+                      const suffixMatch = lbl.productName.match(
+                        /^(.*?)\s*\((.+?)\s*-\s*(.+?)\)\s*$/
+                      );
+                      const displayName = suffixMatch
+                        ? suffixMatch[1]
+                        : lbl.productName;
+                      const colorText =
+                        lbl.color || (suffixMatch ? suffixMatch[2] : undefined);
+                      const sizeText =
+                        lbl.size || (suffixMatch ? suffixMatch[3] : undefined);
+                      return (
                       <div
                         key={`${lbl.sku}-${sIdx}`}
                         className={`bg-white text-black rounded-[4px] border border-zinc-300 p-[2mm] flex flex-col justify-between shadow-xs select-none ${
                           isThermal
-                            ? "print-thermal-sticker w-[50mm] h-[30mm] min-w-[50mm] min-h-[30mm]"
+                            ? `print-thermal-sticker w-[50mm] min-w-[50mm] ${
+                                paperMode === "thermal_50_25"
+                                  ? "h-[25mm] min-h-[25mm]"
+                                  : "h-[30mm] min-h-[30mm]"
+                              }`
                             : "print-a4-sticker w-full h-[30mm]"
                         }`}
                         style={{
                           boxSizing: "border-box",
                         }}
                       >
-                        {/* Top Line: Product Name (Left) + Category/Tag (Right) */}
-                        <div className="flex items-start justify-between gap-1 leading-none">
-                          <div className="font-bold text-[10.5px] text-zinc-950 truncate max-w-[76%] tracking-tight">
-                            {lbl.productName}
+                        {/* REDESIGNED STICKER (owner spec): brand + product name
+                            centered on top, barcode alone in the middle spanning
+                            the FULL width (nothing on either side), and a
+                            bottom row of SKU | Color/Size | Price. */}
+                        {/* Top: Brand centered, product name centered under it */}
+                        <div className="text-center leading-tight">
+                          <div
+                            className={`font-black uppercase text-zinc-950 ${
+                              paperMode === "thermal_50_25"
+                                ? "text-[8.5px] tracking-[0.22em]"
+                                : "text-[9.5px] tracking-[0.24em]"
+                            }`}
+                          >
+                            {lbl.brandName || "Anchor Fashion"}
                           </div>
-                          <div className="text-[8.5px] font-bold text-zinc-800 uppercase shrink-0">
-                            {lbl.tag || (lbl.categoryName ? lbl.categoryName.slice(0, 3).toUpperCase() : "ND")}
+                          <div
+                            className={`font-bold text-zinc-900 line-clamp-2 tracking-tight ${
+                              paperMode === "thermal_50_25" ? "text-[9.5px]" : "text-[10.5px]"
+                            }`}
+                          >
+                            {displayName}
                           </div>
-                        </div>
-
-                        {/* Middle Section: Left (Size & Style Code) | Right (Brand & Barcode) */}
-                        <div className="flex items-center justify-between gap-1 my-auto">
-                          {/* Left Column: Size & Style Code */}
-                          <div className="flex flex-col justify-center text-left leading-tight shrink-0">
-                            {lbl.size && (
-                              <span className="text-[10px] font-bold text-black tracking-tight">
-                                Size: {lbl.size}
-                              </span>
-                            )}
-                            <span className="text-[9px] font-mono font-bold text-zinc-900 tracking-tight">
-                              {lbl.styleCode || lbl.sku}
-                            </span>
-                            {lbl.color && (
-                              <span className="text-[8px] font-medium text-zinc-600 line-clamp-1">
-                                {lbl.color}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Right Column: Brand Name above Barcode + Crisp Vector Barcode */}
-                          <div className="flex flex-1 min-w-0 flex-col items-center justify-center text-center">
-                            <span className="text-[8.5px] font-bold tracking-wider uppercase text-zinc-900 leading-none mb-0.5">
-                              {lbl.brandName || "Anchor Fashion"}
-                            </span>
-                            <div className="barcode-svg-clean flex w-full items-center justify-center">
-                              <ClientBarcode
-                                value={lbl.barcode || "040050336332"}
-                                format="CODE128"
-                                width={1.2}
-                                height={24}
-                                fontSize={9}
-                                margin={0}
-                                textMargin={1}
-                                displayValue={true}
-                                fit
-                                className="w-full"
-                              />
+                          {/* Color · Size sit above the barcode (owner allowed
+                              the size/color texts above or below it): at 50mm
+                              wide, SKU + Color/Size + Price cannot share one
+                              row without clipping the SKU. */}
+                          {(colorText || sizeText) && (
+                            <div className="text-[8.5px] font-semibold text-zinc-700 tracking-tight">
+                              {[colorText, sizeText].filter(Boolean).join(" · ")}
                             </div>
-                          </div>
+                          )}
                         </div>
 
-                        {/* Bottom Line: Price */}
-                        <div className="text-center border-t border-zinc-200/90 pt-0.5 leading-none">
-                          <span className="text-[11.5px] font-black tracking-tight text-zinc-950">
+                        {/* Middle: full-width centered barcode, number under the bars */}
+                        <div className="barcode-svg-clean flex w-full items-center justify-center my-auto px-[1mm]">
+                          <ClientBarcode
+                            value={lbl.barcode || "040050336332"}
+                            format="CODE128"
+                            width={1.4}
+                            height={paperMode === "thermal_50_25" ? 19 : 25}
+                            fontSize={9}
+                            margin={0}
+                            textMargin={1}
+                            displayValue={true}
+                            fit
+                            className="w-full"
+                          />
+                        </div>
+
+                        {/* Bottom row: SKU/Style | Price (Inc.VAT) */}
+                        <div className="flex items-end justify-between gap-1 border-t border-zinc-200/90 pt-[0.8mm] leading-none">
+                          <span className="flex-1 min-w-0 text-left font-mono font-bold text-[8px] text-zinc-900 tracking-tight truncate">
+                            {lbl.styleCode || lbl.sku}
+                          </span>
+                          <span className="shrink-0 text-[9.5px] font-black tracking-tight text-zinc-950 whitespace-nowrap">
                             TK.{Number(lbl.price || 0).toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
-                            (Inc.VAT)
+                            <span className="text-[7px] font-bold">(Inc.VAT)</span>
                           </span>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

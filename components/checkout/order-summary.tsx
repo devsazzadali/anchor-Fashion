@@ -12,6 +12,7 @@ import { applyCouponAction, removeCouponAction } from "@/actions/checkout.action
 import { useToast } from "@/hooks/use-toast";
 import { totalVatAmount } from "@/lib/utils/vat";
 import { getPublicZonesAction } from "@/lib/actions/shipping.actions";
+import { getStoreInfo } from "@/lib/actions/settings.actions";
 import {
   pickZone,
   defaultZone,
@@ -69,7 +70,27 @@ export function OrderSummary() {
     }
     return shippingMethod === "home_delivery_outside" ? 150 : 100;
   })();
-  const shippingFee = zoneFee;
+  // Free-shipping threshold (Settings → Store Info, advertised in the
+  // announcement bar and cart): at/above it delivery is free. Mirrors the
+  // server's OrderService.calculateSummary so the displayed total matches
+  // the charged total. BUG FIX: this display previously never consulted
+  // the threshold and kept showing the zone fee on qualifying orders.
+  const [freeThreshold, setFreeThreshold] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    getStoreInfo()
+      .then((info) => {
+        if (!cancelled) {
+          setFreeThreshold(parseFloat(info?.free_shipping_threshold ?? "") || 0);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const shippingFee =
+    freeThreshold > 0 && subtotal >= freeThreshold ? 0 : zoneFee;
   // Real per-product VAT (each product's vat_percent, added on top of its
   // selling price) — identical to the server's OrderService.calculateSummary.
   // (This replaces a hardcoded 15% "estimated tax" that the server never
