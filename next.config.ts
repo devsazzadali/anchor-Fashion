@@ -100,6 +100,7 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/shop", destination: "/products", permanent: true },
+      { source: "/store", destination: "/products", permanent: true },
       { source: "/customer", destination: "/account", permanent: true },
       { source: "/orders", destination: "/account/orders", permanent: true },
       { source: "/login", destination: "/auth/login", permanent: true },

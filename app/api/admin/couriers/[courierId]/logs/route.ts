@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
+import { authErrorResponse } from "@/lib/api/auth-error";
 
 export const dynamic = "force-dynamic";
 
@@ -48,9 +49,6 @@ export async function GET(
       data: logs || [],
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { success: false, error: err.message || "Failed to retrieve logs" },
-      { status: 500 }
-    );
+    return authErrorResponse(err);
   }
 }

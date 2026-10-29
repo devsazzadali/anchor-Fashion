@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WarehouseService } from "@/services/warehouse.service";
 import { verifyStaff, verifyManager } from "@/lib/security/roles";
+import { authErrorResponse } from "@/lib/api/auth-error";
 
 export async function GET(
   request: NextRequest,
@@ -13,7 +14,7 @@ export async function GET(
     const racks = await service.getRacksByZone(id);
     return NextResponse.json(racks);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 500 });
+    return authErrorResponse(error);
   }
 }
 
@@ -29,6 +30,6 @@ export async function POST(
     const rack = await service.createRack(id, body);
     return NextResponse.json(rack, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 400 });
+    return authErrorResponse(error, 400);
   }
 }

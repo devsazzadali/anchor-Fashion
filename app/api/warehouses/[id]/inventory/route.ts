@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WarehouseService } from "@/services/warehouse.service";
 import { verifyStaff } from "@/lib/security/roles";
+import { authErrorResponse } from "@/lib/api/auth-error";
 
 export async function GET(
   request: NextRequest,
@@ -20,6 +21,6 @@ export async function GET(
     const inventory = await service.getWarehouseInventory(id, { search, category, status, page, limit });
     return NextResponse.json(inventory);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 500 });
+    return authErrorResponse(error);
   }
 }

@@ -105,6 +105,7 @@ export class ShipmentRepository {
       .eq("id", id)
       .maybeSingle();
 
+    if (error?.code === "PGRST116") return null;
     if (error) throw new Error(`Get shipment failed: ${error.message}`);
     return data as Shipment | null;
   }
@@ -123,6 +124,7 @@ export class ShipmentRepository {
       .eq("tracking_number", trackingNumber)
       .maybeSingle();
 
+    if (error?.code === "PGRST116") return null;
     if (error)
       throw new Error(`Get shipment by tracking failed: ${error.message}`);
     return data as Shipment | null;

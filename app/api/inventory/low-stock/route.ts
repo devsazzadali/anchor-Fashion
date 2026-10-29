@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
+import { authErrorResponse } from "@/lib/api/auth-error";
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,6 +55,6 @@ export async function GET(request: NextRequest) {
       items: lowStockItems,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return authErrorResponse(error);
   }
 }

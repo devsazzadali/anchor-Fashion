@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WarehouseService } from "@/services/warehouse.service";
 import { verifyStaff, verifyManager, verifyAdmin } from "@/lib/security/roles";
+import { authErrorResponse } from "@/lib/api/auth-error";
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +17,7 @@ export async function GET(
     }
     return NextResponse.json(warehouse);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 500 });
+    return authErrorResponse(error);
   }
 }
 
@@ -32,7 +33,7 @@ export async function PATCH(
     const updated = await service.updateWarehouse(id, body);
     return NextResponse.json(updated);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 400 });
+    return authErrorResponse(error, 400);
   }
 }
 
@@ -47,6 +48,6 @@ export async function DELETE(
     const res = await service.deleteWarehouse(id);
     return NextResponse.json(res);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 400 });
+    return authErrorResponse(error, 400);
   }
 }

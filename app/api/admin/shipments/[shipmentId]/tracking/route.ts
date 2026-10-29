@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
 import { verifyStaff } from "@/lib/security/roles";
+import { authErrorResponse } from "@/lib/api/auth-error";
 
 export const dynamic = "force-dynamic";
 
@@ -80,9 +81,6 @@ export async function GET(
       },
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { success: false, error: err.message || "Failed to fetch tracking" },
-      { status: 500 }
-    );
+    return authErrorResponse(err);
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
 import { verifyStaff } from "@/lib/security/roles";
+import { authErrorResponse } from "@/lib/api/auth-error";
 
 export const dynamic = "force-dynamic";
 
@@ -20,15 +21,6 @@ export async function GET(
       data: health,
     });
   } catch (err: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: "HEALTH_CHECK_FAILED",
-          message: err.message || "Failed to perform courier health check",
-        },
-      },
-      { status: 500 }
-    );
+    return authErrorResponse(err);
   }
 }

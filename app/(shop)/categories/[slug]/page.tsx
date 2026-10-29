@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import {
   getCategoryBySlug,
   getCategories,
@@ -53,6 +54,7 @@ export default async function CategoryPage({
   const search = typeof sParams?.q === "string" ? sParams.q : undefined;
 
   const category = await getCategoryBySlug(slug);
+  if (!category) notFound();
   const displayName = category?.name || slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
   // Fetch data in parallel with comprehensive filter parameters

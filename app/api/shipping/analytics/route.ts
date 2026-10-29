@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
+import { authErrorResponse } from "@/lib/api/auth-error";
 
 /**
  * GET /api/shipping/analytics
@@ -105,6 +106,6 @@ export async function GET(req: Request) {
     });
   } catch (err: any) {
     console.error("[Analytics API]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return authErrorResponse(err);
   }
 }
