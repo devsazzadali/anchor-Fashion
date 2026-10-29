@@ -135,6 +135,8 @@ export function getCachedProducts(params: ProductListParams) {
     String(params.minPrice || ""),
     String(params.maxPrice || ""),
     params.search || "",
+    (params.sizes || []).join(","),
+    (params.colors || []).join(","),
   ];
 
   const fetcher = unstable_cache(

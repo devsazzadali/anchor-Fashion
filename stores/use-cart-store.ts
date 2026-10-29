@@ -16,6 +16,7 @@ interface CartState {
   isSheetOpen: boolean;
 
   setSheetOpen: (open: boolean) => void;
+  setCart: (cart: Cart | null) => void;
   fetchCart: () => Promise<void>;
   addItem: (
     productId: string,
@@ -36,6 +37,8 @@ export const useCartStore = create<CartState>()(
       isSheetOpen: false,
 
       setSheetOpen: (open) => set({ isSheetOpen: open }),
+
+      setCart: (cart) => set({ cart }),
 
       fetchCart: async () => {
         set({ isLoading: true, error: null });

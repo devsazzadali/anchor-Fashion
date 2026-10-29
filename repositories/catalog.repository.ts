@@ -10,6 +10,10 @@ export interface ProductListParams {
   sortBy?: "price_asc" | "price_desc" | "newest" | "rating";
   limit?: number;
   offset?: number;
+  /** Selected size facet values (variant attributes Size/size). */
+  sizes?: string[];
+  /** Selected colour facet values (variant attributes Color/Colour). */
+  colors?: string[];
 }
 
 function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
@@ -143,6 +147,50 @@ export const CatalogRepository = {
     } catch (e) {
       console.error("Error fetching categories from Neon:", e);
       return [];
+    }
+  },
+
+  /**
+   * Distinct size / colour facet values across variants of ACTIVE
+   * products, read from the real variant attribute JSON (keys are not
+   * uniform: "Size"/"size", "Color"/"color"/"Colour"/"colour").
+   */
+  async getFilterFacets(): Promise<{ sizes: string[]; colors: string[] }> {
+    try {
+      const variants = await prisma.variant.findMany({
+        where: {
+          isActive: true,
+          product: { status: "ACTIVE", deletedAt: null },
+        },
+        select: { attributes: true },
+      });
+      const sizes = new Set<string>();
+      const colors = new Set<string>();
+      for (const v of variants) {
+        const a = (v.attributes ?? {}) as Record<string, any>;
+        const size = a.Size ?? a.size;
+        const color = a.Color ?? a.color ?? a.Colour ?? a.colour;
+        if (size !== undefined && size !== null && String(size).trim() !== "") {
+          sizes.add(String(size));
+        }
+        if (
+          color !== undefined &&
+          color !== null &&
+          String(color).trim() !== ""
+        ) {
+          colors.add(String(color));
+        }
+      }
+      const sizeList = [...sizes].sort((x, y) => {
+        const nx = parseFloat(x);
+        const ny = parseFloat(y);
+        if (!Number.isNaN(nx) && !Number.isNaN(ny)) return nx - ny;
+        return x.localeCompare(y);
+      });
+      return { sizes: sizeList, colors: [...colors].sort((x, y) => x.localeCompare(y)) };
+    } catch (error) {
+      console.error("Error fetching filter facets from Neon:", error);
+      return { sizes: [], colors: [] };
     }
   },
 
@@ -281,6 +329,33 @@ export const CatalogRepository = {
         if (params.minPrice !== undefined) priceFilter.gte = params.minPrice;
         if (params.maxPrice !== undefined) priceFilter.lte = params.maxPrice;
         andClauses.push({ basePrice: priceFilter });
+      }
+      // Size / colour facets: a product qualifies when ONE active variant
+      // matches every selected facet group (values within a group are OR).
+      // Variant attribute keys are not uniform in the catalog data ("Size"
+      // and "size" both occur; colours are stored under "Color"), so each
+      // value is checked against every known key spelling.
+      const SIZE_KEYS = ["Size", "size"];
+      const COLOR_KEYS = ["Color", "color", "Colour", "colour"];
+      if (params.sizes?.length || params.colors?.length) {
+        const variantConds: any[] = [];
+        if (params.sizes?.length) {
+          variantConds.push({
+            OR: params.sizes.flatMap((s) =>
+              SIZE_KEYS.map((k) => ({ attributes: { path: [k], equals: s } }))
+            ),
+          });
+        }
+        if (params.colors?.length) {
+          variantConds.push({
+            OR: params.colors.flatMap((c) =>
+              COLOR_KEYS.map((k) => ({ attributes: { path: [k], equals: c } }))
+            ),
+          });
+        }
+        andClauses.push({
+          variants: { some: { isActive: true, AND: variantConds } },
+        });
       }
       if (params.search && params.search.trim()) {
         const term = params.search.trim();

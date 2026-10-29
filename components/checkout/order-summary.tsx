@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, ShieldCheck } from "lucide-react";
 import { applyCouponAction, removeCouponAction } from "@/actions/checkout.actions";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { totalVatAmount } from "@/lib/utils/vat";
 import { getPublicZonesAction } from "@/lib/actions/shipping.actions";
 import { getStoreInfo } from "@/lib/actions/settings.actions";
@@ -22,8 +22,11 @@ import {
 export function OrderSummary() {
   const { cart } = useCartStore();
   const { formData, session } = useCheckoutStore();
-  const { toast } = useToast();
   const [couponCode, setCouponCode] = useState("");
+  const [couponMessage, setCouponMessage] = useState<{
+    kind: "error" | "success";
+    text: string;
+  } | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<{
     code: string;
@@ -120,23 +123,42 @@ export function OrderSummary() {
 
   const handleApplyCoupon = async (codeToApply?: string) => {
     const code = codeToApply || couponCode;
-    if (!code.trim() || !session?.id) return;
-    
+    if (!code.trim()) {
+      setCouponMessage({ kind: "error", text: "Please enter a coupon code." });
+      return;
+    }
+    if (!session?.id) {
+      setCouponMessage({
+        kind: "error",
+        text: "Checkout session is still loading — please try again in a moment.",
+      });
+      return;
+    }
+
     setIsApplying(true);
+    setCouponMessage(null);
     try {
       const res = await applyCouponAction(session.id, code, subtotal);
       if (res.success && res.discount !== undefined) {
         setAppliedCoupon({ code: res.code || code, discount: res.discount });
         setCouponCode("");
+        setCouponMessage({
+          kind: "success",
+          text: `Coupon ${res.code || code} applied — you save ${formatCurrency(res.discount)}.`,
+        });
         if (!codeToApply) {
-          toast({ title: "Coupon applied successfully" });
+          toast.success("Coupon applied successfully");
         }
       } else {
-        toast({ title: "Coupon Error", description: res.error, variant: "destructive" });
+        const message = res.error || "This coupon code is not valid.";
+        setCouponMessage({ kind: "error", text: message });
+        toast.error(message);
         setAppliedCoupon(null);
       }
     } catch (err) {
-      toast({ title: "Failed to apply coupon", variant: "destructive" });
+      const message = "Failed to apply coupon. Please try again.";
+      setCouponMessage({ kind: "error", text: message });
+      toast.error(message);
     } finally {
       setIsApplying(false);
     }
@@ -149,9 +171,10 @@ export function OrderSummary() {
       await removeCouponAction(session.id);
       setAppliedCoupon(null);
       setCouponCode("");
-      toast({ title: "Coupon removed" });
+      setCouponMessage(null);
+      toast.success("Coupon removed");
     } catch (err) {
-      toast({ title: "Failed to remove coupon", variant: "destructive" });
+      toast.error("Failed to remove coupon");
     } finally {
       setIsApplying(false);
     }
@@ -229,6 +252,16 @@ export function OrderSummary() {
               Apply
             </Button>
           </div>
+        )}
+        {couponMessage && (
+          <p
+            role={couponMessage.kind === "error" ? "alert" : "status"}
+            className={`mt-2 text-xs font-medium ${
+              couponMessage.kind === "error" ? "text-red-600" : "text-green-700"
+            }`}
+          >
+            {couponMessage.text}
+          </p>
         )}
       </div>
 

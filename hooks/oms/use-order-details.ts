@@ -15,6 +15,10 @@ export function useOrderDetails(orderId: string) {
       if (!response.success) throw new Error(response.error);
       return response.data;
     },
+    // A missing order must settle immediately: with the default 3 retries
+    // (plus backoff) the page sat on "Loading order details…" long enough
+    // to look like an infinite spinner.
+    retry: false,
   });
 
   const updateStatusMutation = useMutation({

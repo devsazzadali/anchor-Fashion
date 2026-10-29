@@ -12,6 +12,7 @@ import {
   Star,
   Bell,
   RefreshCcw,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ const navItems = [
   { label: "Overview", href: "/account", icon: User, exact: true },
   { label: "Profile", href: "/account/profile", icon: User },
   { label: "Orders", href: "/account/orders", icon: ShoppingBag },
+  { label: "Wallet", href: "/account/wallet", icon: Wallet },
   { label: "Returns", href: "/account/returns", icon: RefreshCcw },
   { label: "Wishlist", href: "/account/wishlist", icon: Heart },
   { label: "Loyalty", href: "/account/loyalty", icon: Award },

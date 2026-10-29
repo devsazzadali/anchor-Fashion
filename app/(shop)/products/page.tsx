@@ -75,6 +75,17 @@ export default async function ProductsPage({
     typeof params.maxPrice === "string" && !isNaN(Number(params.maxPrice))
       ? Number(params.maxPrice)
       : undefined;
+  // Size / colour facets travel as comma-separated URL params so several
+  // values can be active at once.
+  const parseFacet = (v: string | string[] | undefined): string[] =>
+    typeof v === "string"
+      ? v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+  const selectedSizes = parseFacet(params.size);
+  const selectedColors = parseFacet(params.color);
 
   let sortBy: ProductListParams["sortBy"] = "newest";
   if (sort === "price_asc" || sort === "price_desc" || sort === "rating") {
@@ -89,9 +100,11 @@ export default async function ProductsPage({
   if (sort) safeParams.sort = sort;
   if (minPrice !== undefined) safeParams.minPrice = String(minPrice);
   if (maxPrice !== undefined) safeParams.maxPrice = String(maxPrice);
+  if (selectedSizes.length) safeParams.size = selectedSizes.join(",");
+  if (selectedColors.length) safeParams.color = selectedColors.join(",");
 
   // Fetch catalog data in parallel
-  const [prodResult, rawCategories, rawBrands] =
+  const [prodResult, rawCategories, rawBrands, facets] =
     await Promise.all([
       CatalogService.getProducts({
         category,
@@ -101,9 +114,12 @@ export default async function ProductsPage({
         search,
         sortBy,
         limit: 50,
+        sizes: selectedSizes.length ? selectedSizes : undefined,
+        colors: selectedColors.length ? selectedColors : undefined,
       }),
       CatalogService.getCategories(),
       CatalogService.getBrands(),
+      CatalogService.getFilterFacets(),
     ]);
 
   const products = prodResult?.data || [];
@@ -135,6 +151,8 @@ export default async function ProductsPage({
     brand,
     minPrice !== undefined || maxPrice !== undefined,
     search,
+    selectedSizes.length > 0,
+    selectedColors.length > 0,
   ].filter(Boolean).length;
 
   const pageTitle = search
@@ -273,6 +291,8 @@ export default async function ProductsPage({
                 <ProductFilters
                   categories={categories}
                   brands={brands}
+                  sizes={facets.sizes}
+                  colors={facets.colors}
                   productCount={products.length}
                 />
               </div>
@@ -437,6 +457,44 @@ export default async function ProductsPage({
             </span>
           )}
 
+          {selectedSizes.map((s) => (
+            <span
+              key={`size-${s}`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-800 shadow-sm"
+            >
+              <span>Size: {s}</span>
+              <Link
+                href={`/products?${new URLSearchParams({
+                  ...safeParams,
+                  size: selectedSizes.filter((x) => x !== s).join(","),
+                }).toString()}`}
+                className="hover:text-red-600"
+                aria-label={`Remove size ${s}`}
+              >
+                <X className="h-3 w-3" />
+              </Link>
+            </span>
+          ))}
+
+          {selectedColors.map((c) => (
+            <span
+              key={`color-${c}`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-800 shadow-sm"
+            >
+              <span>Colour: {c}</span>
+              <Link
+                href={`/products?${new URLSearchParams({
+                  ...safeParams,
+                  color: selectedColors.filter((x) => x !== c).join(","),
+                }).toString()}`}
+                className="hover:text-red-600"
+                aria-label={`Remove colour ${c}`}
+              >
+                <X className="h-3 w-3" />
+              </Link>
+            </span>
+          ))}
+
           <Link
             href="/products"
             className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-[#C9A86A] hover:text-black transition-colors"
@@ -464,6 +522,8 @@ export default async function ProductsPage({
               <ProductFilters
                 categories={categories}
                 brands={brands}
+                sizes={facets.sizes}
+                colors={facets.colors}
                 productCount={products.length}
               />
             </Suspense>

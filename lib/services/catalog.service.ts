@@ -1,4 +1,7 @@
-import { ProductListParams } from "@/repositories/catalog.repository";
+import {
+  CatalogRepository,
+  ProductListParams,
+} from "@/repositories/catalog.repository";
 import {
   getCachedCategories,
   getCachedBrands,
@@ -42,6 +45,13 @@ export class CatalogService {
    */
   static async getProducts(params: ProductListParams) {
     return getCachedProducts(params);
+  }
+
+  /**
+   * Distinct size / colour facet values from the live variant data.
+   */
+  static async getFilterFacets() {
+    return CatalogRepository.getFilterFacets();
   }
 
   /**

@@ -32,10 +32,23 @@ export default function TrackOrderPage() {
   const [query, setQuery] = useState("");
 
   const {
-    data: timeline,
+    data: rawData,
     isLoading,
     error,
   } = usePublicTracking(query || undefined);
+
+  // The API returns either a courier timeline or, when the customer enters
+  // their order number (AF-…) and no shipment exists yet, an orderInfo
+  // payload with the order's current status.
+  const orderInfo: {
+    orderNumber: string;
+    status: string;
+    placedAt: string;
+    totalAmount: number | null;
+    shipped: boolean;
+    trackingNumber: string | null;
+  } | null = (rawData as any)?.orderInfo ?? null;
+  const timeline = orderInfo ? null : rawData;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +68,8 @@ export default function TrackOrderPage() {
             Track Your Order
           </h1>
           <p className="mb-8 text-lg text-slate-300">
-            Enter your tracking number to see the latest delivery status
+            Enter your tracking number or your order number to see the
+            latest delivery status
           </p>
 
           <form onSubmit={handleSearch} className="flex gap-2">
@@ -63,7 +77,7 @@ export default function TrackOrderPage() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Enter tracking number (e.g. SFT-1234567)"
+              placeholder="Tracking number or order number (e.g. AF-20261029-XXXX)"
               className="flex-1 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-white/50"
             />
             <button
@@ -90,8 +104,57 @@ export default function TrackOrderPage() {
             <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-red-400" />
             <p className="font-medium text-red-600">Tracking not found</p>
             <p className="mt-1 text-sm text-red-400">
-              Please check your tracking number and try again.
+              Please check your tracking number or order number and try again.
             </p>
+          </div>
+        )}
+
+        {orderInfo && (
+          <div className="space-y-6">
+            <div className="rounded-2xl border bg-white p-6 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Order Number
+                  </p>
+                  <p className="mt-0.5 font-mono text-lg font-bold">
+                    {orderInfo.orderNumber}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-sm font-medium capitalize text-blue-700">
+                  {orderInfo.status.replace(/_/g, " ").toLowerCase()}
+                </span>
+              </div>
+              <div className="mt-4 space-y-1 text-sm text-slate-600">
+                <p>
+                  Placed on{" "}
+                  <strong>
+                    {new Date(orderInfo.placedAt).toLocaleDateString("en-BD", {
+                      weekday: "short",
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </strong>
+                </p>
+                {orderInfo.totalAmount !== null && (
+                  <p>
+                    Order total: <strong>৳{orderInfo.totalAmount}</strong>
+                  </p>
+                )}
+              </div>
+              {!orderInfo.shipped && (
+                <div className="mt-4 flex items-start gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
+                  <Package className="mt-0.5 h-5 w-5 shrink-0" />
+                  <p>
+                    Your order has not been shipped yet, so there is no
+                    courier tracking number for it yet. Once it is handed to
+                    the courier, tracking will appear here — you can check
+                    back with the same order number.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -234,7 +297,7 @@ export default function TrackOrderPage() {
         {!query && !isLoading && (
           <div className="py-12 text-center text-slate-400">
             <Truck className="mx-auto mb-4 h-12 w-12 opacity-30" />
-            <p>Enter your tracking number above to get started</p>
+            <p>Enter your tracking number or order number above to get started</p>
           </div>
         )}
       </div>

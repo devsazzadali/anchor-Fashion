@@ -49,7 +49,7 @@ export default function AdminOrderDetailsPage() {
   const params = useParams();
   const orderId = params.id as string;
   const queryClient = useQueryClient();
-  const { order, isLoading, updateStatus, isUpdatingStatus } =
+  const { order, isLoading, error, updateStatus, isUpdatingStatus } =
     useOrderDetails(orderId);
 
   const [isApproving, setIsApproving] = useState(false);
@@ -59,7 +59,21 @@ export default function AdminOrderDetailsPage() {
   const [copiedTrx, setCopiedTrx] = useState(false);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading order details...</div>;
-  if (!order) return <div className="p-8 text-destructive">Order not found</div>;
+  if (!order)
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+        <AlertTriangle className="h-10 w-10 text-amber-500" />
+        <h2 className="text-lg font-semibold">Order not found</h2>
+        <p className="max-w-md text-sm text-muted-foreground">
+          {error
+            ? `We couldn't load this order (${error.message}). It may have been deleted, or the link is incorrect.`
+            : "This order does not exist. It may have been deleted, or the link is incorrect."}
+        </p>
+        <Button asChild variant="outline">
+          <Link href="/admin/orders">Back to Orders</Link>
+        </Button>
+      </div>
+    );
 
   const handleStatusUpdate = async (newStatus: OrderStatus) => {
     try {

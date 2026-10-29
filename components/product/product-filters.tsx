@@ -26,6 +26,10 @@ interface Brand {
 interface ProductFiltersProps {
   categories: Category[];
   brands: Brand[];
+  /** Distinct size facet values from live variant data. */
+  sizes?: string[];
+  /** Distinct colour facet values from live variant data. */
+  colors?: string[];
   basePath?: string;
   onClose?: () => void;
   productCount?: number;
@@ -41,6 +45,8 @@ const PRICE_PRESETS = [
 export function ProductFilters({
   categories,
   brands,
+  sizes = [],
+  colors = [],
   basePath,
   onClose,
   productCount,
@@ -54,6 +60,15 @@ export function ProductFilters({
   const currentMinPrice = searchParams.get("minPrice");
   const currentMaxPrice = searchParams.get("maxPrice");
   const currentSearch = searchParams.get("q");
+  const parseFacetParam = (v: string | null): string[] =>
+    v
+      ? v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+  const currentSizes = parseFacetParam(searchParams.get("size"));
+  const currentColors = parseFacetParam(searchParams.get("color"));
 
   const [customMin, setCustomMin] = useState(currentMinPrice || "");
   const [customMax, setCustomMax] = useState(currentMaxPrice || "");
@@ -84,6 +99,20 @@ export function ProductFilters({
     updateQuery({ brand: currentBrand === slug ? null : slug });
   };
 
+  const toggleSize = (size: string) => {
+    const next = currentSizes.includes(size)
+      ? currentSizes.filter((s) => s !== size)
+      : [...currentSizes, size];
+    updateQuery({ size: next.length ? next.join(",") : null });
+  };
+
+  const toggleColor = (color: string) => {
+    const next = currentColors.includes(color)
+      ? currentColors.filter((c) => c !== color)
+      : [...currentColors, color];
+    updateQuery({ color: next.length ? next.join(",") : null });
+  };
+
   const applyPricePreset = (min: string, max: string) => {
     if (
       currentMinPrice === min &&
@@ -112,7 +141,9 @@ export function ProductFilters({
       currentBrand ||
       currentMinPrice ||
       currentMaxPrice ||
-      currentSearch
+      currentSearch ||
+      currentSizes.length ||
+      currentColors.length
   );
 
   const currentCategoryObj = categories.find((c) => c.slug === currentCategory);
@@ -207,13 +238,47 @@ export function ProductFilters({
               </button>
             </span>
           )}
+          {currentSizes.map((s) => (
+            <span
+              key={`badge-size-${s}`}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-medium text-gray-800"
+            >
+              <span>Size: {s}</span>
+              <button
+                type="button"
+                onClick={() => toggleSize(s)}
+                disabled={isPending}
+                className="hover:text-red-600 disabled:opacity-50"
+                aria-label={`Remove size ${s} filter`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          {currentColors.map((c) => (
+            <span
+              key={`badge-color-${c}`}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-medium text-gray-800"
+            >
+              <span>Colour: {c}</span>
+              <button
+                type="button"
+                onClick={() => toggleColor(c)}
+                disabled={isPending}
+                className="hover:text-red-600 disabled:opacity-50"
+                aria-label={`Remove colour ${c} filter`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
         </div>
       )}
 
       {/* Accordion Filter Sections */}
       <Accordion
         type="multiple"
-        defaultValue={["category", "brand", "price"]}
+        defaultValue={["category", "brand", "price", "size", "color"]}
         className="w-full space-y-1"
       >
         {/* Categories */}
@@ -283,6 +348,91 @@ export function ProductFilters({
                       }`}
                     >
                       <span>{brand.name}</span>
+                      {active && <Check className="h-3.5 w-3.5 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        )}
+
+        {/* Size (variant facet) */}
+        {sizes.length > 0 && (
+          <AccordionItem value="size" className="border-b border-gray-100">
+            <AccordionTrigger className="py-2.5 text-xs font-bold uppercase tracking-wider text-gray-900 hover:no-underline">
+              Size
+              {currentSizes.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-black px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {currentSizes.length}
+                </span>
+              )}
+            </AccordionTrigger>
+            <AccordionContent>
+              <div
+                className="flex flex-wrap gap-1.5 pt-1"
+                role="listbox"
+                aria-label="Filter by size"
+              >
+                {sizes.map((size) => {
+                  const active = currentSizes.includes(size);
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => toggleSize(size)}
+                      disabled={isPending}
+                      className={`min-w-9 rounded-md border px-2 py-1.5 text-center text-xs transition-colors disabled:cursor-wait ${
+                        active
+                          ? "border-black bg-black text-white font-medium shadow-sm"
+                          : "border-gray-200 text-gray-600 hover:border-black hover:text-black"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  );
+                })}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        )}
+
+        {/* Colour (variant facet) */}
+        {colors.length > 0 && (
+          <AccordionItem value="color" className="border-b border-gray-100">
+            <AccordionTrigger className="py-2.5 text-xs font-bold uppercase tracking-wider text-gray-900 hover:no-underline">
+              Colour
+              {currentColors.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-black px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {currentColors.length}
+                </span>
+              )}
+            </AccordionTrigger>
+            <AccordionContent>
+              <div
+                className="max-h-56 space-y-0.5 overflow-y-auto pr-1 pt-1"
+                role="listbox"
+                aria-label="Filter by colour"
+              >
+                {colors.map((color) => {
+                  const active = currentColors.includes(color);
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => toggleColor(color)}
+                      disabled={isPending}
+                      className={`flex w-full cursor-pointer items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition-colors disabled:cursor-wait ${
+                        active
+                          ? "bg-black text-white font-medium shadow-sm"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <span>{color}</span>
                       {active && <Check className="h-3.5 w-3.5 shrink-0" />}
                     </button>
                   );

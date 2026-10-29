@@ -59,6 +59,7 @@ export default async function CheckoutPage() {
       <CheckoutStoreInitializer
         cartId={cartRes.cart.id}
         initialSession={sessionRes.session}
+        initialCart={cartRes.cart}
       />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-16">

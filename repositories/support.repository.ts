@@ -159,13 +159,15 @@ export class SupportRepository {
 
   static async updateTicketStatus(ticketId: string, status: string): Promise<void> {
     const db = await this.getClient();
+    // NOTE: support_tickets has no resolved_at / closed_at columns. Sending
+    // them made the DB layer silently discard the ENTIRE update (its
+    // unknown-column guard returns an empty success), so status changes
+    // never persisted. Only real columns may be sent — see updateTicket.
     const { error } = await db
       .from("support_tickets")
       .update({
         status,
         updated_at: new Date().toISOString(),
-        ...(status === "resolved" ? { resolved_at: new Date().toISOString() } : {}),
-        ...(status === "closed" ? { closed_at: new Date().toISOString() } : {}),
       })
       .eq("id", ticketId);
 
@@ -336,20 +338,22 @@ export class SupportRepository {
 
   async updateTicket(id: string, data: any): Promise<any> {
     const db = await SupportRepository.getClient();
+    // Only columns that actually exist on support_tickets may be sent. The
+    // DB layer silently discards the WHOLE update when the payload contains
+    // an unknown column (returning an empty success), which is why status
+    // changes — above all "resolved", which used to drag in a resolved_at
+    // key — never persisted while the UI reported success. The table has no
+    // profile_id / department_id / order_id / sla_breach_at /
+    // first_response_at / resolved_at / closed_at columns; the customer
+    // column is customer_id.
     const allowed = [
-      "profile_id",
+      "customer_id",
       "subject",
       "description",
       "category",
       "priority",
       "status",
-      "department_id",
       "assigned_agent_id",
-      "order_id",
-      "sla_breach_at",
-      "first_response_at",
-      "resolved_at",
-      "closed_at",
     ];
     const payload: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -359,21 +363,14 @@ export class SupportRepository {
         payload[key] = data[key];
       }
     }
-    if (data.customer_id && !payload.profile_id) {
-      payload.profile_id = data.customer_id;
+    if (payload.customer_id === undefined && (data.profile_id || data.customer_id)) {
+      payload.customer_id = data.profile_id || data.customer_id;
     }
 
     if (payload.assigned_agent_id !== undefined) {
       payload.assigned_agent_id = await SupportRepository.resolveSupportAgentId(
         payload.assigned_agent_id
       );
-    }
-
-    if (payload.status === "resolved" && !payload.resolved_at) {
-      payload.resolved_at = new Date().toISOString();
-    }
-    if (payload.status === "closed" && !payload.closed_at) {
-      payload.closed_at = new Date().toISOString();
     }
 
     const { data: ticket, error } = await db
