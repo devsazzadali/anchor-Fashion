@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Warehouse, WarehouseZone, WarehouseBin } from "@/types/inventory.types";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { 
   updateWarehouseAction, 
   createZoneAction, 
@@ -97,8 +99,12 @@ export function WarehouseManager({
     }
   }
 
+  const [pendingDelete, setPendingDelete] = useState<
+    { kind: "zone" | "bin"; id: string } | null
+  >(null);
+
   async function handleDeleteZone(id: string) {
-    if (!confirm("Are you sure?")) return;
+    setPendingDelete(null);
     const res = await deleteZoneAction(id, warehouse.id);
     if (res.success) toast.success("Zone deleted");
     else toast.error(res.error || "Failed to delete zone");
@@ -123,7 +129,7 @@ export function WarehouseManager({
   }
 
   async function handleDeleteBin(id: string) {
-    if (!confirm("Are you sure?")) return;
+    setPendingDelete(null);
     const res = await deleteBinAction(id, warehouse.id);
     if (res.success) toast.success("Bin deleted");
     else toast.error(res.error || "Failed to delete bin");
@@ -196,7 +202,7 @@ export function WarehouseManager({
                     <h4 className="font-medium">{zone.name}</h4>
                     <p className="text-sm text-muted-foreground">{zone.type}</p>
                   </div>
-                  <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteZone(zone.id)}>
+                  <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setPendingDelete({ kind: "zone", id: zone.id })}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -246,7 +252,7 @@ export function WarehouseManager({
                   <div key={bin.id} className="flex flex-col p-4 border rounded-md relative">
                     <h4 className="font-medium">{bin.code}</h4>
                     <p className="text-sm text-muted-foreground">Zone: {zone?.name || "Unknown"}</p>
-                    <Button variant="ghost" size="icon" className="text-destructive absolute top-2 right-2" onClick={() => handleDeleteBin(bin.id)}>
+                    <Button variant="ghost" size="icon" className="text-destructive absolute top-2 right-2" onClick={() => setPendingDelete({ kind: "bin", id: bin.id })}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -298,6 +304,22 @@ export function WarehouseManager({
           </CardContent>
         </Card>
       </TabsContent>
+
+      {/* Delete gates — shared in-app dialog (replaces native confirm) */}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={pendingDelete?.kind === "zone" ? "Delete zone?" : "Delete bin?"}
+        description="Are you sure?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          if (pendingDelete.kind === "zone") handleDeleteZone(pendingDelete.id);
+          else handleDeleteBin(pendingDelete.id);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </Tabs>
   );
 }

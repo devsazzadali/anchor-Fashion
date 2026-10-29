@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Activity, CheckCircle, AlertCircle, RefreshCcw, Trash2 } from "lucide-react";
 import { HealthCheckResult } from "@/lib/couriers/types";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 interface Props {
   courier: CourierProviderRecord | null;
@@ -78,11 +79,10 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
     }
   };
 
+  const [showRemoveCredsConfirm, setShowRemoveCredsConfirm] = useState(false);
+
   const handleRemoveCredentials = async () => {
-    const confirmed = window.confirm(
-      `Are you sure you want to remove all API credentials for ${courier.display_name}? This will disconnect the courier.`
-    );
-    if (!confirmed) return;
+    setShowRemoveCredsConfirm(false);
 
     setLoading(true);
     try {
@@ -318,7 +318,7 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleRemoveCredentials}
+                onClick={() => setShowRemoveCredsConfirm(true)}
                 disabled={testing || loading}
                 className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
               >
@@ -337,6 +337,23 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
             </Button>
           </div>
         </DialogFooter>
+
+        {/* Remove-credentials gate — shared in-app dialog (replaces window.confirm) */}
+        <ConfirmDialog
+          open={showRemoveCredsConfirm}
+          title="Remove credentials?"
+          description={
+            courier
+              ? `Are you sure you want to remove all API credentials for ${courier.display_name}? This will disconnect the courier.`
+              : ""
+          }
+          confirmLabel="Remove credentials"
+          cancelLabel="Cancel"
+          variant="destructive"
+          isLoading={loading}
+          onConfirm={handleRemoveCredentials}
+          onCancel={() => setShowRemoveCredsConfirm(false)}
+        />
       </DialogContent>
     </Dialog>
   );

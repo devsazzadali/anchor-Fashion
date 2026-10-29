@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { jost } from "@/lib/fonts";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { cn } from "@/lib/utils";
 
 interface CuratedCategoriesManagerClientProps {
@@ -206,14 +207,14 @@ export function CuratedCategoriesManagerClient({
     }
   };
 
-  const handleReset = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to reset this section to the default auto-category configuration?"
-      )
-    ) {
-      return;
-    }
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleReset = () => {
+    setShowResetConfirm(true);
+  };
+
+  const runReset = async () => {
+    setShowResetConfirm(false);
 
     setIsResetting(true);
     try {
@@ -998,6 +999,19 @@ export function CuratedCategoriesManagerClient({
           </CardContent>
         </Card>
       )}
+
+      {/* Reset gate — shared in-app dialog (replaces native confirm) */}
+      <ConfirmDialog
+        open={showResetConfirm}
+        title="Reset section?"
+        description="Are you sure you want to reset this section to the default auto-category configuration?"
+        confirmLabel="Reset"
+        cancelLabel="Cancel"
+        variant="destructive"
+        isLoading={isResetting}
+        onConfirm={runReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 }

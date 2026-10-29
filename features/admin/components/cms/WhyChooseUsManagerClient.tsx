@@ -58,6 +58,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { jost } from "@/lib/fonts";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 const AVAILABLE_ICONS = [
   { value: "ShieldCheck", label: "Shield / Quality", icon: ShieldCheck },
@@ -176,10 +177,14 @@ export function WhyChooseUsManagerClient({
     }
   };
 
-  const handleReset = async () => {
-    if (!confirm("Are you sure you want to reset this section to the default copy and images?")) {
-      return;
-    }
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleReset = () => {
+    setShowResetConfirm(true);
+  };
+
+  const runReset = async () => {
+    setShowResetConfirm(false);
     setIsResetting(true);
     try {
       const res = await resetWhyChooseUsSettings();
@@ -683,6 +688,19 @@ export function WhyChooseUsManagerClient({
           </div>
         </div>
       )}
+
+      {/* Reset gate — shared in-app dialog (replaces native confirm) */}
+      <ConfirmDialog
+        open={showResetConfirm}
+        title="Reset section?"
+        description="Are you sure you want to reset this section to the default copy and images?"
+        confirmLabel="Reset"
+        cancelLabel="Cancel"
+        variant="destructive"
+        isLoading={isResetting}
+        onConfirm={runReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 }

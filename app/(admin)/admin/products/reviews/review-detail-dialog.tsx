@@ -27,6 +27,7 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { Review } from "@/types/catalog.types";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import {
   approveReviewAction,
   revokeReviewAction,
@@ -50,6 +51,7 @@ export function ReviewDetailDialog({
   onDelete,
 }: ReviewDetailDialogProps) {
   const [actionLoading, setActionLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   if (!review) return null;
@@ -99,9 +101,6 @@ export function ReviewDetailDialog({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to permanently delete this review?")) {
-      return;
-    }
     setActionLoading(true);
     try {
       const res = await deleteReviewAction({ id: review.id });
@@ -304,7 +303,7 @@ export function ReviewDetailDialog({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={handleDelete}
+              onClick={() => setShowDeleteConfirm(true)}
               disabled={actionLoading}
               className="text-destructive hover:bg-destructive/10 gap-1.5"
             >
@@ -359,6 +358,22 @@ export function ReviewDetailDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete gate — shared in-app dialog (replaces native confirm) */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete review?"
+        description="Are you sure you want to permanently delete this review?"
+        confirmLabel="Delete review"
+        cancelLabel="Cancel"
+        variant="destructive"
+        isLoading={actionLoading}
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+          handleDelete();
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
 
       {/* Lightbox for full image view */}
       {selectedImage && (

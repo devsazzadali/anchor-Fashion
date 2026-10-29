@@ -7,6 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { toast } from "sonner";
 import { addProductsToCategoryAction, removeProductFromCategoryAction, updateProductPricesAction } from "@/app/actions/admin/category-products.actions";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { useAdminBreadcrumbStore } from "@/stores/useAdminBreadcrumbStore";
 
 export function CategoryDetailsClientPage({ category, categoryProducts, allProducts }: any) {
@@ -68,9 +69,19 @@ export function CategoryDetailsClientPage({ category, categoryProducts, allProdu
     }
   };
 
-  const handleRemoveProduct = async (productId: string) => {
-    if (!confirm("Remove this product from the category?")) return;
-    
+  const [productToRemove, setProductToRemove] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  const handleRemoveProduct = (productId: string) => {
+    setProductToRemove(productId);
+  };
+
+  const runRemoveProduct = async () => {
+    if (!productToRemove) return;
+    const productId = productToRemove;
+    setProductToRemove(null);
+    setIsRemoving(true);
+
     try {
       const res = await removeProductFromCategoryAction({ categoryId: category.id, productId });
       if (res?.success) {
@@ -79,6 +90,8 @@ export function CategoryDetailsClientPage({ category, categoryProducts, allProdu
       }
     } catch (e) {
       toast.error("Failed to remove product");
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -338,6 +351,19 @@ export function CategoryDetailsClientPage({ category, categoryProducts, allProdu
           </div>
         </div>
       )}
+
+      {/* Remove gate — shared in-app dialog (replaces native confirm) */}
+      <ConfirmDialog
+        open={!!productToRemove}
+        title="Remove product?"
+        description="Remove this product from the category?"
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        variant="destructive"
+        isLoading={isRemoving}
+        onConfirm={runRemoveProduct}
+        onCancel={() => setProductToRemove(null)}
+      />
     </div>
   );
 }

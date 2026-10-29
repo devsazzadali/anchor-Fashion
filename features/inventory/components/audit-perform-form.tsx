@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { updateAuditItemCountAction, updateAuditStatusAction } from "@/app/actions/manager/inventory.actions";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 export function AuditPerformForm({ audit, items }: { audit: any; items: any[] }) {
   const [loading, setLoading] = useState<string | null>(null);
@@ -28,9 +29,11 @@ export function AuditPerformForm({ audit, items }: { audit: any; items: any[] })
     }
   }
 
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+
   async function handleCompleteAudit() {
-    if (!confirm("Are you sure you want to complete this audit? This action cannot be undone.")) return;
-    
+    setShowCompleteConfirm(false);
+
     setLoading("complete");
     const res = await updateAuditStatusAction(audit.id, "COMPLETED");
     setLoading(null);
@@ -46,7 +49,7 @@ export function AuditPerformForm({ audit, items }: { audit: any; items: any[] })
     <div className="space-y-6">
       <div className="flex justify-end">
         {audit.status !== "COMPLETED" && audit.status !== "CANCELLED" && (
-          <Button onClick={handleCompleteAudit} disabled={loading === "complete"}>
+          <Button onClick={() => setShowCompleteConfirm(true)} disabled={loading === "complete"}>
             {loading === "complete" ? "Completing..." : "Complete Audit"}
           </Button>
         )}
@@ -128,6 +131,19 @@ export function AuditPerformForm({ audit, items }: { audit: any; items: any[] })
           </TableBody>
         </Table>
       </div>
+
+      {/* Complete gate — shared in-app dialog (replaces native confirm) */}
+      <ConfirmDialog
+        open={showCompleteConfirm}
+        title="Complete audit?"
+        description="Are you sure you want to complete this audit? This action cannot be undone."
+        confirmLabel="Complete audit"
+        cancelLabel="Cancel"
+        variant="default"
+        isLoading={loading === "complete"}
+        onConfirm={handleCompleteAudit}
+        onCancel={() => setShowCompleteConfirm(false)}
+      />
     </div>
   );
 }

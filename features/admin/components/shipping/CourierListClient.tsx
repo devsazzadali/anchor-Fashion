@@ -61,6 +61,7 @@ const COURIER_CODE_OPTIONS = [
   { code: "sandbox", label: "Sandbox (test)" },
 ];
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { CourierConfigModal } from "./CourierConfigModal";
 import { CourierLogsModal } from "./CourierLogsModal";
 
@@ -174,13 +175,15 @@ export function CourierListClient({ initialCouriers }: Props) {
     loadMetricsAndHealth();
   }, [couriers.length]);
 
+  const [pendingDeactivation, setPendingDeactivation] = useState<string | null>(null);
+
   const handleToggle = async (id: string, checked: boolean) => {
-    if (!checked) {
-      const confirmed = window.confirm(
-        "Are you sure you want to deactivate this courier? No new shipments can be routed through disabled providers."
-      );
-      if (!confirmed) return;
+    if (!checked && pendingDeactivation !== id) {
+      // Gate deactivation behind the shared in-app dialog (replaces window.confirm)
+      setPendingDeactivation(id);
+      return;
     }
+    if (pendingDeactivation === id) setPendingDeactivation(null);
 
     const nextCouriers = couriers.map((c) =>
       c.id === id ? { ...c, is_active: checked } : c
@@ -531,6 +534,20 @@ export function CourierListClient({ initialCouriers }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Deactivation gate — shared in-app dialog (replaces window.confirm) */}
+      <ConfirmDialog
+        open={!!pendingDeactivation}
+        title="Deactivate courier?"
+        description="Are you sure you want to deactivate this courier? No new shipments can be routed through disabled providers."
+        confirmLabel="Deactivate"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={() => {
+          if (pendingDeactivation) handleToggle(pendingDeactivation, false);
+        }}
+        onCancel={() => setPendingDeactivation(null)}
+      />
     </>
   );
 }

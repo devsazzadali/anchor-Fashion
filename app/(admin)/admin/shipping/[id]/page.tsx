@@ -9,6 +9,7 @@ import {
   useSyncTracking,
 } from "@/hooks/shipping/use-shipments";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -92,8 +93,9 @@ export default function ShipmentDetailPage({
     }
   };
 
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
   const handleCancel = async () => {
-    if (!confirm("Cancel this shipment?")) return;
     try {
       await cancelShipment.mutateAsync({
         shipmentId: id,
@@ -281,7 +283,7 @@ export default function ShipmentDetailPage({
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={handleCancel}
+                onClick={() => setShowCancelConfirm(true)}
                 disabled={cancelShipment.isPending}
                 className="flex items-center gap-1"
               >
@@ -357,6 +359,22 @@ export default function ShipmentDetailPage({
           </CardContent>
         </Card>
       )}
+
+      {/* Cancel gate — shared in-app dialog (replaces native confirm) */}
+      <ConfirmDialog
+        open={showCancelConfirm}
+        title="Cancel shipment?"
+        description="Cancel this shipment?"
+        confirmLabel="Cancel shipment"
+        cancelLabel="Keep shipment"
+        variant="destructive"
+        isLoading={cancelShipment.isPending}
+        onConfirm={() => {
+          setShowCancelConfirm(false);
+          handleCancel();
+        }}
+        onCancel={() => setShowCancelConfirm(false)}
+      />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import {
   createZoneAction,
   updateZoneAction,
@@ -118,13 +119,16 @@ export function ShippingSettingsClient({ zones }: ShippingSettingsClientProps) {
     });
   };
 
+  const [zoneToDelete, setZoneToDelete] = useState<AdminZone | null>(null);
+
   const handleDelete = (zone: AdminZone) => {
-    if (
-      !window.confirm(
-        `Delete the "${zone.name}" zone permanently? Orders already placed keep their charged amount.`
-      )
-    )
-      return;
+    setZoneToDelete(zone);
+  };
+
+  const runDeleteZone = () => {
+    if (!zoneToDelete) return;
+    const zone = zoneToDelete;
+    setZoneToDelete(null);
     startTransition(async () => {
       const result = await deleteZoneAction(zone.id);
       if (result.success) {
@@ -353,6 +357,23 @@ export function ShippingSettingsClient({ zones }: ShippingSettingsClientProps) {
           </div>
         )}
       </CardContent>
+
+      {/* Delete gate — shared in-app dialog (replaces window.confirm) */}
+      <ConfirmDialog
+        open={!!zoneToDelete}
+        title="Delete zone?"
+        description={
+          zoneToDelete
+            ? `Delete the "${zoneToDelete.name}" zone permanently? Orders already placed keep their charged amount.`
+            : ""
+        }
+        confirmLabel="Delete zone"
+        cancelLabel="Cancel"
+        variant="destructive"
+        isLoading={isPending}
+        onConfirm={runDeleteZone}
+        onCancel={() => setZoneToDelete(null)}
+      />
     </Card>
   );
 }
