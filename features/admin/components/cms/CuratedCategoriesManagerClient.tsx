@@ -113,6 +113,7 @@ export function CuratedCategoriesManagerClient({
         subtitle: existing?.subtitle || cfg.defaultSubtitle,
         customTitle: existing?.customTitle || "",
         customImageUrl: existing?.customImageUrl || "",
+        isActive: existing?.isActive !== false,
       };
     }),
   };
@@ -555,6 +556,26 @@ export function CuratedCategoriesManagerClient({
                     </CardHeader>
 
                     <CardContent className="space-y-4 pt-4 text-xs flex-1">
+                      {/* Per-slot visibility */}
+                      <div className="flex items-center justify-between rounded-md border border-input bg-background px-3 py-2">
+                        <span className="font-medium text-foreground">
+                          Show this slot on the homepage
+                        </span>
+                        <Switch
+                          checked={slot.isActive !== false}
+                          onCheckedChange={(v) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              slots: prev.slots.map((s) =>
+                                s.id === config.slotId
+                                  ? { ...s, isActive: v }
+                                  : s
+                              ),
+                            }))
+                          }
+                          aria-label={`Toggle ${config.name}`}
+                        />
+                      </div>
                       {/* Category Selector Dropdown */}
                       <div className="relative">
                         <label className="mb-1 block font-medium text-foreground">

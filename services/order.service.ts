@@ -13,6 +13,10 @@ import {
 } from "@/types/checkout.types";
 import { createAdminDbClient } from "@/lib/db/client";
 import { lineVatAmount, roundMoney } from "@/lib/utils/vat";
+import {
+  listActiveZones,
+  pickZone,
+} from "@/lib/services/shipping/zone-resolution.service";
 
 // 15-minute window before an unpaid reservation expires.
 // The cron route at /api/cron/release-expired-reservations uses this.
@@ -170,9 +174,24 @@ export class OrderService {
       throw new Error("No reservable items found in cart");
     }
 
-    const shippingFee =
+    // Delivery charge from the admin-configured delivery zones
+    // (Settings → Store → Shipping Zones): match the shipping address's
+    // district/city against zone district lists; fall back to the default
+    // zone. If zone data is unavailable, the customer's chosen method maps
+    // to the historical flat schedule (inside ৳100 / outside ৳150).
+    let shippingFee =
       session.shipping_method === "home_delivery_outside" ? 150 : 100;
-      
+    try {
+      const zones = await listActiveZones();
+      if (zones.length > 0) {
+        const snap: any = session.shipping_address_snapshot || {};
+        const zone = pickZone(zones, snap.district, snap.city);
+        if (zone) shippingFee = zone.rate;
+      }
+    } catch (err) {
+      console.error("[OrderService] zone lookup failed, legacy rate used", err);
+    }
+
     let discountAmount = 0;
     let couponId: string | null = null;
 

@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import { StoreSettingsClient } from "./store-client";
 import { ShippingSettingsClient } from "./ShippingSettingsClient";
 import { getStoreConfig } from "@/lib/actions/settings.actions";
-import { getDeliveryZonesWithRates } from "@/lib/actions/shipping.actions";
+import { getAdminZonesAction } from "@/lib/actions/shipping.actions";
 
 export const metadata: Metadata = {
   title: "Store Settings | Admin",
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default async function StoreSettingsPage() {
   const [storeConfig, zonesResult] = await Promise.all([
     getStoreConfig(),
-    getDeliveryZonesWithRates(),
+    getAdminZonesAction(),
   ]);
 
   return (
@@ -25,7 +25,9 @@ export default async function StoreSettingsPage() {
 
       <StoreSettingsClient initialConfig={storeConfig} />
 
-      <ShippingSettingsClient zones={zonesResult.data ?? []} />
+      <ShippingSettingsClient
+        zones={zonesResult.success ? zonesResult.data : []}
+      />
     </div>
   );
 }

@@ -88,7 +88,7 @@ export async function uploadAvatarAction(formData: FormData) {
     const buffer = Buffer.from(arrayBuffer);
 
     const admin = createAdminDbClient();
-    const { error: uploadError } = await admin.storage
+    const { data: uploadData, error: uploadError } = await admin.storage
       .from("media")
       .upload(fileName, buffer, {
         contentType: file.type,
@@ -100,8 +100,11 @@ export async function uploadAvatarAction(formData: FormData) {
       return { success: false, error: uploadError.message };
     }
 
+    // Blob mode: persist the absolute Blob URL from the upload result.
     const { data: pubData } = admin.storage.from("media").getPublicUrl(fileName);
-    const avatarUrl = pubData.publicUrl;
+    const avatarUrl = (uploadData as any)?.path?.startsWith("http")
+      ? (uploadData as any).path
+      : pubData.publicUrl;
 
     // Update customer profile
     await customerService.updateProfile(user.id, {

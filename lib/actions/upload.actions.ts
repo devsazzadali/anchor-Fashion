@@ -3,8 +3,6 @@
 import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 import { prisma } from "@/lib/prisma";
-import path from "path";
-import fs from "fs/promises";
 
 const ALLOWED_BUCKETS = [
   "products",
@@ -85,26 +83,28 @@ export async function uploadImageAction(formData: FormData): Promise<{
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const mimeType = file.type;
-    const dataUri = `data:${mimeType};base64,${buffer.toString("base64")}`;
 
-    // 4. Try local disk save (works on local development / self-hosted)
-    let localPublicUrl: string | null = null;
+    // 4. Store through the media storage driver (Workstream G): Vercel
+    // Blob in production (absolute URL persisted in the DB), local disk
+    // in development. No more data-URI fallback — a failed store is an
+    // honest upload error, not a base64 blob in a DB column.
+    const { storeUploadedFile } = await import("@/lib/storage/driver");
+    let stored;
     try {
-      const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
-      const uploadDir = path.resolve(uploadsRoot, bucket, folder);
-      if (!uploadDir.startsWith(uploadsRoot + path.sep)) {
-        throw new Error("Invalid upload directory");
-      }
-      await fs.mkdir(uploadDir, { recursive: true });
-      const localFilePath = path.join(uploadDir, `${uniqueId}.${fileExt}`);
-      await fs.writeFile(localFilePath, buffer);
-      localPublicUrl = `/uploads/${bucket}/${folder}/${uniqueId}.${fileExt}`;
-    } catch {
-      // Ephemeral or read-only filesystem (e.g. Vercel) — ignore filesystem error
+      stored = await storeUploadedFile(
+        `${bucket}/${filePath}`,
+        buffer,
+        mimeType
+      );
+    } catch (storeErr: any) {
+      console.error("[uploadImageAction] Storage driver failed:", storeErr);
+      return {
+        success: false,
+        error:
+          "File storage failed. If this is production, check STORAGE_DRIVER / BLOB_READ_WRITE_TOKEN configuration.",
+      };
     }
-
-    // On Vercel serverless, Data URI ensures images load everywhere without 404
-    const resolvedUrl = process.env.VERCEL ? dataUri : (localPublicUrl || dataUri);
+    const resolvedUrl = stored.url;
 
     // 5. Save media record in Neon PostgreSQL via Prisma
     try {

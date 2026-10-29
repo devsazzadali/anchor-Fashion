@@ -16,6 +16,7 @@
 import { prisma } from "@/lib/prisma";
 import { EmailProvider } from "./EmailProvider";
 import { EmailTemplates } from "./EmailTemplates";
+import { getInvoiceInfo } from "@/lib/actions/settings.actions";
 
 const STAFF_NOTIFICATION_ROLES = ["ADMIN", "SUPERADMIN", "MANAGER"];
 
@@ -108,7 +109,8 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
       subject: `Your Anchor Fashion invoice — order #${order.orderNumber} delivered`,
       html: EmailTemplates.orderDeliveredInvoice(
         toTemplateOrder(order),
-        storeUrl()
+        storeUrl(),
+        await getInvoiceInfo().catch(() => undefined)
       ),
     });
 

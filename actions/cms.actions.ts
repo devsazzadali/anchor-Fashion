@@ -5,11 +5,18 @@ import { CMSPage, CMSSection, CMSNavigation, CMSPageBlock, CMSMediaItem } from "
 import { revalidatePath } from "next/cache";
 import { invalidateHomepageCache } from "@/lib/cache/invalidate-catalog";
 import { CMSRepository } from "@/lib/repositories/cms.repository";
-import fs from "fs";
-import path from "path";
 import { verifyStaff } from "@/lib/security/roles";
 
-function saveBase64ImageLocally(dataUrl: string | null | undefined, id: string): string | null {
+/**
+ * Banner images sometimes arrive as data URIs (CMS editor). Persist them
+ * through the media storage driver (Workstream G — Vercel Blob in
+ * production, disk in dev) and return the stored URL; non-data-URI
+ * values pass through unchanged.
+ */
+async function persistDataUrlImage(
+  dataUrl: string | null | undefined,
+  id: string
+): Promise<string | null> {
   if (!dataUrl) return null;
   if (!dataUrl.startsWith("data:image/")) return dataUrl;
   try {
@@ -17,19 +24,15 @@ function saveBase64ImageLocally(dataUrl: string | null | undefined, id: string):
     if (!matches) return dataUrl;
     const rawExt = matches[1].toLowerCase();
     const ext = rawExt === "jpeg" ? "jpg" : rawExt.includes("png") ? "png" : rawExt.includes("webp") ? "webp" : "jpg";
-    const base64Data = matches[2];
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "banners");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    const filename = `banner-${id}.${ext}`;
-    const filePath = path.join(uploadDir, filename);
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
-    }
-    return `/uploads/banners/${filename}`;
+    const { storeUploadedFile } = await import("@/lib/storage/driver");
+    const stored = await storeUploadedFile(
+      `banners/banner-${id}.${ext}`,
+      Buffer.from(matches[2], "base64"),
+      `image/${rawExt}`
+    );
+    return stored.url;
   } catch (err) {
-    console.error("Error saving base64 banner:", err);
+    console.error("Error persisting base64 banner:", err);
     return dataUrl;
   }
 }
@@ -244,9 +247,15 @@ export async function uploadMedia(formData: FormData) {
         });
 
       if (!uploadError && uploadData) {
-        const { data: publicUrlData } = adminDb.storage.from("media").getPublicUrl(fileName);
-        if (publicUrlData?.publicUrl && !publicUrlData.publicUrl.startsWith("data:")) {
-          fileUrl = publicUrlData.publicUrl;
+        // Blob mode: upload returns the absolute public URL as data.path —
+        // that URL is what the DB stores (Workstream G).
+        if ((uploadData as any).path?.startsWith("http")) {
+          fileUrl = (uploadData as any).path;
+        } else {
+          const { data: publicUrlData } = adminDb.storage.from("media").getPublicUrl(fileName);
+          if (publicUrlData?.publicUrl && !publicUrlData.publicUrl.startsWith("data:")) {
+            fileUrl = publicUrlData.publicUrl;
+          }
         }
       }
     } catch {
@@ -278,11 +287,16 @@ export async function deleteMedia(id: string, fileUrl?: string) {
       try {
         const { createAdminDbClient } = await import("@/lib/db/client");
         const db = createAdminDbClient();
-        const url = new URL(fileUrl);
-        const match = url.pathname.match(/\/media\/(.+)$/);
-        if (match && match[1]) {
-          const storagePath = decodeURIComponent(match[1]);
-          await db.storage.from("media").remove([storagePath]);
+        if (fileUrl.startsWith("http")) {
+          // Blob mode: delete by absolute URL through the storage driver.
+          await db.storage.from("media").remove([fileUrl]);
+        } else {
+          const url = new URL(fileUrl, "http://local");
+          const match = url.pathname.match(/\/media\/(.+)$/);
+          if (match && match[1]) {
+            const storagePath = decodeURIComponent(match[1]);
+            await db.storage.from("media").remove([storagePath]);
+          }
         }
       } catch (storageErr) {
         console.warn("Storage removal non-fatal:", storageErr);
@@ -426,9 +440,9 @@ function isBannerActive(b: any, now: Date): boolean {
   return true;
 }
 
-function prismaRowToHeroSlide(b: any): HeroSlide {
-  const cleanImage = saveBase64ImageLocally(b.image_url, String(b.id)) || b.image_url || "/images/home/hero-banner.png";
-  const cleanMedia = b.media_url ? (saveBase64ImageLocally(b.media_url, `media-${b.id}`) || b.media_url) : cleanImage;
+async function prismaRowToHeroSlide(b: any): Promise<HeroSlide> {
+  const cleanImage = (await persistDataUrlImage(b.image_url, String(b.id))) || b.image_url || "/images/home/hero-banner.png";
+  const cleanMedia = b.media_url ? ((await persistDataUrlImage(b.media_url, `media-${b.id}`)) || b.media_url) : cleanImage;
 
   return {
     id: b.id,
@@ -458,10 +472,13 @@ export async function getHeroSlides(): Promise<HeroSlide[]> {
   try {
     const now = new Date();
     const banners = await cmsRepo.getBanners("hero");
-    const slides = banners
-      .filter((b) => isBannerActive(b, now))
-      .map(prismaRowToHeroSlide)
-      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+    const slides = (
+      await Promise.all(
+        banners
+          .filter((b) => isBannerActive(b, now))
+          .map(prismaRowToHeroSlide)
+      )
+    ).sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
     return slides;
   } catch {
     return [];
@@ -475,7 +492,7 @@ export async function getFeaturedPromoBanner(): Promise<FeaturedPromoBannerData 
     const banners = await cmsRepo.getBanners("promo");
     const promoBanner = banners.find((b) => isBannerActive(b, now));
     if (!promoBanner) return null;
-    const cleanPromoImage = saveBase64ImageLocally(promoBanner.image_url, `promo-${promoBanner.id}`) || promoBanner.image_url || "";
+    const cleanPromoImage = (await persistDataUrlImage(promoBanner.image_url, `promo-${promoBanner.id}`)) || promoBanner.image_url || "";
     return {
       id: promoBanner.id,
       title: promoBanner.title || "",
@@ -499,9 +516,11 @@ export async function getAdminHeroSlides(): Promise<HeroSlide[]> {
       cmsRepo.getBanners("hero"),
       cmsRepo.getBanners("promo"),
     ]);
-    return [...heroBanners, ...promoBanners]
-      .map(prismaRowToHeroSlide)
-      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+    return (
+      await Promise.all(
+        [...heroBanners, ...promoBanners].map(prismaRowToHeroSlide)
+      )
+    ).sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
   } catch {
     return [];
   }
@@ -595,14 +614,17 @@ export async function upsertHeroSlideWithUpload(formData: FormData) {
       const fileName = `${Date.now()}_${safeBase}.${ext}`;
 
       try {
-        const fs = await import("fs/promises");
-        const uploadDir = pathModule.join(process.cwd(), "public", "uploads", "banners");
-        await fs.mkdir(uploadDir, { recursive: true });
-        const filePath = pathModule.join(uploadDir, fileName);
-        await fs.writeFile(filePath, buffer);
-        image_url = `/uploads/banners/${fileName}`;
+        // Through the storage driver (Workstream G): Blob URL in
+        // production, /uploads path in local dev.
+        const { storeUploadedFile } = await import("@/lib/storage/driver");
+        const stored = await storeUploadedFile(
+          `banners/${fileName}`,
+          buffer,
+          mimeType
+        );
+        image_url = stored.url;
       } catch (writeErr) {
-        console.warn("[upsertHeroSlideWithUpload] Local disk write fallback to dataUri:", writeErr);
+        console.warn("[upsertHeroSlideWithUpload] Storage driver fallback to dataUri:", writeErr);
         image_url = `data:${mimeType};base64,${buffer.toString("base64")}`;
       }
     }
@@ -665,15 +687,17 @@ export async function deleteHeroSlide(id: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    // Optionally remove local file from disk if under /uploads/banners/
+    // Remove the stored file too (Blob URL or /uploads path) via the driver.
     try {
       const banners = await cmsRepo.getBanners();
       const existing = banners.find((b: any) => b.id === id);
-      if (existing?.image_url?.startsWith("/uploads/banners/")) {
-        const fs = await import("fs/promises");
-        const pathModule = await import("path");
-        const safePath = pathModule.join(process.cwd(), "public", existing.image_url);
-        await fs.unlink(safePath).catch(() => {});
+      if (
+        existing?.image_url &&
+        (existing.image_url.startsWith("/uploads/") ||
+          existing.image_url.startsWith("http"))
+      ) {
+        const { deleteUploadedFile } = await import("@/lib/storage/driver");
+        await deleteUploadedFile(existing.image_url);
       }
     } catch {}
 

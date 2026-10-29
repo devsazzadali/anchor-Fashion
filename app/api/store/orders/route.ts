@@ -5,6 +5,7 @@ import { InventoryService } from '@/services/inventory.service';
 import { OrderRepository } from '@/lib/repositories/order.repository';
 import { prisma } from '@/lib/prisma';
 import { lineVatAmount, roundMoney } from '@/lib/utils/vat';
+import { resolveShippingCharge } from '@/lib/services/shipping/zone-resolution.service';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -168,8 +169,13 @@ export async function POST(request: Request) {
         0
       )
     );
-    // Same delivery schedule as the main checkout (inside/outside Dhaka).
-    const shippingFee = String(city).trim().toLowerCase() === 'dhaka' ? 100 : 150;
+    // Delivery charge comes from the admin-configured delivery zones
+    // (Settings → Store → Shipping Zones). The zone whose district list
+    // covers the customer's city/district sets the charge; every other
+    // address falls to the default zone. (This replaces the hardcoded
+    // Dhaka ৳100 / elsewhere ৳150 ternary.)
+    const { zone: deliveryZone, charge: shippingFee } =
+      await resolveShippingCharge({ district: city, city });
     const totalAmount = roundMoney(subtotal + vatAmount + shippingFee);
 
     const nameParts = (customer_name || '').trim().split(' ');
@@ -185,6 +191,8 @@ export async function POST(request: Request) {
       city,
       district: city,
       country: 'Bangladesh',
+      delivery_zone: deliveryZone.name,
+      delivery_zone_id: deliveryZone.id,
     };
 
     // ── Persist through the authoritative Prisma repository ──────────────

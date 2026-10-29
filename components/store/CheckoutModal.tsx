@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { totalVatAmount } from '@/lib/utils/vat';
+import { getPublicZonesAction } from '@/lib/actions/shipping.actions';
+import {
+  pickZone,
+  type PublicZone,
+} from '@/lib/services/shipping/zone-shared';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,7 +21,7 @@ const checkoutModalSchema = z.object({
     .trim()
     .regex(/^(?:\+?88)?01[3-9]\d{8}$/, "Enter a valid 11-digit phone number (e.g. 01XXXXXXXXX)"),
   address: z.string().trim().min(5, "Please provide your detailed delivery address"),
-  city: z.enum(["Dhaka", "Outside Dhaka"]),
+  city: z.string().trim().min(1, "Please select your district"),
   paymentMethod: z.enum(["COD", "bKash"]),
   createAccount: z.boolean().default(false),
   password: z.string().optional(),
@@ -74,9 +79,30 @@ export default function CheckoutModal({ isOpen, onClose, items, onOrderComplete 
   const createAccountChecked = watch('createAccount');
 
   const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  // Same delivery schedule as the main checkout (was ৳80 for Dhaka here,
-  // ৳100 everywhere else — the server now charges the unified rate).
-  const deliveryFee = selectedCity === 'Dhaka' ? 100 : 150;
+  // Delivery zones are admin-configured (Settings → Store → Shipping
+  // Zones): the fee follows the zone whose district list covers the
+  // selected district, with the default zone as fallback — the same
+  // resolution the server applies when persisting the order. Legacy flat
+  // rates render only until the zone list loads.
+  const [zones, setZones] = useState<PublicZone[]>([]);
+  useEffect(() => {
+    if (!isOpen || zones.length > 0) return;
+    let cancelled = false;
+    getPublicZonesAction()
+      .then((res) => {
+        if (!cancelled && res.success) setZones(res.data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, zones.length]);
+  const matchedZone = pickZone(zones, selectedCity, selectedCity);
+  const deliveryFee = matchedZone
+    ? matchedZone.rate
+    : selectedCity === 'Dhaka'
+      ? 100
+      : 150;
   // Per-product VAT added on top of the selling price — identical math to
   // the server (lib/utils/vat), so the displayed total is the charged total.
   const vatAmount = totalVatAmount(
@@ -201,8 +227,31 @@ export default function CheckoutModal({ isOpen, onClose, items, onOrderComplete 
                       {...register('city')}
                       className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg p-3 text-white focus:border-[#b8955e] focus:outline-none transition-colors appearance-none"
                     >
-                      <option value="Dhaka">Inside Dhaka (৳80)</option>
-                      <option value="Outside Dhaka">Outside Dhaka (৳150)</option>
+                      {zones.length === 0 ? (
+                        <>
+                          <option value="Dhaka">Inside Dhaka (৳100)</option>
+                          <option value="Outside Dhaka">Outside Dhaka (৳150)</option>
+                        </>
+                      ) : (
+                        <>
+                          {zones
+                            .filter((z) => !z.is_default)
+                            .flatMap((z) =>
+                              (z.districts || []).map((d) => (
+                                <option key={`${z.id}-${d}`} value={d}>
+                                  {d} — {z.name} (৳{z.rate})
+                                </option>
+                              ))
+                            )}
+                          <option value="Outside Dhaka">
+                            Other District —{" "}
+                            {zones.find((z) => z.is_default)?.name ||
+                              "Outside Dhaka"}{" "}
+                            (৳
+                            {zones.find((z) => z.is_default)?.rate ?? 150})
+                          </option>
+                        </>
+                      )}
                     </select>
                   </div>
 

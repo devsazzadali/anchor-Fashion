@@ -11,6 +11,12 @@ import { RefreshCw, ShieldCheck } from "lucide-react";
 import { applyCouponAction, removeCouponAction } from "@/actions/checkout.actions";
 import { useToast } from "@/hooks/use-toast";
 import { totalVatAmount } from "@/lib/utils/vat";
+import { getPublicZonesAction } from "@/lib/actions/shipping.actions";
+import {
+  pickZone,
+  defaultZone,
+  type PublicZone,
+} from "@/lib/services/shipping/zone-shared";
 
 export function OrderSummary() {
   const { cart } = useCartStore();
@@ -36,8 +42,34 @@ export function OrderSummary() {
   }, 0);
 
   const shippingMethod = formData.shipping?.shipping_method;
-  const shippingFee =
-    subtotal > 0 ? (shippingMethod === "home_delivery_outside" ? 150 : 100) : 0;
+  // Delivery charge mirrors the server's zone resolution: admin-configured
+  // zones (Settings → Store) matched by the customer's city/district, with
+  // the default zone as fallback. Legacy flat rates only until zones load.
+  const [zones, setZones] = useState<PublicZone[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getPublicZonesAction()
+      .then((res) => {
+        if (!cancelled && res.success) setZones(res.data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const cityForZone = formData.information?.shipping_address?.city || "";
+  const zoneFee = (() => {
+    if (subtotal <= 0) return 0;
+    if (zones.length > 0) {
+      const zone =
+        shippingMethod === "home_delivery_outside"
+          ? defaultZone(zones)
+          : pickZone(zones, cityForZone, cityForZone);
+      if (zone) return zone.rate;
+    }
+    return shippingMethod === "home_delivery_outside" ? 150 : 100;
+  })();
+  const shippingFee = zoneFee;
   // Real per-product VAT (each product's vat_percent, added on top of its
   // selling price) — identical to the server's OrderService.calculateSummary.
   // (This replaces a hardcoded 15% "estimated tax" that the server never

@@ -1,36 +1,43 @@
-import { Truck, RotateCcw, Award, ShieldCheck } from "lucide-react";
+import {
+  Truck,
+  RotateCcw,
+  Award,
+  ShieldCheck,
+  CreditCard,
+  PackageCheck,
+  Sparkles,
+  Headset,
+  type LucideIcon,
+} from "lucide-react";
 import { jost } from "@/lib/fonts";
+import type { FeaturesBarConfig } from "@/lib/homepage-shared";
 
-const features = [
-  {
-    icon: Truck,
-    title: "Free Delivery",
-    description: "Orders over ৳999",
-  },
-  {
-    icon: RotateCcw,
-    title: "Easy Returns",
-    description: "7-day free returns",
-  },
-  {
-    icon: Award,
-    title: "Premium Quality",
-    description: "Finest materials only",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Secure Checkout",
-    description: "100% safe & encrypted",
-  },
-];
+/** Icons an admin may pick for a features-bar item (CMS → Homepage). */
+export const FEATURE_ICONS: Record<string, LucideIcon> = {
+  Truck,
+  RotateCcw,
+  Award,
+  ShieldCheck,
+  CreditCard,
+  PackageCheck,
+  Sparkles,
+  Headset,
+};
 
-export function FeaturesBar() {
+export function FeaturesBar({ config }: { config?: FeaturesBarConfig }) {
+  if (config && config.isEnabled === false) return null;
+  const features = (config?.items?.length ? config.items : null) || [
+    { icon: "Truck", title: "Free Delivery", description: "Orders over ৳999" },
+    { icon: "RotateCcw", title: "Easy Returns", description: "7-day free returns" },
+    { icon: "Award", title: "Premium Quality", description: "Finest materials only" },
+    { icon: "ShieldCheck", title: "Secure Checkout", description: "100% safe & encrypted" },
+  ];
   return (
     <section className={`${jost.className} border-b border-gray-100 bg-white`}>
       <div className="container mx-auto px-4 md:px-6">
         <div className="grid grid-cols-2 md:grid-cols-4">
           {features.map((feature, index) => {
-            const Icon = feature.icon;
+            const Icon = FEATURE_ICONS[feature.icon] || Truck;
             return (
               <div
                 key={index}

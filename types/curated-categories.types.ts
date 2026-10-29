@@ -4,6 +4,7 @@ export type CuratedCategorySlot = {
   subtitle?: string; // e.g. "Classic & Contemporary", "Signature Collection", "Shop Now"
   customTitle?: string; // Optional custom title override
   customImageUrl?: string; // Optional custom promotional image URL
+  isActive?: boolean; // Per-slot visibility on the homepage (default true)
 };
 
 export type CuratedCategoriesSettings = {

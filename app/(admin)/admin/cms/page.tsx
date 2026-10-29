@@ -17,6 +17,7 @@ import {
   HelpCircle,
   Sparkles,
   Layers,
+  LayoutDashboard,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -24,6 +25,13 @@ export const metadata: Metadata = {
 };
 
 const cmsModules = [
+  {
+    id: "homepage",
+    name: "Homepage Manager",
+    icon: LayoutDashboard,
+    description: "Show/hide & reorder homepage sections and edit the Features Bar",
+    href: "/admin/cms/homepage",
+  },
   {
     id: "curated-categories",
     name: "Curated Categories (Style Edit)",

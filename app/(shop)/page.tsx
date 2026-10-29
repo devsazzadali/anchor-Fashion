@@ -21,6 +21,12 @@ import { LatestBlogs } from "@/components/home/latest-blogs";
 import { FadeIn } from "@/components/ui/fade-in";
 import { FlashSaleService } from "@/lib/services/marketing/flash-sale.service";
 import { getPromoSections } from "@/actions/cms.actions";
+import {
+  getHomepageLayout,
+  getFeaturesBarConfig,
+} from "@/lib/actions/homepage.actions";
+import { HOMEPAGE_SECTIONS } from "@/lib/homepage-shared";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Clock, ArrowRight } from "lucide-react";
@@ -50,6 +56,8 @@ export default async function HomePage() {
     whyChooseUsData,
     curatedCategoriesData,
     promoSections,
+    homepageLayout,
+    featuresBarConfig,
   ] = await Promise.all([
     getCachedCategories().catch(() => []),
     getCachedCollections().catch(() => []),
@@ -61,7 +69,27 @@ export default async function HomePage() {
     getCachedWhyChooseUs().catch(() => null),
     getCachedCuratedCategoriesData().catch(() => null),
     getPromoSections().catch(() => []),
+    getHomepageLayout().catch(() => null),
+    getFeaturesBarConfig().catch(() => null),
   ]);
+
+  // Homepage section visibility + ordering (Admin → CMS → Homepage).
+  // Sections render within their structural group (top strip under the
+  // hero, then the main spaced column) in the admin-defined order.
+  const sectionEnabled = (key: string) =>
+    !homepageLayout ||
+    homepageLayout.sections.find((s) => s.key === key)?.isEnabled !== false;
+  const orderedKeys = (group: "top" | "main") => {
+    const registryOrder = HOMEPAGE_SECTIONS.filter(
+      (s) => s.group === group
+    ).map((s) => s.key);
+    if (!homepageLayout) return registryOrder;
+    const stored = homepageLayout.sections
+      .map((s) => s.key)
+      .filter((k) => registryOrder.includes(k));
+    const missing = registryOrder.filter((k) => !stored.includes(k));
+    return [...stored, ...missing];
+  };
 
   // Phase 9 (no-hardcode rule): collection sections are generated from the
   // admin-managed top-level categories in the database. The previous build
@@ -85,19 +113,18 @@ export default async function HomePage() {
     (p) => p.id !== (featuredPromoBanner as any)?.id
   );
 
-  return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-[#FAFAFA]">
-      {/* 1. Immersive Hero Banner */}
-      <HomeHero slides={heroSlides} />
-
-      {/* 2. Features Bar (Service Guarantees) */}
-      <FadeIn delay={0.1} direction="none">
-        <FeaturesBar />
+  // ── Homepage blocks, visibility + order from Admin → CMS → Homepage ──
+  const topBlocks: Record<string, ReactNode> = {
+    features_bar: sectionEnabled("features_bar") ? (
+      <FadeIn key="features_bar" delay={0.1} direction="none">
+        <FeaturesBar config={featuresBarConfig || undefined} />
       </FadeIn>
-
-      {/* 2.5 Flash Deals Banner (Dynamic) */}
-      {activeFlashSales && activeFlashSales.length > 0 && (
-        <FadeIn delay={0.15} direction="up">
+    ) : null,
+    flash_deals:
+      sectionEnabled("flash_deals") &&
+      activeFlashSales &&
+      activeFlashSales.length > 0 ? (
+        <FadeIn key="flash_deals" delay={0.15} direction="up">
           <div className="bg-red-600 text-white py-3 sm:py-4 px-3 sm:px-4 text-center shadow-lg relative z-20">
             <Link href="/flash-deals" className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm font-bold uppercase tracking-wider hover:scale-105 transition-transform">
               <Clock className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse shrink-0" />
@@ -106,74 +133,68 @@ export default async function HomePage() {
             </Link>
           </div>
         </FadeIn>
-      )}
-
-      {/* 3. Editorial Category Highlight Masonry */}
-      <FadeIn delay={0.2} direction="up">
+      ) : null,
+    category_highlight: sectionEnabled("category_highlight") ? (
+      <FadeIn key="category_highlight" delay={0.2} direction="up">
         <CategoryHighlight
           categories={categories}
           curatedData={curatedCategoriesData ?? undefined}
         />
       </FadeIn>
+    ) : null,
+  };
 
-      <div className="space-y-10 py-6 md:space-y-16 md:py-12 lg:space-y-20 lg:py-16">
-        {/* 5. The Collection Grid */}
-        <FadeIn>
-          <ExploreCollections collections={collections} categories={categories} />
+  const mainBlocks: Record<string, ReactNode> = {
+    explore_collections: sectionEnabled("explore_collections") ? (
+      <FadeIn key="explore_collections">
+        <ExploreCollections collections={collections} categories={categories} />
+      </FadeIn>
+    ) : null,
+    featured_promo:
+      sectionEnabled("featured_promo") && featuredPromoBanner ? (
+        <FadeIn key="featured_promo" direction="left">
+          <PromoBanner
+            title={featuredPromoBanner.title}
+            subtitle={featuredPromoBanner.subtitle}
+            description={featuredPromoBanner.description}
+            ctaText={featuredPromoBanner.ctaText}
+            ctaLink={featuredPromoBanner.ctaLink}
+            imageUrl={featuredPromoBanner.imageUrl}
+          />
         </FadeIn>
-
-        {/* Mens Collection - MOVED DOWN */}
-
-        {/* 6. Womens Collection - MOVED DOWN */}
-
-        {/* Kids and Accessories - MOVED DOWN */}
-
-        {/* 7. Mid-Season Promo Banner */}
-        {featuredPromoBanner && (
-          <FadeIn direction="left">
-            <PromoBanner
-              title={featuredPromoBanner.title}
-              subtitle={featuredPromoBanner.subtitle}
-              description={featuredPromoBanner.description}
-              ctaText={featuredPromoBanner.ctaText}
-              ctaLink={featuredPromoBanner.ctaLink}
-              imageUrl={featuredPromoBanner.imageUrl}
-            />
-          </FadeIn>
-        )}
-
-        {/* 8. Trending Products */}
-        <FadeIn>
-          <TrendingProducts products={trendingProducts.data || []} />
-        </FadeIn>
-
-        {/* 9. Brand Ethos / Story */}
-        <FadeIn direction="right">
-          <WhyChooseUs data={whyChooseUsData || undefined} />
-        </FadeIn>
-
-        {/* 10. Featured Products (New Arrivals) */}
+      ) : null,
+    trending_products: sectionEnabled("trending_products") ? (
+      <FadeIn key="trending_products">
+        <TrendingProducts products={trendingProducts.data || []} />
+      </FadeIn>
+    ) : null,
+    why_choose_us: sectionEnabled("why_choose_us") ? (
+      <FadeIn key="why_choose_us" direction="right">
+        <WhyChooseUs data={whyChooseUsData || undefined} />
+      </FadeIn>
+    ) : null,
+    featured_products: sectionEnabled("featured_products") ? (
         <FadeIn>
           <FeaturedProducts products={featuredProducts} />
         </FadeIn>
-
-        {/* 11. Category Collections — generated from the DB category tree */}
-        <div className="space-y-10 md:space-y-14">
-          {collectionSections.map(({ category, products }) => (
-            <FadeIn key={category.id}>
-              <BrandedCollection
-                products={products}
-                title={`${category.name} Collection`}
-                subtitle={category.name}
-                viewAllLink={`/categories/${category.slug}`}
-              />
-            </FadeIn>
-          ))}
-        </div>
-
-        {/* 11.5 Campaign banners (CMS promo banners beyond the featured one) */}
-        {extraPromos.length > 0 && (
-          <FadeIn>
+    ) : null,
+    collection_sections: sectionEnabled("collection_sections") ? (
+      <div key="collection_sections" className="space-y-10 md:space-y-14">
+        {collectionSections.map(({ category, products }) => (
+          <FadeIn key={category.id}>
+            <BrandedCollection
+              products={products}
+              title={`${category.name} Collection`}
+              subtitle={category.name}
+              viewAllLink={`/categories/${category.slug}`}
+            />
+          </FadeIn>
+        ))}
+      </div>
+    ) : null,
+    campaigns:
+      sectionEnabled("campaigns") && extraPromos.length > 0 ? (
+        <FadeIn key="campaigns">
             <section>
               <div className="mb-6">
                 <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#C9A86A]">
@@ -221,13 +242,24 @@ export default async function HomePage() {
                 ))}
               </div>
             </section>
-          </FadeIn>
-        )}
-
-        {/* 12. Latest from Blog / Editorial Journal */}
-        <FadeIn>
-          <LatestBlogs />
         </FadeIn>
+      ) : null,
+    latest_blogs: sectionEnabled("latest_blogs") ? (
+      <FadeIn key="latest_blogs">
+        <LatestBlogs />
+      </FadeIn>
+    ) : null,
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-[#FAFAFA]">
+      {/* 1. Immersive Hero Banner (slides managed in CMS → Banners) */}
+      <HomeHero slides={heroSlides} />
+
+      {orderedKeys("top").map((k) => topBlocks[k])}
+
+      <div className="space-y-10 py-6 md:space-y-16 md:py-12 lg:space-y-20 lg:py-16">
+        {orderedKeys("main").map((k) => mainBlocks[k])}
       </div>
     </div>
   );

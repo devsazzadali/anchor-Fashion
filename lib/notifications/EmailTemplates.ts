@@ -124,7 +124,13 @@ export const EmailTemplates = {
     </div>
   `,
 
-  orderDeliveredInvoice: (order: any, storeUrl: string) => {
+  orderDeliveredInvoice: (order: any, storeUrl: string, company?: {
+    company_name?: string;
+    central_bin?: string;
+    central_address?: string;
+    email?: string;
+    customer_care?: string;
+  }) => {
     const formatPrice = (amount: number) =>
       new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT' }).format(amount || 0).replace('BDT', '৳');
 
@@ -202,6 +208,15 @@ export const EmailTemplates = {
       <div style="text-align: center; margin: 40px 0;">
         <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View / Download Full Invoice</a>
       </div>
+
+      ${company ? `<div style="text-align: center; margin-top: 10px; padding: 14px; background-color: #f9f9f9; border-radius: 8px;">
+        <p style="color: #555; font-size: 12px; margin: 0; line-height: 1.7;">
+          <strong style="color: #1a1a1a;">${company.company_name || "Anchor Fashion Ltd"}</strong><br/>
+          ${company.central_bin ? `Central BIN: ${company.central_bin}<br/>` : ""}
+          ${company.central_address || ""}<br/>
+          ${company.customer_care ? `Customer Care: ${company.customer_care}` : ""}${company.email ? ` · ${company.email}` : ""}
+        </p>
+      </div>` : ""}
 
       <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eaeaea;">
         <p style="color: #999; font-size: 12px; margin: 0;">© ${new Date().getFullYear()} Anchor Fashion. All rights reserved.</p>

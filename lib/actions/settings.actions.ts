@@ -56,6 +56,24 @@ export type AnalyticsSettingsConfig = {
   fb_pixel: string;
 };
 
+/**
+ * Company / invoice identity shown on the Mushak-6.3 invoice
+ * (InvoiceSheet header + footer, print views, public invoice page and the
+ * completion email). Admin-editable under Settings → Invoice & Company.
+ * Defaults are the values that were previously hardcoded in the invoice
+ * component, so rendering is unchanged until an admin edits them.
+ */
+export type InvoiceInfo = {
+  company_name: string;
+  central_bin: string;
+  central_address: string;
+  web_address: string;
+  customer_care: string;
+  shop_concern: string;
+  email: string;
+  system_by: string;
+};
+
 const DEFAULTS: {
   store_info: StoreInfo;
   social_links: SocialLinks;
@@ -64,6 +82,7 @@ const DEFAULTS: {
   security_settings: SecuritySettingsConfig;
   email_settings: EmailSettingsConfig;
   analytics_settings: AnalyticsSettingsConfig;
+  invoice_info: InvoiceInfo;
 } = {
   store_info: {
     store_name: "Anchor Fashion Enterprise",
@@ -112,6 +131,16 @@ const DEFAULTS: {
     gtm_id: "",
     fb_pixel: "",
   },
+  invoice_info: {
+    company_name: "Anchor Fashion Ltd",
+    central_bin: "001168309-0101",
+    central_address: "Plot No# 01, Section #07, Mirpur - 1216, Dhaka",
+    web_address: "anchorfashion.com",
+    customer_care: "+8801885598889",
+    shop_concern: "+8801885813370",
+    email: "info@anchorfashion.com",
+    system_by: "Anchor Fashion Ltd.",
+  },
 };
 
 const getCachedSetting = unstable_cache(
@@ -137,6 +166,39 @@ const getCachedSetting = unstable_cache(
 
 export async function getStoreInfo(): Promise<StoreInfo> {
   return getCachedSetting("store_info", DEFAULTS.store_info);
+}
+
+export async function getInvoiceInfo(): Promise<InvoiceInfo> {
+  return getCachedSetting("invoice_info", DEFAULTS.invoice_info);
+}
+
+export async function updateInvoiceInfo(info: InvoiceInfo) {
+  try {
+    await verifySuperAdmin(); // Enforce strict role-based access
+    const db = createAdminDbClient(); // Bypass RLS securely for writing settings
+
+    const { error } = await db
+      .from("settings")
+      .upsert(
+        {
+          key: "invoice_info",
+          value: info as any,
+          description: "Company identity printed on invoices (name, BIN, address, contacts)",
+        },
+        { onConflict: "key" }
+      );
+
+    if (error) throw error;
+
+    try {
+      revalidateTag("settings", "max");
+      revalidatePath("/admin/settings/invoice");
+    } catch {}
+    return { success: true };
+  } catch (error: any) {
+    console.error("[updateInvoiceInfo]", error);
+    return { success: false, error: error.message };
+  }
 }
 
 export async function getSocialLinks(): Promise<SocialLinks> {

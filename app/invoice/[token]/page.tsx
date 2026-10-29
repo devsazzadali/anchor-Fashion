@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { InvoiceSheet, InvoiceData } from "@/components/print/invoice-sheet";
-import { getStoreInfo } from "@/lib/actions/settings.actions";
+import { getStoreInfo, getInvoiceInfo } from "@/lib/actions/settings.actions";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +74,7 @@ export default async function PublicInvoicePage(props: {
   const isCod = String(order.paymentMethod || "").toUpperCase() === "COD" || !isPaid;
 
   const storeInfo = await getStoreInfo().catch(() => null);
+  const invoiceInfo = await getInvoiceInfo().catch(() => null);
 
   const invoiceData: InvoiceData = {
     invoiceNumber: order.orderNumber,
@@ -82,6 +83,7 @@ export default async function PublicInvoicePage(props: {
     orderTime,
     printDate: `${orderDate} ${orderTime}`,
     barcodeValue,
+    company: invoiceInfo || undefined,
     customer: {
       name: customerName,
       phone: customerPhone,

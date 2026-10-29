@@ -77,7 +77,9 @@ export async function evaluateCodRiskAction(
     const summary = await OrderService.calculateSummary(
       cartId,
       userId,
-      parsedData.shipping.shipping_method
+      parsedData.shipping.shipping_method,
+      null,
+      parsedData.information.shipping_address
     );
 
     const evaluation = await CodRiskService.evaluateRisk({
@@ -117,7 +119,9 @@ export async function sendCodOtpAction(
       ? await OrderService.calculateSummary(
           checkoutSession.cartId,
           userId,
-          parsedData.shipping.shipping_method
+          parsedData.shipping.shipping_method,
+          null,
+          parsedData.information.shipping_address
         ).catch(() => null)
       : null;
 

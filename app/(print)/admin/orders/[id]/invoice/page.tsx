@@ -4,7 +4,7 @@ import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { STAFF_ROLES } from "@/lib/constants/auth";
 import { InvoiceToolbar } from "@/components/print/invoice-toolbar";
 import { InvoiceSheet, InvoiceData } from "@/components/print/invoice-sheet";
-import { getStoreInfo } from "@/lib/actions/settings.actions";
+import { getStoreInfo, getInvoiceInfo } from "@/lib/actions/settings.actions";
 
 export default async function AdminPrintInvoicePage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -131,6 +131,7 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
   // Branch identity from store settings — previously a hardcoded person's
   // name and a hardcoded Rangpur address printed on every invoice.
   const storeInfo = await getStoreInfo().catch(() => null);
+  const invoiceInfo = await getInvoiceInfo().catch(() => null);
 
   const invoiceData: InvoiceData = {
     invoiceNumber,
@@ -139,6 +140,7 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
     orderTime,
     printDate,
     barcodeValue,
+    company: invoiceInfo || undefined,
     customer: {
       name: recipientName,
       phone: recipientPhone,

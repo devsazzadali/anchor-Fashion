@@ -15,6 +15,33 @@ export interface InvoiceItem {
   total_price?: number | string;
 }
 
+/** Company identity printed on the invoice — DB-backed (Settings → Invoice & Company). */
+export interface InvoiceCompanyInfo {
+  company_name: string;
+  central_bin: string;
+  central_address: string;
+  web_address: string;
+  customer_care: string;
+  shop_concern: string;
+  email: string;
+  system_by: string;
+}
+
+/** Fallbacks identical to the values printed before settings existed. */
+export const DEFAULT_INVOICE_COMPANY: InvoiceCompanyInfo = {
+  company_name: "Anchor Fashion Ltd",
+  central_bin: "001168309-0101",
+  central_address: "Plot No# 01, Section #07, Mirpur - 1216, Dhaka",
+  web_address: "anchorfashion.com",
+  customer_care: "+8801885598889",
+  shop_concern: "+8801885813370",
+  email: "info@anchorfashion.com",
+  system_by: "Anchor Fashion Ltd.",
+};
+
+/** The store's live public website — the invoice QR points here. */
+export const STORE_WEBSITE_URL = "https://www.anchorfashion.com.bd/";
+
 export interface InvoiceData {
   invoiceNumber: string;
   orderNumber: string;
@@ -23,6 +50,7 @@ export interface InvoiceData {
   printDate?: string;
   barcodeValue?: string;
   qrCodeUrl?: string;
+  company?: Partial<InvoiceCompanyInfo>;
   customer: {
     name: string;
     phone: string;
@@ -60,7 +88,13 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
     items,
     barcodeValue: customBarcode,
     qrCodeUrl: customQrUrl,
+    company: companyOverride,
   } = data;
+
+  const company: InvoiceCompanyInfo = {
+    ...DEFAULT_INVOICE_COMPANY,
+    ...(companyOverride || {}),
+  };
 
   // Compute item counts & amounts
   const totalQuantity = items.reduce(
@@ -124,12 +158,10 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
     invoiceNumber.replace(/[^A-Za-z0-9]/g, "") ||
     "2608052500467877";
 
-  // QR Code URL: fallback to website or tracking URL
-  const qrToUse =
-    customQrUrl ||
-    (typeof window !== "undefined"
-      ? window.location.href
-      : "https://anchorfashion.com");
+  // QR Code: always points at the store's live public website homepage
+  // (owner decision 2026-10-29). It previously encoded the current page URL
+  // under a "Download Our App" caption — the store has no app.
+  const qrToUse = customQrUrl || STORE_WEBSITE_URL;
 
   // Payment text matching reference image (e.g. MFS - Bangla QR: 4842 or COD - Cash on Delivery: 4842)
   const paymentMethodLabel = order.isPaid
@@ -155,13 +187,13 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
           National Board of Revenue
         </p>
         <h1 className="text-sm sm:text-base font-bold tracking-tight text-black pt-0.5">
-          Anchor Fashion Ltd
+          {company.company_name}
         </h1>
         <p className="text-[9.5px] sm:text-[10px] text-gray-800">
-          Central BIN : 001168309-0101
+          Central BIN : {company.central_bin}
         </p>
         <p className="text-[9px] sm:text-[9.5px] text-gray-700">
-          Central Address : Plot No# 01, Section #07, Mirpur - 1216, Dhaka
+          Central Address : {company.central_address}
         </p>
         <p className="text-[10.5px] font-bold text-black pt-0.5">
           {order.branchName || "Online Store Branch"}
@@ -352,19 +384,19 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
       {/* 8. Contact & Approval Details (Centered) */}
       <div className="text-center text-[10px] leading-[1.3] space-y-0.5 my-3 text-black">
         <p>
-          <span className="font-semibold">Web Address :</span> anchorfashion.com
+          <span className="font-semibold">Web Address :</span> {company.web_address}
         </p>
         <p>
-          <span className="font-semibold">Customer Care :</span> +8801885598889
+          <span className="font-semibold">Customer Care :</span> {company.customer_care}
         </p>
         <p>
-          <span className="font-semibold">Shop Concern :</span> +8801885813370
+          <span className="font-semibold">Shop Concern :</span> {company.shop_concern}
         </p>
         <p>
-          <span className="font-semibold">Email :</span> info@anchorfashion.com
+          <span className="font-semibold">Email :</span> {company.email}
         </p>
         <p className="pt-0.5">
-          <span className="font-semibold">System by:</span> Anchor Fashion Ltd.
+          <span className="font-semibold">System by:</span> {company.system_by}
         </p>
         <p className="font-semibold pt-0.5">
           Approved by: National Board of Revenue
@@ -393,7 +425,7 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
       <div className="flex flex-col items-center justify-center my-3 space-y-1.5">
         <ClientQRCode value={qrToUse} size={110} level="M" />
         <p className="text-[11px] font-semibold text-black tracking-wide">
-          Scan to Download Our App
+          Scan to Visit Our Website
         </p>
       </div>
     </div>

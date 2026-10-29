@@ -1,134 +1,208 @@
 "use server";
 
-import { createDbClient } from "@/lib/db/client";
-import { createAdminDbClient } from "@/lib/db/client";
+/**
+ * Delivery-zone actions (Workstream C rewrite).
+ *
+ * Zones are stored in the `delivery_zones` table and are the single source
+ * of truth for delivery charges at checkout. Admins manage them from
+ * Settings → Store → "Shipping Zones & Rates": name, code, flat charge,
+ * covered districts, default flag, sort order and active state.
+ *
+ * This module previously read a `shipping_rates` relation and zone columns
+ * (description / estimated_days / is_cod_available) that never existed in
+ * the database, so the settings page could only render an empty state and
+ * checkout quietly used hardcoded ৳100/৳150 constants. All of that is now
+ * backed by the real table via Prisma.
+ */
+import { prisma } from "@/lib/prisma";
 import { verifySuperAdmin } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
+import {
+  listActiveZones,
+  type PublicZone,
+} from "@/lib/services/shipping/zone-resolution.service";
 
-export type DeliveryZone = {
-  id: string;
+export type AdminZone = PublicZone & { is_active: boolean };
+
+export interface ZoneInput {
   name: string;
   code: string;
-  description?: string;
+  rate: number;
   districts: string[];
-  is_cod_available: boolean;
+  is_default: boolean;
   is_active: boolean;
-  estimated_days_min: number;
-  estimated_days_max: number;
-};
-
-export type ShippingRate = {
-  id: string;
-  zone_id: string;
-  name: string;
-  base_rate: number;
-  free_shipping_above?: number | null;
-  is_cod_rate: boolean;
-  cod_charge: number;
-  is_active: boolean;
-};
-
-export async function getDeliveryZonesWithRates() {
-  const db = await createDbClient();
-  const { data: zones, error } = await db
-    .from("delivery_zones")
-    .select(`
-      *,
-      shipping_rates (*)
-    `)
-    .eq("is_active", true)
-    .order("name");
-
-  if (error) {
-    console.error("[getDeliveryZonesWithRates]", error);
-    return { success: false, data: null, error: error.message };
-  }
-  return { success: true, data: zones };
+  sort_order: number;
 }
 
-export async function getPublicShippingRates() {
-  const db = await createDbClient();
-  const { data, error } = await db
-    .from("delivery_zones")
-    .select(`
-      id,
-      name,
-      code,
-      districts,
-      estimated_days_min,
-      estimated_days_max,
-      shipping_rates (
-        id,
-        name,
-        base_rate,
-        free_shipping_above,
-        cod_charge,
-        is_cod_rate
-      )
-    `)
-    .eq("is_active", true)
-    .eq("shipping_rates.is_active", true);
+type ActionResult<T = void> = T extends void
+  ? { success: true } | { success: false; error: string }
+  : { success: true; data: T } | { success: false; error: string };
 
-  if (error) {
-    console.error("[getPublicShippingRates]", error);
-    return { success: false, data: null };
-  }
-  return { success: true, data };
+function normalizeCode(raw: string): string {
+  return String(raw || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
-export async function upsertShippingRate(
-  rate: Partial<ShippingRate> & { zone_id: string; name: string; base_rate: number }
-) {
+function validateZoneInput(input: ZoneInput): string | null {
+  if (!input.name?.trim()) return "Zone name is required.";
+  if (!normalizeCode(input.code)) return "Zone code is required.";
+  if (!Number.isFinite(input.rate) || input.rate < 0)
+    return "Delivery charge must be a number ≥ 0.";
+  return null;
+}
+
+function revalidateZoneConsumers() {
   try {
-    await verifySuperAdmin();
-    const db = createAdminDbClient();
-    const { data, error } = await db
-      .from("shipping_rates")
-      .upsert(rate, { onConflict: "id" })
-      .select()
-      .single();
-    if (error) throw error;
     revalidatePath("/admin/settings/store");
+    revalidatePath("/admin/shipping/zones");
+    revalidatePath("/checkout");
     revalidatePath("/", "layout");
-    return { success: true, data };
-  } catch (error: any) {
-    console.error("[upsertShippingRate]", error);
-    return { success: false, error: error.message };
+  } catch {}
+}
+
+/** Public: active zones for checkout display (no admin data leaks). */
+export async function getPublicZonesAction(): Promise<{
+  success: boolean;
+  data: PublicZone[];
+}> {
+  try {
+    return { success: true, data: await listActiveZones() };
+  } catch (err) {
+    console.error("[getPublicZonesAction]", err);
+    return { success: false, data: [] };
   }
 }
 
-export async function toggleShippingRate(rateId: string, isActive: boolean) {
+/** Admin: every zone (active + inactive), in display order. */
+export async function getAdminZonesAction(): Promise<
+  ActionResult<AdminZone[]>
+> {
   try {
     await verifySuperAdmin();
-    const db = createAdminDbClient();
-    const { error } = await db
-      .from("shipping_rates")
-      .update({ is_active: isActive })
-      .eq("id", rateId);
-    if (error) throw error;
-    revalidatePath("/admin/settings/store");
+    const zones = await prisma.delivery_zones.findMany({
+      orderBy: [{ sort_order: "asc" }, { name: "asc" }],
+    });
+    return {
+      success: true,
+      data: zones.map((z) => ({
+        id: z.id,
+        name: z.name,
+        code: z.code,
+        rate: Number(z.rate ?? 0),
+        districts: z.districts ?? [],
+        is_default: z.is_default,
+        is_active: z.is_active !== false,
+        sort_order: z.sort_order,
+      })),
+    };
+  } catch (err: any) {
+    console.error("[getAdminZonesAction]", err);
+    return { success: false, error: err.message || "Failed to load zones" };
+  }
+}
+
+export async function createZoneAction(
+  input: ZoneInput
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    await verifySuperAdmin();
+    const invalid = validateZoneInput(input);
+    if (invalid) return { success: false, error: invalid };
+
+    const zone = await prisma.$transaction(async (tx) => {
+      if (input.is_default) {
+        await tx.delivery_zones.updateMany({ data: { is_default: false } });
+      }
+      return tx.delivery_zones.create({
+        data: {
+          name: input.name.trim(),
+          code: normalizeCode(input.code),
+          rate: input.rate,
+          districts: input.districts.map((d) => d.trim()).filter(Boolean),
+          is_default: input.is_default,
+          is_active: input.is_active,
+          sort_order: input.sort_order || 0,
+        },
+      });
+    });
+
+    revalidateZoneConsumers();
+    return { success: true, data: { id: zone.id } };
+  } catch (err: any) {
+    console.error("[createZoneAction]", err);
+    if (String(err?.code) === "P2002") {
+      return { success: false, error: "A zone with this code already exists." };
+    }
+    return { success: false, error: err.message || "Failed to create zone" };
+  }
+}
+
+export async function updateZoneAction(
+  id: string,
+  input: ZoneInput
+): Promise<ActionResult> {
+  try {
+    await verifySuperAdmin();
+    const invalid = validateZoneInput(input);
+    if (invalid) return { success: false, error: invalid };
+
+    await prisma.$transaction(async (tx) => {
+      if (input.is_default) {
+        await tx.delivery_zones.updateMany({
+          where: { id: { not: id } },
+          data: { is_default: false },
+        });
+      }
+      await tx.delivery_zones.update({
+        where: { id },
+        data: {
+          name: input.name.trim(),
+          code: normalizeCode(input.code),
+          rate: input.rate,
+          districts: input.districts.map((d) => d.trim()).filter(Boolean),
+          is_default: input.is_default,
+          is_active: input.is_active,
+          sort_order: input.sort_order || 0,
+          updated_at: new Date(),
+        },
+      });
+    });
+
+    revalidateZoneConsumers();
     return { success: true };
-  } catch (error: any) {
-    console.error("[toggleShippingRate]", error);
-    return { success: false, error: error.message };
+  } catch (err: any) {
+    console.error("[updateZoneAction]", err);
+    if (String(err?.code) === "P2002") {
+      return { success: false, error: "A zone with this code already exists." };
+    }
+    return { success: false, error: err.message || "Failed to update zone" };
   }
 }
 
-export async function upsertDeliveryZone(zone: Partial<DeliveryZone> & { name: string; code: string }) {
+export async function deleteZoneAction(id: string): Promise<ActionResult> {
   try {
     await verifySuperAdmin();
-    const db = createAdminDbClient();
-    const { data, error } = await db
-      .from("delivery_zones")
-      .upsert(zone, { onConflict: "code" })
-      .select()
-      .single();
-    if (error) throw error;
-    revalidatePath("/admin/settings/store");
-    revalidatePath("/", "layout");
-    return { success: true, data };
-  } catch (error: any) {
-    console.error("[upsertDeliveryZone]", error);
-    return { success: false, error: error.message };
+    const zone = await prisma.delivery_zones.findUnique({ where: { id } });
+    if (!zone) return { success: false, error: "Zone not found." };
+    if (zone.is_default) {
+      return {
+        success: false,
+        error:
+          "The default zone cannot be deleted. Make another zone the default first.",
+      };
+    }
+    const count = await prisma.delivery_zones.count();
+    if (count <= 1) {
+      return { success: false, error: "At least one delivery zone must exist." };
+    }
+    await prisma.delivery_zones.delete({ where: { id } });
+    revalidateZoneConsumers();
+    return { success: true };
+  } catch (err: any) {
+    console.error("[deleteZoneAction]", err);
+    return { success: false, error: err.message || "Failed to delete zone" };
   }
 }

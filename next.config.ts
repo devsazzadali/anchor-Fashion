@@ -19,6 +19,11 @@ const nextConfig: NextConfig = {
         hostname: "res.cloudinary.com",
       },
       {
+        // Vercel Blob public store URLs (Workstream G media storage)
+        protocol: "https",
+        hostname: "*.public.blob.vercel-storage.com",
+      },
+      {
         protocol: "https",
         hostname: "**.neon.tech",
       },

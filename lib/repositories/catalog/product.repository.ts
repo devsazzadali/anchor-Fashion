@@ -828,17 +828,145 @@ export class ProductRepository {
   }
 
   /**
-   * Soft deletes a product in Neon.
+   * Moves a product to the TRASH (Workstream E): the row stays in the DB
+   * for 30 days, hidden from the storefront and normal admin lists
+   * (deletedAt is filtered everywhere), and remembers the status it had
+   * so Restore can put it back exactly. Deleting from the trash is the
+   * only permanent removal (see permanentlyDeleteProduct).
    */
   static async deleteProduct(id: string) {
+    const current = await prisma.product.findUnique({
+      where: { id },
+      select: { status: true, deletedAt: true, preTrashStatus: true },
+    });
     await prisma.product.update({
       where: { id },
       data: {
         deletedAt: new Date(),
         status: "ARCHIVED",
+        // Only remember the pre-trash status on the first move to trash.
+        ...(current && !current.deletedAt
+          ? { preTrashStatus: current.status }
+          : {}),
       },
     });
     return true;
+  }
+
+  /** Days a trashed product is kept before the automatic purge. */
+  static readonly TRASH_RETENTION_DAYS = 30;
+
+  /** Lists trashed products (deletedAt set), newest trash first. */
+  static async getTrashedProducts(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  }) {
+    const page = Math.max(1, params?.page || 1);
+    const limit = Math.min(100, Math.max(1, params?.limit || 20));
+    const where: any = { deletedAt: { not: null } };
+    if (params?.search?.trim()) {
+      const term = params.search.trim();
+      where.OR = [
+        { name: { contains: term, mode: "insensitive" } },
+        { sku: { contains: term, mode: "insensitive" } },
+        { barcode: { contains: term, mode: "insensitive" } },
+      ];
+    }
+    const [total, rows] = await Promise.all([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        orderBy: { deletedAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          category: { select: { name: true } },
+          media: {
+            where: { isPrimary: true },
+            take: 1,
+            select: { url: true },
+          },
+        },
+      }),
+    ]);
+    const now = Date.now();
+    const data = rows.map((p: any) => {
+      const deletedAt = p.deletedAt ? new Date(p.deletedAt) : null;
+      const daysInTrash = deletedAt
+        ? Math.floor((now - deletedAt.getTime()) / 86_400_000)
+        : 0;
+      return {
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        barcode: p.barcode,
+        price: p.price ? Number(p.price) : 0,
+        imageUrl: p.media?.[0]?.url || null,
+        categoryName: p.category?.name || null,
+        preTrashStatus: p.preTrashStatus || "DRAFT",
+        deletedAt: deletedAt ? deletedAt.toISOString() : null,
+        daysRemaining: Math.max(
+          0,
+          ProductRepository.TRASH_RETENTION_DAYS - daysInTrash
+        ),
+      };
+    });
+    return { data, total, page, limit };
+  }
+
+  /** Restores a trashed product to the status it had before trashing. */
+  static async restoreProduct(id: string) {
+    const current = await prisma.product.findUnique({
+      where: { id },
+      select: { preTrashStatus: true },
+    });
+    await prisma.product.update({
+      where: { id },
+      data: {
+        deletedAt: null,
+        status: (current?.preTrashStatus as any) || "DRAFT",
+        preTrashStatus: null,
+      },
+    });
+    return true;
+  }
+
+  static async bulkRestoreProducts(ids: string[]): Promise<number> {
+    let count = 0;
+    for (const id of ids) {
+      await ProductRepository.restoreProduct(id);
+      count++;
+    }
+    return count;
+  }
+
+  /** PERMANENT delete — only valid from the trash. */
+  static async permanentlyDeleteProduct(id: string) {
+    await prisma.product.delete({ where: { id } });
+    return true;
+  }
+
+  static async bulkPermanentlyDeleteProducts(ids: string[]): Promise<number> {
+    const result = await prisma.product.deleteMany({
+      where: { id: { in: ids }, deletedAt: { not: null } },
+    });
+    return result.count;
+  }
+
+  /**
+   * Auto-purge: permanently deletes products trashed longer than the
+   * retention window. Invoked by the daily cron route
+   * (/api/cron/purge-product-trash) and the admin "Purge now" action.
+   */
+  static async purgeExpiredTrash(
+    retentionDays: number = ProductRepository.TRASH_RETENTION_DAYS
+  ): Promise<number> {
+    const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
+    const result = await prisma.product.deleteMany({
+      where: { deletedAt: { not: null, lt: cutoff } },
+    });
+    return result.count;
   }
 
   /**
@@ -856,17 +984,32 @@ export class ProductRepository {
   }
 
   /**
-   * Bulk soft-delete multiple products in Neon.
+   * Bulk move-to-trash: each product remembers its own pre-trash status.
    */
   static async bulkDelete(ids: string[]): Promise<number> {
-    const result = await prisma.product.updateMany({
-      where: { id: { in: ids } },
-      data: {
-        deletedAt: new Date(),
-        status: "ARCHIVED",
-      },
+    const rows = await prisma.product.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true, status: true },
     });
-    return result.count;
+    let count = 0;
+    const byStatus = new Map<string, string[]>();
+    for (const r of rows) {
+      const list = byStatus.get(r.status) || [];
+      list.push(r.id);
+      byStatus.set(r.status, list);
+    }
+    for (const [status, group] of byStatus) {
+      const result = await prisma.product.updateMany({
+        where: { id: { in: group } },
+        data: {
+          deletedAt: new Date(),
+          status: "ARCHIVED",
+          preTrashStatus: status as any,
+        },
+      });
+      count += result.count;
+    }
+    return count;
   }
 
   /**
@@ -887,13 +1030,11 @@ export class ProductRepository {
       ];
     }
 
-    const result = await prisma.product.updateMany({
+    const matched = await prisma.product.findMany({
       where,
-      data: {
-        deletedAt: new Date(),
-        status: "ARCHIVED",
-      },
+      select: { id: true, status: true },
     });
-    return result.count;
+    if (matched.length === 0) return 0;
+    return ProductRepository.bulkDelete(matched.map((m) => m.id));
   }
 }

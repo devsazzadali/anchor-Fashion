@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Store,
   Activity,
+  FileText,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -38,6 +39,14 @@ const settingsSections = [
     description: "Configure your store's basic information and localization.",
     href: "/admin/settings/store",
     icon: Store,
+  },
+  {
+    title: "Invoice & Company",
+    description:
+      "Company name, Central BIN, address and contacts printed on every invoice.",
+    href: "/admin/settings/invoice",
+    icon: FileText,
+    badge: "Live",
   },
   {
     title: "Payment Gateways",

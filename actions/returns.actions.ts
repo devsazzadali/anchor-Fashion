@@ -244,7 +244,7 @@ export async function uploadReturnProofAction(
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const { error: uploadErr } = await adminDb.storage
+    const { data: uploadData, error: uploadErr } = await adminDb.storage
       .from("return_proofs")
       .upload(filePath, buffer, {
         contentType: file.type,
@@ -255,13 +255,18 @@ export async function uploadReturnProofAction(
       throw new Error(`Upload failed: ${uploadErr.message}`);
     }
 
+    // Blob mode: persist the absolute Blob URL from the upload result.
     const { data: publicData } = adminDb.storage
       .from("return_proofs")
       .getPublicUrl(filePath);
 
     return {
       success: true,
-      data: { url: publicData.publicUrl },
+      data: {
+        url: (uploadData as any)?.path?.startsWith("http")
+          ? (uploadData as any).path
+          : publicData.publicUrl,
+      },
     };
   } catch (err: any) {
     return { success: false, error: err.message };

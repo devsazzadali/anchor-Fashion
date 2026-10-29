@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { InvoiceToolbar } from "@/components/print/invoice-toolbar";
 import { InvoiceSheet, InvoiceData } from "@/components/print/invoice-sheet";
-import { getStoreInfo } from "@/lib/actions/settings.actions";
+import { getStoreInfo, getInvoiceInfo } from "@/lib/actions/settings.actions";
 
 export default async function CustomerPrintInvoicePage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -208,6 +208,7 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   // previously printed a hardcoded person's name ("Shojol Mia") and a
   // hardcoded Rangpur address on every customer invoice.
   const storeInfo = await getStoreInfo().catch(() => null);
+  const invoiceInfo = await getInvoiceInfo().catch(() => null);
 
   const invoiceData: InvoiceData = {
     invoiceNumber,
@@ -216,6 +217,7 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
     orderTime,
     printDate,
     barcodeValue,
+    company: invoiceInfo || undefined,
     customer: {
       name: recipientName,
       phone: recipientPhone,

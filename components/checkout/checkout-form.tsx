@@ -33,6 +33,12 @@ import { Loader2, ArrowRight, Lock, Landmark, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { AllPaymentConfigs } from "@/lib/actions/payment.actions";
 import { ManualPaymentFields } from "@/components/checkout/manual-payment-fields";
+import { getPublicZonesAction } from "@/lib/actions/shipping.actions";
+import {
+  dhakaZone,
+  defaultZone,
+  type PublicZone,
+} from "@/lib/services/shipping/zone-shared";
 
 export function CheckoutForm({
   checkoutSessionId,
@@ -54,6 +60,26 @@ export function CheckoutForm({
     setPayment,
   } = useCheckoutStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Delivery-zone charges (admin-configured in Settings → Store). The two
+  // shipping methods map to the zone covering Dhaka and the default zone;
+  // the legacy flat rates below only render until zone data loads.
+  const [zones, setZones] = useState<PublicZone[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getPublicZonesAction()
+      .then((res) => {
+        if (!cancelled && res.success) setZones(res.data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const insideZone = dhakaZone(zones);
+  const outsideZone = defaultZone(zones);
+  const insideRate = insideZone?.rate ?? 100;
+  const outsideRate = outsideZone?.rate ?? 150;
 
   // COD Fraud Shield OTP Verification states
   const [showOtpDialog, setShowOtpDialog] = useState(false);
@@ -551,12 +577,12 @@ export function CheckoutForm({
                       <div className="flex flex-1 justify-between items-center cursor-pointer">
                         <div className="flex flex-col">
                           <FormLabel className="cursor-pointer font-medium text-foreground text-sm">
-                            Home Delivery (Inside Dhaka)
+                            Home Delivery ({insideZone?.name || "Inside Dhaka"})
                           </FormLabel>
                           <span className="text-xs text-muted-foreground mt-0.5">Est. 1-2 business days</span>
                         </div>
                         <span className="font-semibold text-foreground">
-                          ৳ 100
+                          ৳ {insideRate}
                         </span>
                       </div>
                     </FormItem>
@@ -567,12 +593,12 @@ export function CheckoutForm({
                       <div className="flex flex-1 justify-between items-center cursor-pointer">
                         <div className="flex flex-col">
                           <FormLabel className="cursor-pointer font-medium text-foreground text-sm">
-                            Home Delivery (Outside Dhaka)
+                            Home Delivery ({outsideZone?.name || "Outside Dhaka"})
                           </FormLabel>
                           <span className="text-xs text-muted-foreground mt-0.5">Est. 3-5 business days</span>
                         </div>
                         <span className="font-semibold text-foreground">
-                          ৳ 150
+                          ৳ {outsideRate}
                         </span>
                       </div>
                     </FormItem>

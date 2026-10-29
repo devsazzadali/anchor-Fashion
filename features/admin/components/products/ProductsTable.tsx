@@ -168,14 +168,14 @@ export function ProductsTable({
 
   const handleDelete = (id: string) => {
     openConfirm(
-      "Delete Product?",
-      "This product will be archived and removed from your store. This cannot be undone.",
+      "Move Product to Trash?",
+      "This product will be hidden from your store and moved to the Trash, where it can be restored for 30 days before being permanently deleted.",
       async () => {
         setIsDeleting(id);
         setConfirmState((s) => ({ ...s, isLoading: true }));
         const res = await deleteAdminProductAction({ id });
         if (res.success) {
-          toast.success("Product deleted successfully");
+          toast.success("Product moved to trash — restorable for 30 days");
           setProducts((prev) => prev.filter((p) => p.id !== id));
           router.refresh();
         } else {
@@ -207,10 +207,10 @@ export function ProductsTable({
       const isCatalogWide = selectAllAcrossCatalog && totalCount > products.length;
       const countToDelete = isCatalogWide ? totalCount : selectedIds.length;
       openConfirm(
-        `Delete ${isCatalogWide ? `ALL ${countToDelete}` : `${countToDelete}`} products?`,
+        `Move ${isCatalogWide ? `ALL ${countToDelete}` : `${countToDelete}`} products to Trash?`,
         isCatalogWide
-          ? `All ${countToDelete} products in your catalog matching the current view will be archived and removed from your store. This cannot be undone.`
-          : "These products will be archived and removed from your store. This cannot be undone.",
+          ? `All ${countToDelete} products in your catalog matching the current view will be hidden from your store and moved to the Trash, restorable for 30 days.`
+          : "These products will be hidden from your store and moved to the Trash, restorable for 30 days.",
         async () => {
           setConfirmState((s) => ({ ...s, isLoading: true }));
           if (isCatalogWide) {

@@ -14,13 +14,67 @@ export class OrderService {
    * Calculate Order Summary
    */
   /**
-   * Shipping fee lookup by method slug.
-   * Keys must match the RadioGroup values in checkout-form.tsx.
+   * Fallback shipping fees by method slug — used ONLY when the
+   * admin-configured delivery zones cannot be loaded. Keys must match
+   * the RadioGroup values in checkout-form.tsx.
    */
   private static readonly SHIPPING_FEES: Record<string, number> = {
     home_delivery: 100,          // Inside Dhaka
     home_delivery_outside: 150,  // Outside Dhaka
   };
+
+  /**
+   * Zone-backed fee for a checkout method: "home_delivery" resolves the
+   * zone covering Dhaka; "home_delivery_outside" resolves the default
+   * zone. Returns null when no zones are configured (caller falls back).
+   */
+  private static async zoneFeeForMethod(
+    shippingMethod?: string
+  ): Promise<number | null> {
+    try {
+      const { listActiveZones, pickZone } = await import(
+        "@/lib/services/shipping/zone-resolution.service"
+      );
+      const zones = await listActiveZones();
+      if (!zones.length) return null;
+      const zone =
+        shippingMethod === "home_delivery_outside"
+          ? zones.find((z) => z.is_default) || zones[0]
+          : pickZone(zones, "Dhaka", "Dhaka");
+      return zone ? zone.rate : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Zone for a concrete delivery ADDRESS (Workstream C correction): the
+   * delivery charge follows the district/city on the address — the zone
+   * whose district list covers it, else the default zone. This is the
+   * primary resolution; the shipping METHOD is only a fallback hint for
+   * address-less summary calls. Returns null when no zones exist.
+   */
+  static async zoneForAddress(
+    address?: { city?: string | null; state?: string | null; district?: string | null } | null
+  ): Promise<{ id: string; name: string; code: string | null; rate: number } | null> {
+    try {
+      const { listActiveZones, pickZone } = await import(
+        "@/lib/services/shipping/zone-resolution.service"
+      );
+      const zones = await listActiveZones();
+      if (!zones.length) return null;
+      const zone = pickZone(
+        zones,
+        address?.district || address?.state,
+        address?.city
+      );
+      return zone
+        ? { id: zone.id, name: zone.name, code: zone.code, rate: zone.rate }
+        : null;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Resolve the coupon applied to the checkout session (if any) and its
@@ -66,7 +120,8 @@ export class OrderService {
     cartId: string,
     userId?: string | null,
     shippingMethod?: string,
-    sessionId?: string | null
+    sessionId?: string | null,
+    shippingAddress?: { city?: string | null; state?: string | null; district?: string | null } | null
   ): Promise<{
     subtotal: number;
     shipping_fee: number;
@@ -109,10 +164,21 @@ export class OrderService {
       }))
     );
 
-    // Derive shipping fee from selected method; default to inside-Dhaka rate.
+    // Derive the shipping fee from the admin-configured delivery zones:
+    // FIRST by the delivery address (district/city → zone), then by the
+    // selected method; the historical flat schedule is only a last
+    // fallback when zones cannot be loaded at all.
+    const addressZone =
+      subtotal > 0 ? await this.zoneForAddress(shippingAddress) : null;
+    const zoneFee =
+      subtotal > 0 && !addressZone
+        ? await this.zoneFeeForMethod(shippingMethod)
+        : null;
     const shipping_fee =
       subtotal > 0
-        ? (this.SHIPPING_FEES[shippingMethod ?? "home_delivery"] ?? 100)
+        ? addressZone?.rate ??
+          zoneFee ??
+          (this.SHIPPING_FEES[shippingMethod ?? "home_delivery"] ?? 100)
         : 0;
 
     // Coupon applied to the checkout session (see resolveSessionCoupon).
@@ -153,7 +219,8 @@ export class OrderService {
       cartId,
       userId,
       checkoutData.shipping.shipping_method,
-      sessionId
+      sessionId,
+      checkoutData.information.shipping_address
     );
 
     // Strict coupon validation before anything is persisted: a coupon the
@@ -253,10 +320,20 @@ export class OrderService {
     // address was lost, so guests could not be emailed their invoice and
     // the repository's email→profile linking never matched.
     const rawShippingAddress = checkoutData.information.shipping_address;
+    // Stamp the resolved delivery zone onto the persisted address so the
+    // order record (and invoice) shows which zone set the charge.
+    const resolvedZone = await this.zoneForAddress(rawShippingAddress as any);
+    const withZone = resolvedZone
+      ? {
+          ...(rawShippingAddress as any),
+          delivery_zone: resolvedZone.name,
+          delivery_zone_id: resolvedZone.id,
+        }
+      : rawShippingAddress;
     const shippingAddress =
-      guestEmail && !(rawShippingAddress as any)?.email
-        ? { ...rawShippingAddress, email: guestEmail }
-        : rawShippingAddress;
+      guestEmail && !(withZone as any)?.email
+        ? { ...(withZone as any), email: guestEmail }
+        : withZone;
     const billingAddress = checkoutData.payment.billing_address_same_as_shipping
       ? shippingAddress
       : checkoutData.payment.billing_address!;

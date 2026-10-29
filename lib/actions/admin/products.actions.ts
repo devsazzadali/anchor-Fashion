@@ -183,6 +183,79 @@ const BulkDeleteAllSchema = z.object({
   search: z.string().optional(),
 });
 
+// ============================================================================
+// TRASH (Workstream E) — delete moves a product to the trash for 30 days;
+// restore brings it back with its previous status; delete-forever and the
+// 30-day auto-purge are the only permanent removals.
+// ============================================================================
+
+const GetTrashedSchema = z.object({
+  page: z.number().optional(),
+  limit: z.number().optional(),
+  search: z.string().optional(),
+});
+
+export const getTrashedProductsAction = createAdminAction(
+  GetTrashedSchema,
+  async (input) => {
+    return await ProductRepository.getTrashedProducts(input);
+  }
+);
+
+export const restoreAdminProductAction = createAdminAction(
+  ProductIdSchema,
+  async ({ id }) => {
+    await ProductRepository.restoreProduct(id);
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/products/trash");
+    invalidateProductCache();
+    return { success: true };
+  }
+);
+
+export const permanentlyDeleteAdminProductAction = createAdminAction(
+  ProductIdSchema,
+  async ({ id }) => {
+    await ProductRepository.permanentlyDeleteProduct(id);
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/products/trash");
+    invalidateProductCache();
+    return { success: true };
+  }
+);
+
+export const bulkRestoreProductsAction = createAdminAction(
+  BulkDeleteSchema,
+  async ({ ids }) => {
+    const count = await ProductRepository.bulkRestoreProducts(ids);
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/products/trash");
+    invalidateProductCache();
+    return { count };
+  }
+);
+
+export const bulkPermanentlyDeleteProductsAction = createAdminAction(
+  BulkDeleteSchema,
+  async ({ ids }) => {
+    const count = await ProductRepository.bulkPermanentlyDeleteProducts(ids);
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/products/trash");
+    invalidateProductCache();
+    return { count };
+  }
+);
+
+/** Manual trigger for the same purge the daily cron runs. */
+export const purgeExpiredTrashAction = createAdminAction(
+  EmptySchema,
+  async () => {
+    const count = await ProductRepository.purgeExpiredTrash();
+    revalidatePath("/admin/products/trash");
+    return { count };
+  }
+);
+
 /**
  * Bulk delete all products matching optional filter criteria, or all non-deleted products.
  */

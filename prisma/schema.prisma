@@ -198,6 +198,7 @@ model Product {
   brandId           String?           @map("brand_id") @db.Uuid
   tags              String[]          @default([])
   deletedAt         DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  preTrashStatus    String?           @map("pre_trash_status")
   createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   cartItems         CartItem[]
@@ -1321,10 +1322,14 @@ model customer_wallets {
 model delivery_zones {
   id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name       String    @db.VarChar(255)
-  code       String?   @db.VarChar(50)
+  code       String?   @unique @db.VarChar(50)
   rate       Decimal?  @default(0) @db.Decimal(10, 2)
   is_active  Boolean?  @default(true)
+  districts  String[]  @default([])
+  is_default Boolean   @default(false)
+  sort_order Int       @default(0)
   created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model expenses {

@@ -115,7 +115,10 @@ export async function getStorefrontCuratedCategories(): Promise<CuratedCategorie
       return { settings, items: [] };
     }
 
-    const slotCategoryIds = (settings.slots || [])
+    const activeSlots = (settings.slots || []).filter(
+      (s) => s.isActive !== false
+    );
+    const slotCategoryIds = activeSlots
       .map((s) => s.categoryId)
       .filter((id): id is string => Boolean(id && id.trim().length > 0));
 
@@ -133,7 +136,7 @@ export async function getStorefrontCuratedCategories(): Promise<CuratedCategorie
       const categoryMap = new Map(matchedCategories.map((c) => [c.id, c]));
 
       // Preserve the exact order specified in settings.slots
-      items = settings.slots
+      items = activeSlots
         .map((slot, index) => {
           const category = categoryMap.get(slot.categoryId);
           if (!category) return null;
@@ -210,6 +213,7 @@ export async function updateCuratedCategoriesSettings(
         subtitle: slot.subtitle?.trim() || DEFAULT_SUBTITLES[idx] || "Shop Now",
         customTitle: slot.customTitle?.trim() || "",
         customImageUrl: slot.customImageUrl?.trim() || "",
+        isActive: slot.isActive !== false,
       })),
     };
 
