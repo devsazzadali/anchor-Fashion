@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createDbClient } from "@/lib/db/client";
 import { toast } from "sonner";
 
 interface Preferences {
@@ -16,7 +16,7 @@ export function NotificationPreferences() {
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const supabase = createClient();
+  const db = createDbClient();
 
   useEffect(() => {
     fetchPreferences();
@@ -25,10 +25,10 @@ export function NotificationPreferences() {
   const fetchPreferences = async () => {
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = await db.auth.getSession();
     if (!session) return;
 
-    const { data } = await supabase
+    const { data } = await db
       .from("notification_preferences")
       .select("*")
       .eq("user_id", session.user.id)
@@ -54,10 +54,10 @@ export function NotificationPreferences() {
     setSaving(true);
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = await db.auth.getSession();
     if (!session) return;
 
-    await supabase.from("notification_preferences").upsert({
+    await db.from("notification_preferences").upsert({
       user_id: session.user.id,
       ...preferences,
     });

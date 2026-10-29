@@ -98,110 +98,10 @@ export interface PremiumMobileMenuProps {
   triggerButton?: React.ReactNode;
 }
 
-// Curated high-fashion imagery for categories
-const CATEGORY_IMAGE_MAP: Record<string, string> = {
-  panjabi: "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=600&q=85",
-  "kabli-set": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=600&q=85",
-  shirt: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=600&q=85",
-  shirts: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=600&q=85",
-  polo: "https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=600&q=85",
-  "t-shirt": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&q=85",
-  bottom: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&q=85",
-  trousers: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&q=85",
-  denim: "https://images.unsplash.com/photo-1582552938357-32b906df40cb?w=600&q=85",
-  outerwear: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&q=85",
-  blazer: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&q=85",
-  accessories: "https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?w=600&q=85",
-  men: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=600&q=85",
-  women: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600&q=85",
-  kids: "https://images.unsplash.com/photo-1503944545259-babc49265b6e?w=600&q=85",
-};
-
-// Curated badge highlights for categories
-const CATEGORY_BADGES: Record<string, { label: string; bg: string; text: string }> = {
-  panjabi: {
-    label: "SIGNATURE",
-    bg: "bg-amber-400/20 border-amber-400/40",
-    text: "text-amber-300",
-  },
-  "kabli-set": {
-    label: "ROYAL FIT",
-    bg: "bg-amber-400/20 border-amber-400/40",
-    text: "text-amber-300",
-  },
-  polo: {
-    label: "BEST SELLER",
-    bg: "bg-sky-400/20 border-sky-400/40",
-    text: "text-sky-300",
-  },
-  shirt: {
-    label: "LUXURY COTTON",
-    bg: "bg-emerald-400/20 border-emerald-400/40",
-    text: "text-emerald-300",
-  },
-  outerwear: {
-    label: "HAUTE COUTURE",
-    bg: "bg-purple-400/20 border-purple-400/40",
-    text: "text-purple-300",
-  },
-  denim: {
-    label: "JAPANESE SELVEDGE",
-    bg: "bg-indigo-400/20 border-indigo-400/40",
-    text: "text-indigo-300",
-  },
-  accessories: {
-    label: "HANDCRAFTED",
-    bg: "bg-rose-400/20 border-rose-400/40",
-    text: "text-rose-300",
-  },
-};
-
-// Trending search chips
-const TRENDING_SEARCH_CHIPS = [
-  "Silk Panjabi",
-  "Piqué Polo",
-  "Mandarin Shirt",
-  "Drop Shoulder",
-  "Slim Chinos",
-  "Wedding Kabli",
-  "Italian Blazer",
-];
-
-// Curated editorial lookbook stories
-const EDITORIAL_COLLECTIONS = [
-  {
-    tag: "FESTIVE EDIT 2026",
-    title: "The Royal Heritage Panjabi",
-    subtitle: "Pure dupion silk, hand-embroidered collars and heirloom silhouettes.",
-    image: "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=800&q=80",
-    href: "/categories/panjabi?collection=heritage",
-    accent: "from-amber-900/80 to-black/90",
-  },
-  {
-    tag: "EXECUTIVE LUXURY",
-    title: "The Sartorial Suiting & Blazers",
-    subtitle: "Precision Italian cut wools tailored for high-stakes distinction.",
-    image: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=800&q=80",
-    href: "/categories/outerwear?type=blazer",
-    accent: "from-slate-900/80 to-black/90",
-  },
-  {
-    tag: "LEISURE LUXE",
-    title: "Mercerized Knitwear & Polos",
-    subtitle: "Silk-feel premium Egyptian cotton engineered for Dhaka warmth.",
-    image: "https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=800&q=80",
-    href: "/categories/polo?fabric=mercerized",
-    accent: "from-blue-950/80 to-black/90",
-  },
-  {
-    tag: "CEREMONIAL",
-    title: "Imperial Kabli Collection",
-    subtitle: "Modern regal cuts with tonal threadwork and signature buttons.",
-    image: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800&q=80",
-    href: "/categories/kabli-set",
-    accent: "from-emerald-950/80 to-black/90",
-  },
-];
+// Phase 9 (no-hardcode rule): the mobile menu renders ONLY data derived
+// from the admin-managed category tree passed in via props — the previous
+// per-slug Unsplash image map, badge map, trending chips and editorial
+// lookbook constants were removed.
 
 export function PremiumMobileMenu({
   open: controlledOpen,
@@ -309,16 +209,28 @@ export function PremiumMobileMenu({
 
   const closeMenu = () => setOpen(false);
 
-  // Fallback links if navLinks aren't passed
+  // Fallback links if navLinks aren't passed: utility links only (no
+  // fabricated categories — the menu is driven by the DB category tree).
   const navLinks = propNavLinks || [
-    { label: "PANJABI", href: "/categories/panjabi" },
-    { label: "SHIRTS", href: "/categories/shirt" },
-    { label: "POLOS", href: "/categories/polo" },
-    { label: "T-SHIRTS", href: "/categories/t-shirt" },
-    { label: "BOTTOMS", href: "/categories/bottom" },
-    { label: "OUTERWEAR", href: "/categories/outerwear" },
-    { label: "ACCESSORIES", href: "/categories/accessories" },
+    { label: "ALL PRODUCTS", href: "/products" },
+    { label: "NEW ARRIVALS", href: "/products?sort=newest" },
   ];
+
+  // Derived from the admin-managed category tree (props), never hardcoded.
+  const topCategories = (categories || [])
+    .filter((c) => !c.parent_id && c.is_active !== false)
+    .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+  const trendingChips = topCategories.slice(0, 6).map((c) => c.name);
+  const editorialCollections = topCategories
+    .filter((c) => !!c.image_url)
+    .slice(0, 4)
+    .map((c) => ({
+      tag: "THE COLLECTION",
+      title: c.name,
+      subtitle: "Explore the collection",
+      image: c.image_url as string,
+      href: `/categories/${c.slug}`,
+    }));
 
   return (
     <Sheet open={isOpen} onOpenChange={setOpen}>
@@ -404,7 +316,7 @@ export function PremiumMobileMenu({
             <span className="text-[9.5px] font-extrabold uppercase tracking-widest text-[#DFBA73]/80 flex-shrink-0 mr-0.5 flex items-center gap-1">
               <Sparkles className="h-2.5 w-2.5" /> Hot:
             </span>
-            {TRENDING_SEARCH_CHIPS.map((chip, idx) => (
+            {trendingChips.map((chip, idx) => (
               <button
                 key={idx}
                 type="button"
@@ -497,10 +409,11 @@ export function PremiumMobileMenu({
               <div className="space-y-2">
                 {navLinks.map((link) => {
                   const slug = link.href.replace("/categories/", "").toLowerCase();
-                  const fallbackImage =
-                    CATEGORY_IMAGE_MAP[slug] ||
-                    "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=600&q=80";
-                  const badge = CATEGORY_BADGES[slug];
+                  const thumbSrc =
+                    link.megaMenu?.leftCard?.src ||
+                    (categories || []).find((c) => c.slug.toLowerCase() === slug)
+                      ?.image_url ||
+                    null;
                   const isExpanded = expandedCategories.includes(link.label);
                   const hasSubmenu = link.megaMenu && link.megaMenu.columns.length > 0;
 
@@ -518,13 +431,15 @@ export function PremiumMobileMenu({
                         >
                           {/* Miniature High-Fashion Thumbnail */}
                           <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-white/10 bg-slate-900 shadow-md">
-                            <Image
-                              src={link.megaMenu?.leftCard?.src || fallbackImage}
-                              alt={link.label}
-                              fill
-                              sizes="48px"
-                              className="object-cover transition-transform duration-500 group-hover:scale-110"
-                            />
+                            {thumbSrc && (
+                              <Image
+                                src={thumbSrc}
+                                alt={link.label}
+                                fill
+                                sizes="48px"
+                                className="object-cover transition-transform duration-500 group-hover:scale-110"
+                              />
+                            )}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                           </div>
 
@@ -534,17 +449,6 @@ export function PremiumMobileMenu({
                               <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white group-hover:text-[#DFBA73] transition-colors">
                                 {link.label}
                               </span>
-                              {badge && (
-                                <span
-                                  className={cn(
-                                    "rounded-full border px-2 py-0.5 text-[8.5px] font-extrabold uppercase tracking-widest",
-                                    badge.bg,
-                                    badge.text
-                                  )}
-                                >
-                                  {badge.label}
-                                </span>
-                              )}
                             </div>
                             <span className="text-[10.5px] text-slate-400 font-medium">
                               {link.megaMenu?.leftCard?.subtitle || "Explore styles & fabrics"}
@@ -674,7 +578,7 @@ export function PremiumMobileMenu({
                 <span className="text-[10px] text-slate-400">Curated Haute Couture</span>
               </div>
 
-              {EDITORIAL_COLLECTIONS.map((col, idx) => (
+              {editorialCollections.map((col, idx) => (
                 <Link
                   key={idx}
                   href={col.href}

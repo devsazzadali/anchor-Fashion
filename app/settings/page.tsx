@@ -1,14 +1,14 @@
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { redirect } from "next/navigation";
 import { ADMIN_ROLES, MANAGER_ROLES, MARKETING_ROLES } from "@/lib/constants/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsRedirectPage() {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     redirect("/auth/login?next=/settings");
@@ -17,7 +17,7 @@ export default async function SettingsRedirectPage() {
   let role = user.user_metadata?.role || user.app_metadata?.role;
   if (!role) {
     try {
-      const { data: profile } = await supabase
+      const { data: profile } = await db
         .from("profiles")
         .select("roles(name)")
         .eq("id", user.id)
@@ -27,6 +27,9 @@ export default async function SettingsRedirectPage() {
       role = "CUSTOMER";
     }
   }
+
+  // Canonical role names are UPPERCASE; normalize before allow-list checks.
+  role = String(role || "").toUpperCase().trim();
 
   if (ADMIN_ROLES.includes(role)) {
     redirect("/admin/settings");

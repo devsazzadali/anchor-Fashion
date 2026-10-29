@@ -4,7 +4,7 @@ import { PathaoCourierProvider } from "./pathao";
 import { SteadfastCourierProvider } from "./steadfast";
 import { SandboxCourierProvider } from "./sandbox";
 import { decryptCredentialsObject } from "@/utils/encryption.util";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { CourierError } from "./errors";
 
 export class CourierFactory {
@@ -69,14 +69,14 @@ export class CourierFactory {
   static async getProviderFromDatabase(
     codeOrId: string
   ): Promise<{ provider: CourierProvider; record: any }> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const isUuid =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         codeOrId
       );
 
-    const query = supabase.from("courier_providers").select("*");
+    const query = db.from("courier_providers").select("*");
     const { data: record, error } = isUuid
       ? await query.eq("id", codeOrId).maybeSingle()
       : await query.eq("code", codeOrId).maybeSingle();
@@ -88,13 +88,30 @@ export class CourierFactory {
       );
     }
 
+    // Phase 8: courier_providers' real columns are api_key / api_secret /
+    // config — the record has no credentials, is_sandbox, settings or
+    // webhook_secret columns (the old mapping always produced an
+    // unconfigured provider). config JSON may carry credentials/settings
+    // overrides; the dedicated columns are the fallback source.
+    const config = (record.config ?? {}) as Record<string, any>;
+    const credentials: Record<string, any> = {
+      ...((config.credentials as Record<string, any>) ?? {}),
+    };
+    if (credentials.apiKey === undefined && record.api_key) {
+      credentials.apiKey = record.api_key;
+    }
+    if (credentials.secretKey === undefined && record.api_secret) {
+      credentials.secretKey = record.api_secret;
+    }
+    const settings = (config.settings ?? {}) as Record<string, any>;
+
     const provider = CourierFactory.getProvider(
       record.code as CourierCode,
-      record.credentials || {},
+      credentials,
       {
-        environment: record.is_sandbox ? "sandbox" : "production",
-        storeId: record.settings?.storeId || record.credentials?.storeId,
-        webhookSecret: record.webhook_secret,
+        environment: config.is_sandbox ? "sandbox" : "production",
+        storeId: settings.storeId || credentials.storeId,
+        webhookSecret: config.webhook_secret || settings.webhookSecret,
       }
     );
 

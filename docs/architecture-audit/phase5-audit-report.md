@@ -10,20 +10,20 @@ The project's documentation was reviewed across the repository.
 ## 2. Performance Audit Report
 - **Server Components (RSC)**: Effectively used by default in Next.js App Router.
 - **Image Optimization**: Verified usage of WebP and AVIF formats via `next.config.ts`. The `minimumCacheTTL` is aggressively configured for 30 days.
-- **Caching**: React `cache()` and `unstable_cache()` patterns are largely abstracted behind Supabase's data fetching layers. TanStack Query efficiently handles client-side caching.
+- **Caching**: React `cache()` and `unstable_cache()` patterns are largely abstracted behind Neon's data fetching layers. TanStack Query efficiently handles client-side caching.
 - **Third-Party Packages**: `next.config.ts` includes `optimizePackageImports` for heavy libraries like `lucide-react`, `framer-motion`, and `recharts`, ensuring tree-shaking is enforced.
 - **Bundle Splitting**: Handled gracefully by Next.js route boundaries.
 - **Performance Score:** **92/100**
 
 ## 3. Maintainability Audit Report
 - **Code Organization**: Exceptional. The modular feature-driven architecture (`/features/`, `/components/`, `/services/`, `/actions/`) prevents monolithic coupling.
-- **Dependency Direction**: Validated. The flow strictly goes `Component -> Action -> Service -> Repository -> Supabase`. 
+- **Dependency Direction**: Validated. The flow strictly goes `Component -> Action -> Service -> Repository -> Neon`. 
 - **Folder Consistency**: Consistent casing and modular encapsulation.
 - **Maintainability Score:** **94/100**
 
 ## 4. Optimization Opportunities & Technical Debt
 ### Technical Debt Summary
-- **UI Data Coupling**: (Identified in Phase 4) Deeply nested UI components directly instantiating the Supabase client.
+- **UI Data Coupling**: (Identified in Phase 4) Deeply nested UI components directly instantiating the data-layer client.
 - **CSS Utility Sprawl**: Tailwind CSS is highly efficient but heavily repeated across components. Extracting repeated tokens into `@apply` or custom components could reduce TSX bloat.
 
 ### Production Optimization Opportunities (Future Sprints)

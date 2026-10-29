@@ -313,6 +313,18 @@ export function ProductGallery({
   const activeImage = normalizedImages[currentIndex] || normalizedImages[0];
   const hasMultiple = normalizedImages.length > 1;
 
+  // imageLoaded only drives the shimmer placeholder now. When the browser
+  // finishes loading before React hydration attaches onLoad — routine for
+  // fast local /uploads images — the event can be missed and the shimmer
+  // would linger. Reconcile from the DOM state: if the rendered stage img
+  // is already complete, mark it loaded.
+  useEffect(() => {
+    const img = mainImageRef.current?.querySelector("img");
+    if (img && img.complete && img.naturalWidth > 0) {
+      setImageLoaded(true);
+    }
+  }, [currentIndex, activeImage?.url]);
+
   return (
     <div className={cn("w-full select-none", className)}>
       {/* ======================================================== */}
@@ -457,6 +469,15 @@ export function ProductGallery({
                 className="relative h-full w-full overflow-hidden"
                 onClick={() => openLightbox(currentIndex)}
               >
+                {/* Loading Shimmer Placeholder — rendered UNDER the image:
+                    the image paints over it as soon as it decodes. (It used
+                    to sit above an opacity-gated image; if the img load
+                    event was missed before hydration, the gate never opened
+                    and the stage stayed blank.) */}
+                {!imageLoaded && !activeImage.isVideo && (
+                  <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-zinc-100 via-zinc-200/70 to-zinc-100 dark:from-zinc-800 dark:via-zinc-700 dark:to-zinc-800" />
+                )}
+
                 {activeImage.isVideo ? (
                   <video
                     src={activeImage.url}
@@ -475,10 +496,8 @@ export function ProductGallery({
                     priority
                     sizes="(max-width: 1280px) 50vw, 55vw"
                     onLoad={() => setImageLoaded(true)}
-                    className={cn(
-                      "object-cover object-center will-change-transform",
-                      imageLoaded ? "opacity-100" : "opacity-0"
-                    )}
+                    onError={() => setImageLoaded(true)}
+                    className="object-cover object-center will-change-transform"
                     style={{
                       transform: isHovering ? "scale(2.3)" : "scale(1)",
                       transformOrigin: `${mousePos.x}% ${mousePos.y}%`,
@@ -487,11 +506,6 @@ export function ProductGallery({
                         : "transform 0.4s cubic-bezier(0.2, 0, 0.2, 1), opacity 0.3s ease",
                     }}
                   />
-                )}
-
-                {/* Loading Shimmer Placeholder */}
-                {!imageLoaded && !activeImage.isVideo && (
-                  <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-zinc-100 via-zinc-200/70 to-zinc-100 dark:from-zinc-800 dark:via-zinc-700 dark:to-zinc-800" />
                 )}
               </div>
 

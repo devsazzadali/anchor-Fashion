@@ -7,29 +7,9 @@ import type { HeroSlide } from "@/actions/cms.actions";
 
 export type { HeroSlide };
 
-const DEFAULT_SLIDES: HeroSlide[] = [
-  {
-    id: 1,
-    title: "Signature Festive Elegance",
-    subtitle: "New Season Hand-Crafted Collection",
-    ctaHref: "/products?sort=newest",
-    image: "/images/home/hero-banner.png",
-  },
-  {
-    id: 2,
-    title: "Royal Heritage Panjabi",
-    subtitle: "Pure Silk & Handcrafted Embroidery",
-    ctaHref: "/categories/panjabi",
-    image: "/images/home/hero-slide-2.png",
-  },
-  {
-    id: 3,
-    title: "Executive Luxury Polos & Knits",
-    subtitle: "Modern Tailoring & Premium Fabrics",
-    ctaHref: "/categories/polo",
-    image: "/images/home/hero-slide-3.png",
-  },
-];
+// Phase 9 (no-hardcode rule): the built-in DEFAULT_SLIDES were removed —
+// the hero renders ONLY slides managed in Admin → CMS → Banners. With no
+// active hero banners the section renders nothing.
 
 function HeroSlideMedia({
   slide,
@@ -95,8 +75,7 @@ function HeroSlideMedia({
 }
 
 export function HomeHero({ slides: propSlides }: { slides?: HeroSlide[] }) {
-  const slides =
-    propSlides && propSlides.length > 0 ? propSlides : DEFAULT_SLIDES;
+  const slides = propSlides ?? [];
   const [current, setCurrent] = useState(0);
   const [animating, setAnimating] = useState(false);
 
@@ -123,6 +102,9 @@ export function HomeHero({ slides: propSlides }: { slides?: HeroSlide[] }) {
     const timer = setInterval(next, 9000); // 9 seconds reading time
     return () => clearInterval(timer);
   }, [next, slides.length]);
+
+  // No CMS hero banners → no hero section (never fabricated defaults).
+  if (slides.length === 0) return null;
 
   return (
     <section className="relative w-full overflow-hidden bg-[#1A1A1A]">

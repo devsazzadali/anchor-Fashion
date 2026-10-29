@@ -25,10 +25,41 @@ import {
 import { CourierProviderRecord } from "@/types/shipping.types";
 import {
   updateCourierProviderAction,
+  createCourierProviderAction,
   getCourierMetricsAction,
   testCourierConnectionAction,
   CourierMetrics,
 } from "@/actions/logistics.actions";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus } from "lucide-react";
+
+const COURIER_CODE_OPTIONS = [
+  { code: "steadfast", label: "Steadfast" },
+  { code: "pathao", label: "Pathao" },
+  { code: "redx", label: "RedX" },
+  { code: "paperfly", label: "Paperfly" },
+  { code: "sundarban", label: "Sundarban Courier" },
+  { code: "ecourier", label: "eCourier" },
+  { code: "dhl", label: "DHL" },
+  { code: "fedex", label: "FedEx" },
+  { code: "ups", label: "UPS" },
+  { code: "sandbox", label: "Sandbox (test)" },
+];
 import { toast } from "sonner";
 import { CourierConfigModal } from "./CourierConfigModal";
 import { CourierLogsModal } from "./CourierLogsModal";
@@ -43,6 +74,48 @@ export function CourierListClient({ initialCouriers }: Props) {
   const [selectedCourier, setSelectedCourier] = useState<CourierProviderRecord | null>(null);
   const [logsCourier, setLogsCourier] = useState<CourierProviderRecord | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newCourier, setNewCourier] = useState({
+    code: "steadfast",
+    name: "",
+    apiKey: "",
+    secretKey: "",
+    isSandbox: false,
+    isActive: true,
+  });
+
+  const handleCreateCourier = async () => {
+    setCreating(true);
+    try {
+      const res = await createCourierProviderAction({
+        code: newCourier.code,
+        name: newCourier.name.trim() || newCourier.code,
+        apiKey: newCourier.apiKey,
+        secretKey: newCourier.secretKey,
+        isSandbox: newCourier.isSandbox,
+        isActive: newCourier.isActive,
+      });
+      if (!res.success || !res.data) {
+        throw new Error(res.success ? "Create failed" : res.error);
+      }
+      toast.success(`${res.data.display_name} added. Configure or test it any time.`);
+      setCouriers((prev) => [...prev, res.data!]);
+      setAddOpen(false);
+      setNewCourier({
+        code: "steadfast",
+        name: "",
+        apiKey: "",
+        secretKey: "",
+        isSandbox: false,
+        isActive: true,
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add courier");
+    } finally {
+      setCreating(false);
+    }
+  };
   const [healthMap, setHealthMap] = useState<Record<string, { status: string; latency?: number }>>({});
 
   const loadMetricsAndHealth = async (currentCouriers?: CourierProviderRecord[]) => {
@@ -188,6 +261,10 @@ export function CourierListClient({ initialCouriers }: Props) {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button onClick={() => setAddOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Courier
+            </Button>
             <Button
               variant="outline"
               onClick={() => loadMetricsAndHealth()}
@@ -333,6 +410,127 @@ export function CourierListClient({ initialCouriers }: Props) {
         courier={logsCourier}
         onClose={() => setLogsCourier(null)}
       />
+
+      {/* Add Courier (Phase 9): providers can now be created from the
+          dashboard — previously only pre-seeded rows could be edited. */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Courier Provider</DialogTitle>
+            <DialogDescription>
+              Add a delivery partner now — credentials can be pasted here or
+              added later under Configure Settings. Keys are stored encrypted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-courier-code">Provider</Label>
+              <Select
+                value={newCourier.code}
+                onValueChange={(v) =>
+                  setNewCourier((s) => ({
+                    ...s,
+                    code: v,
+                    name:
+                      s.name ||
+                      COURIER_CODE_OPTIONS.find((o) => o.code === v)?.label ||
+                      "",
+                  }))
+                }
+              >
+                <SelectTrigger id="new-courier-code">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {COURIER_CODE_OPTIONS.map((o) => (
+                    <SelectItem key={o.code} value={o.code}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-courier-name">Display name</Label>
+              <Input
+                id="new-courier-name"
+                value={newCourier.name}
+                onChange={(e) =>
+                  setNewCourier((s) => ({ ...s, name: e.target.value }))
+                }
+                placeholder="e.g. Steadfast"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-courier-key">API key</Label>
+              <Input
+                id="new-courier-key"
+                value={newCourier.apiKey}
+                onChange={(e) =>
+                  setNewCourier((s) => ({ ...s, apiKey: e.target.value }))
+                }
+                placeholder="Paste the merchant API key (optional for now)"
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-courier-secret">Secret key</Label>
+              <Input
+                id="new-courier-secret"
+                type="password"
+                value={newCourier.secretKey}
+                onChange={(e) =>
+                  setNewCourier((s) => ({ ...s, secretKey: e.target.value }))
+                }
+                placeholder="Paste the merchant secret key (optional for now)"
+                autoComplete="off"
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
+              <div>
+                <p className="text-sm font-medium">Sandbox mode</p>
+                <p className="text-xs text-muted-foreground">
+                  Use the provider&apos;s test environment.
+                </p>
+              </div>
+              <Switch
+                checked={newCourier.isSandbox}
+                onCheckedChange={(v) =>
+                  setNewCourier((s) => ({ ...s, isSandbox: v }))
+                }
+                aria-label="Sandbox mode"
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
+              <div>
+                <p className="text-sm font-medium">Active</p>
+                <p className="text-xs text-muted-foreground">
+                  Active providers can be selected for shipments.
+                </p>
+              </div>
+              <Switch
+                checked={newCourier.isActive}
+                onCheckedChange={(v) =>
+                  setNewCourier((s) => ({ ...s, isActive: v }))
+                }
+                aria-label="Provider active"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAddOpen(false)}
+              disabled={creating}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreateCourier} disabled={creating}>
+              {creating ? "Adding…" : "Add courier"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

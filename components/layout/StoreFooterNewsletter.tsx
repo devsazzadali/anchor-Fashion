@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { subscribeNewsletterAction } from "@/lib/actions/newsletter.actions";
 
 const newsletterSchema = z.object({
   email: z.string().trim().email("Please enter a valid email address"),
@@ -26,8 +27,16 @@ export function StoreFooterNewsletter() {
   });
 
   const onSubmit = async (values: NewsletterFormValues) => {
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    toast.success(`Thank you for subscribing! Check ${values.email} for exclusive drops.`);
+    const res = await subscribeNewsletterAction(values.email);
+    if (!res.success) {
+      toast.error(res.error || "Could not complete your subscription.");
+      return;
+    }
+    toast.success(
+      res.alreadySubscribed
+        ? "You're already subscribed — welcome back!"
+        : "Thank you for subscribing! Exclusive drops will land in your inbox."
+    );
     reset();
   };
 

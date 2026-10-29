@@ -1,4 +1,4 @@
-import { createAdminClient } from "../supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export type AuditEvent =
   "CREATE" | "UPDATE" | "DELETE" | "LOGIN" | "LOGOUT" | "EXPORT";
@@ -35,10 +35,10 @@ export class AuditLogger {
   }
 
   private static async writeToDatabase(payload: AuditLogPayload) {
-    const supabaseAdmin = createAdminClient();
+    const dbAdmin = createAdminDbClient();
 
     // Assumes an `audit_logs` table exists
-    const { error } = await supabaseAdmin.from("audit_logs").insert([
+    const { error } = await dbAdmin.from("audit_logs").insert([
       {
         user_id: payload.user_id,
         action: payload.action,

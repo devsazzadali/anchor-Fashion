@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createDbClient } from "@/lib/db/client";
 import { X } from "lucide-react";
 import Link from "next/link";
 
@@ -16,7 +16,7 @@ interface Announcement {
 export function AnnouncementBar() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
-  const supabase = createClient();
+  const db = createDbClient();
 
   useEffect(() => {
     // Load dismissed announcements from local storage
@@ -28,7 +28,7 @@ export function AnnouncementBar() {
   }, []);
 
   const fetchAnnouncements = async () => {
-    const { data } = await supabase
+    const { data } = await db
       .from("announcements")
       .select("*")
       .eq("is_active", true)
@@ -36,7 +36,7 @@ export function AnnouncementBar() {
       .gte("end_date", new Date().toISOString());
 
     // Fallback for null dates (always active)
-    const { data: dataNoDates } = await supabase
+    const { data: dataNoDates } = await db
       .from("announcements")
       .select("*")
       .eq("is_active", true)

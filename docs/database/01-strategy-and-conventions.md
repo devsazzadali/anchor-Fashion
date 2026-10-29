@@ -2,15 +2,15 @@
 
 ## 1. Migration Strategy
 
-- We use Supabase CLI to generate and apply migrations.
+- We use Neon CLI to generate and apply migrations.
 - Migrations must be numbered chronologically (e.g., `YYYYMMDDHHMMSS_name.sql`).
 - All structural changes (tables, views, functions, triggers, policies) MUST be tracked in migrations.
 - **NEVER** modify production schema directly via UI.
-- Local development requires running `supabase start` and `supabase db push`.
+- Local development requires running `the local dev server` and `prisma migrate deploy`.
 
 ## 2. Seed Strategy
 
-- `supabase/seed.sql` handles local testing data.
+- `neon/seed.sql` handles local testing data.
 - The seed script should insert minimal required roles and configuration options.
 - Maintain separate environments: local seed is allowed to have mock users, but production seed (if any) should strictly be static taxonomy/lookup data.
 

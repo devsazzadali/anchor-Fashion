@@ -94,13 +94,25 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
   const discountPercent =
     totalMRP > 0 ? Math.round((discountAmount / totalMRP) * 100) : 0;
 
-  const netAmount = Math.round(Number(order.grandTotal ?? order.subtotal ?? lineItemsSubtotal));
+  // Net Amount is the order's stored grand total, shown EXACTLY (2dp) —
+  // never rounded to a whole taka: Sub Total + VAT + Delivery Charge −
+  // Discount must tie to the order row to the paisa (e.g. 4772.50).
+  const netAmount = Number(order.grandTotal ?? order.subtotal ?? lineItemsSubtotal);
 
-  // Inclusive VAT (10%) as per NBR retail standard (Net * 10 / 110)
-  const vatAmount =
-    Number(order.taxTotal || 0) > 0
-      ? Number(order.taxTotal).toFixed(2)
-      : ((netAmount * 10) / 110).toFixed(2);
+  // Delivery charge charged on the order (0 when shipping was free).
+  const deliveryCharge = Number(order.shippingTotal || 0);
+
+  // Money display: whole takas print bare (4450, 100), anything with paisa
+  // prints at exactly 2dp (222.50, 4772.50) so the summary visibly adds up.
+  const fmtMoney = (n: number) => {
+    const v = Number((Number(n) || 0).toFixed(2));
+    return Number.isInteger(v) ? String(v) : v.toFixed(2);
+  };
+
+  // VAT actually charged on the order (per-product rates, added on top of the
+  // selling price and stored on the order). Never fabricate a percentage of
+  // the net amount — an order with no VAT shows 0.
+  const vatAmount = fmtMoney(Number(order.taxTotal || 0));
 
   const paidAmount = order.isPaid ? netAmount : 0;
   const changeAmount = 0;
@@ -121,8 +133,8 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
 
   // Payment text matching reference image (e.g. MFS - Bangla QR: 4842 or COD - Cash on Delivery: 4842)
   const paymentMethodLabel = order.isPaid
-    ? `${order.paymentMethod || "Online Payment"}: ${netAmount}`
-    : `COD - Cash on Delivery: ${netAmount}`;
+    ? `${order.paymentMethod || "Online Payment"}: ${fmtMoney(netAmount)}`
+    : `COD - Cash on Delivery: ${fmtMoney(netAmount)}`;
 
   return (
     <div
@@ -155,7 +167,7 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
           {order.branchName || "Online Store Branch"}
         </p>
         <p className="text-[9px] sm:text-[9.5px] text-gray-700">
-          Branch Address : {order.branchAddress || "Banani, Road #11, Block #D, Dhaka - 1213"}
+          Branch Address : {order.branchAddress || ""}
         </p>
       </div>
 
@@ -265,7 +277,7 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
         <div className="flex justify-between items-center text-[11px] font-bold py-0.5">
           <div className="w-1/2">Sub Total</div>
           <div className="w-8 text-center font-mono">{totalQuantity}</div>
-          <div className="flex-1 text-right font-mono">{lineItemsSubtotal}</div>
+          <div className="flex-1 text-right font-mono">{fmtMoney(lineItemsSubtotal)}</div>
         </div>
       </div>
 
@@ -292,16 +304,20 @@ export function InvoiceSheet({ data }: { data: InvoiceData }) {
             <span className="font-mono">0</span>
           </div>
           <div className="flex justify-between">
-            <span>Including VAT(10%) VAT:</span>
+            <span>Delivery Charge:</span>
+            <span className="font-mono">{fmtMoney(deliveryCharge)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>VAT:</span>
             <span className="font-mono">{vatAmount}</span>
           </div>
           <div className="flex justify-between font-bold">
             <span>Net Amount:</span>
-            <span className="font-mono font-bold">{netAmount}</span>
+            <span className="font-mono font-bold">{fmtMoney(netAmount)}</span>
           </div>
           <div className="flex justify-between">
             <span>Paid Amount:</span>
-            <span className="font-mono">{paidAmount}</span>
+            <span className="font-mono">{fmtMoney(paidAmount)}</span>
           </div>
           <div className="flex justify-between">
             <span>Change Amount:</span>

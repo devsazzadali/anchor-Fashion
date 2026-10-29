@@ -41,6 +41,7 @@ import { PrintBarcodeModal, BarcodeLabelData } from "@/components/admin/inventor
 import { generateProductCodeAction } from "@/lib/actions/admin/inventory-master.actions";
 import { formatVariantSku, APPAREL_SIZE_SYSTEMS, detectApparelSystemForCategory } from "@/lib/utils/product-code";
 import { generateEAN13Sync } from "@/lib/utils/barcode";
+import { priceWithVat, vatAmountFor } from "@/lib/utils/vat";
 import { getWarehouses } from "@/app/actions/admin/procurement.actions";
 import { useAdminBreadcrumbStore } from "@/stores/useAdminBreadcrumbStore";
 
@@ -68,7 +69,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { CreateProductSchema, Product } from "@/types/catalog.types";
 import {
-  createAdminProductAction,
   updateAdminProductAction,
   getAdminProductByIdAction,
   getCategoriesAction,
@@ -186,6 +186,9 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
     if (item.costPrice !== undefined && item.costPrice !== null) {
       form.setValue("costPrice", item.costPrice, { shouldValidate: true });
     }
+    if (item.vatPercent !== undefined && item.vatPercent !== null) {
+      form.setValue("vatPercent", Number(item.vatPercent) || 0, { shouldValidate: true });
+    }
     if (item.sku) form.setValue("sku", item.sku, { shouldValidate: true });
     if (item.barcode) form.setValue("barcode", item.barcode, { shouldValidate: true });
     form.setValue("stockQuantity", item.totalAvailable ?? item.stockQuantity ?? 0, { shouldValidate: true });
@@ -243,6 +246,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
             categoryIds: (item as any).categoryIds,
             basePrice: item.basePrice,
             costPrice: item.costPrice,
+            vatPercent: item.vatPercent,
             sku: item.sku,
             barcode: item.barcode,
             totalAvailable: item.stockQuantity || 0,
@@ -471,6 +475,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
     basePrice: initialData?.basePrice || 0,
     costPrice: initialData?.costPrice ?? undefined,
     salePrice: initialData?.salePrice ?? undefined,
+    vatPercent: initialData?.vatPercent || 0,
     stockQuantity: initialStock,
     sku: initialData?.sku || "",
     barcode: initialData?.barcode || "",
@@ -513,6 +518,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
     const baseSku = form.watch("sku") || "SKU";
     const baseBarcode = form.watch("barcode") || "";
     const basePrice = Number(form.watch("basePrice")) || 0;
+    const vatPct = Number(form.watch("vatPercent")) || 0;
     const variants = form.watch("variants") || [];
 
     if (productType === "VARIABLE" && variants.length > 0) {
@@ -524,7 +530,8 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
           productName: attrStr ? `${name} (${attrStr})` : name,
           sku: v.sku || baseSku,
           barcode: v.barcode || baseBarcode || v.sku || baseSku,
-          price: Number(v.priceOverride ?? basePrice),
+          // Sticker prints "(Inc.VAT)" — the price must be VAT-inclusive.
+          price: priceWithVat(Number(v.priceOverride ?? basePrice), vatPct),
           quantity: Math.max(1, Number(v.stockQuantity) || 1),
         };
       });
@@ -535,7 +542,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
         productName: name,
         sku: baseSku,
         barcode: baseBarcode || baseSku,
-        price: basePrice,
+        price: priceWithVat(basePrice, vatPct),
         quantity: Math.max(1, Number(form.watch("stockQuantity")) || 1),
       },
     ];
@@ -544,6 +551,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
     form.watch("sku"),
     form.watch("barcode"),
     form.watch("basePrice"),
+    form.watch("vatPercent"),
     form.watch("variants"),
     form.watch("stockQuantity"),
     productType,
@@ -1272,7 +1280,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                                 disabled={uploadingImage !== null}
                               />
                             </label>
-                            {/* Hidden field stores the Supabase public URL */}
+                            {/* Hidden field stores the media public URL */}
                             <FormField
                               control={form.control}
                               name={`media.${index}.url`}
@@ -2159,6 +2167,51 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                           </div>
                         )}
                         <FormDescription className="text-[11px]">Displays strikethrough regular price on storefront if active</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+
+                {/* 5. VAT (%) — charged on top of the selling price */}
+                <FormField
+                  control={form.control}
+                  name="vatPercent"
+                  render={({ field }) => {
+                    const basePrice = Number(form.watch("basePrice")) || 0;
+                    const salePrice = Number(form.watch("salePrice")) || 0;
+                    const effectivePrice = salePrice > 0 && salePrice < basePrice ? salePrice : basePrice;
+                    const vatPct = Number(field.value) || 0;
+                    return (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold">VAT (%) <span className="text-muted-foreground font-normal">(Added on top of the selling price)</span></FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              placeholder="0"
+                              className="pr-8 h-9 text-sm"
+                              {...field}
+                              value={field.value ?? 0}
+                              onChange={(e) =>
+                                field.onChange(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))
+                              }
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-bold">%</span>
+                          </div>
+                        </FormControl>
+                        {vatPct > 0 && effectivePrice > 0 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Customer pays {CURRENCY_SYMBOL}
+                            {priceWithVat(effectivePrice, vatPct).toLocaleString()} incl. VAT
+                            ({CURRENCY_SYMBOL}
+                            {vatAmountFor(effectivePrice, vatPct).toLocaleString()} VAT).
+                          </p>
+                        )}
+                        <FormDescription className="text-[11px]">Set at inventory intake; flows to storefront price, cart, checkout and invoice.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     );

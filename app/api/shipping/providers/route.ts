@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export async function GET() {
   try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("courier_providers")
       .select(
         "id, code, name, display_name, logo_url, is_active, is_cod_supported, is_sandbox, priority"

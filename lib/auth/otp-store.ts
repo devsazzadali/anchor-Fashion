@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { logServerError } from "@/lib/utils/error-handler";
 
 interface MemoryOtpRecord {
@@ -21,12 +21,12 @@ export const OtpStore = {
     maxAttempts: number = 5,
     windowMinutes: number = 15
   ): Promise<{ rateLimited: boolean; remainingSeconds: number; abuseExceeded: boolean }> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const nowMs = Date.now();
     const abuseCutoff = new Date(nowMs - windowMinutes * 60 * 1000).toISOString();
 
     try {
-      const { data: recentOtps, error } = await supabase
+      const { data: recentOtps, error } = await db
         .from("registration_otps")
         .select("id, created_at")
         .eq("email", email)
@@ -82,7 +82,7 @@ export const OtpStore = {
    * Save a newly generated OTP with expiry
    */
   async saveOtp(email: string, otp: string, expiresAt: Date): Promise<boolean> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const now = new Date();
 
     // Always keep memory store updated as secondary cache
@@ -97,7 +97,7 @@ export const OtpStore = {
 
     // Attempt writing to registration_otps in database
     try {
-      const { error } = await supabase.from("registration_otps").insert([
+      const { error } = await db.from("registration_otps").insert([
         {
           email,
           otp,
@@ -129,7 +129,7 @@ export const OtpStore = {
     email: string,
     otp: string
   ): Promise<{ success: boolean; error?: string }> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
 
@@ -138,7 +138,7 @@ export const OtpStore = {
 
     // 1. Try checking database table
     try {
-      const { data: records, error } = await supabase
+      const { data: records, error } = await db
         .from("registration_otps")
         .select("id, email, otp, expires_at")
         .eq("email", email)
@@ -152,7 +152,7 @@ export const OtpStore = {
         if (records && records.length > 0) {
           dbSuccess = true;
           // Invalidate immediately
-          await supabase.from("registration_otps").delete().eq("email", email);
+          await db.from("registration_otps").delete().eq("email", email);
         }
       }
     } catch {
@@ -185,7 +185,7 @@ export const OtpStore = {
       memoryStore.delete(email);
       if (dbChecked) {
         try {
-          await supabase.from("registration_otps").delete().eq("email", email);
+          await db.from("registration_otps").delete().eq("email", email);
         } catch {
           // ignore
         }

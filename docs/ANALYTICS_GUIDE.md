@@ -25,4 +25,4 @@ Dashboards are accessible via `/executive`, `/sales`, `/revenue`, and `/inventor
 
 ## AI Predictions (Gemini Integration)
 
-The system leverages Google's Gemini 1.5 Pro to provide predictive insights for demand forecasting and customer lifetime value. Models pull historical data from Supabase and generate insights in real-time.
+The system leverages Google's Gemini 1.5 Pro to provide predictive insights for demand forecasting and customer lifetime value. Models pull historical data from Neon and generate insights in real-time.

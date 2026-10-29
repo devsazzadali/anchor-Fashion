@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
 
+/**
+ * GET /api/store/products — flattened product feed for the /store page.
+ *
+ * Phase 4 fix: this queried a Supabase-era `store_products` view through
+ * the db layer. That table does not exist in the Prisma field map, so
+ * every query resolved to an empty success and the /store page rendered
+ * zero products. The feed is now built from the real catalog tables.
+ */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
@@ -8,33 +16,35 @@ export async function GET(request: Request) {
   const featured = searchParams.get('featured');
 
   try {
-    const supabase = await createClient();
-    
-    let query = supabase.from('store_products').select('*');
+    const products = await prisma.product.findMany({
+      where: {
+        status: 'ACTIVE',
+        deletedAt: null,
+        ...(featured === 'true' ? { isFeatured: true } : {}),
+        ...(search
+          ? { name: { contains: search, mode: 'insensitive' as const } }
+          : {}),
+        ...(category && category !== 'All'
+          ? { category: { name: { equals: category, mode: 'insensitive' as const } } }
+          : {}),
+      },
+      include: { category: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    if (category && category !== 'All') {
-      query = query.eq('category', category);
-    }
-    
-    if (search) {
-      query = query.ilike('name', `%${search}%`);
-    }
-
-    if (featured === 'true') {
-      query = query.eq('is_featured', true);
-    }
-
-    // Sort by created_at descending by default, or you can add sort params
-    query = query.order('created_at', { ascending: false });
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching products:', error);
-      return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
-    }
-
-    return NextResponse.json(data);
+    return NextResponse.json(
+      products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        price: Number(p.basePrice ?? 0),
+        sale_price: p.salePrice != null ? Number(p.salePrice) : null,
+        vat_percent: Number(p.vatPercent ?? 0),
+        category: p.category?.name || 'General',
+        image_url: p.imageUrl || '/placeholder.webp',
+        is_featured: p.isFeatured,
+      }))
+    );
   } catch (error) {
     console.error('Unexpected error fetching products:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

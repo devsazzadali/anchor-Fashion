@@ -53,7 +53,7 @@ export function FulfillmentForm({
     setLoading(false);
     
     if (res.success) {
-      toast.success("Shipment created successfully! Labels are ready.");
+      toast.success("Shipment created — consignment booked with the courier.");
       router.refresh();
     } else {
       toast.error(res.error || "Failed to create shipment");
@@ -81,7 +81,7 @@ export function FulfillmentForm({
                   <p className="text-xs text-muted-foreground">Order verified and sent to floor</p>
                 </div>
               </div>
-              {order.status === "paid" && (
+              {(order.status === "paid" || order.status === "confirmed") && (
                 <Button size="sm" onClick={() => handleAdvanceStatus("preparing")} disabled={loading}>
                   Start Preparing
                 </Button>
@@ -178,7 +178,7 @@ export function FulfillmentForm({
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg">Shipment Ready</h3>
-                  <p className="text-sm text-muted-foreground">Label has been generated and courier notified.</p>
+                  <p className="text-sm text-muted-foreground">This order is marked ready for shipment. Its tracking number lives on the shipment record once a courier consignment exists.</p>
                 </div>
                 <div className="flex gap-2 mt-4">
                   <Button variant="outline" size="sm">Print Label</Button>

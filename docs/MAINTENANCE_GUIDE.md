@@ -1,7 +1,7 @@
 # Maintenance Guide
 
 ## Upgrade Guide
-Anchor Fashion relies on Next.js, Supabase JS, and various UI libraries. 
+Anchor Fashion relies on Next.js, Prisma, and various UI libraries. 
 
 ### Dependency Update Guide
 1. **Frequency**: Run dependency audits (`npm audit`) monthly.
@@ -15,11 +15,11 @@ Anchor Fashion relies on Next.js, Supabase JS, and various UI libraries.
 ## Database Migration Guide
 1. Generate new migrations using Drizzle/Prisma CLI locally.
 2. Test migrations on a local Postgres instance.
-3. Apply to a Supabase Staging project.
+3. Apply to a Neon Staging project.
 4. During production deployment, run migrations in a pre-build step or via CI/CD before the Next.js build compiles (to ensure type safety).
 
 ## Security Patch Guide
-- Subscribe to security advisories for Next.js, React, and Supabase.
+- Subscribe to security advisories for Next.js, React, and Neon.
 - If a vulnerability is announced, patch within 24 hours (SEV-1) or 7 days (SEV-2).
 
 ## Scheduled Maintenance

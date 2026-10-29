@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export interface CmsPost {
   id: string;
@@ -48,8 +48,8 @@ export interface CmsMenuItem {
  * Fetch a specific published blog post by its slug.
  */
 export async function getBlogPostBySlug(slug: string): Promise<CmsPost | null> {
-  const supabaseAdmin = await createAdminClient();
-  const { data, error } = await supabaseAdmin
+  const dbAdmin = await createAdminDbClient();
+  const { data, error } = await dbAdmin
     .from("cms_blog_posts")
     .select("*")
     .eq("slug", slug)
@@ -68,8 +68,8 @@ export async function getBlogPostBySlug(slug: string): Promise<CmsPost | null> {
  * Fetch a dynamically built page and its active blocks.
  */
 export async function getPageBySlug(slug: string): Promise<CmsPage | null> {
-  const supabaseAdmin = await createAdminClient();
-  const { data: page, error: pageError } = await supabaseAdmin
+  const dbAdmin = await createAdminDbClient();
+  const { data: page, error: pageError } = await dbAdmin
     .from("cms_pages")
     .select("*")
     .eq("slug", slug)
@@ -81,7 +81,7 @@ export async function getPageBySlug(slug: string): Promise<CmsPage | null> {
     return null;
   }
 
-  const { data: blocks, error: blocksError } = await supabaseAdmin
+  const { data: blocks, error: blocksError } = await dbAdmin
     .from("cms_page_blocks")
     .select("*")
     .eq("page_id", page.id)
@@ -104,8 +104,8 @@ export async function getPageBySlug(slug: string): Promise<CmsPage | null> {
 export async function getMenuByLocation(
   location: string
 ): Promise<CmsMenu | null> {
-  const supabaseAdmin = await createAdminClient();
-  const { data: menu, error: menuError } = await supabaseAdmin
+  const dbAdmin = await createAdminDbClient();
+  const { data: menu, error: menuError } = await dbAdmin
     .from("cms_menus")
     .select("*")
     .eq("location", location)
@@ -116,7 +116,7 @@ export async function getMenuByLocation(
     return null;
   }
 
-  const { data: items, error: itemsError } = await supabaseAdmin
+  const { data: items, error: itemsError } = await dbAdmin
     .from("cms_menu_items")
     .select("*")
     .eq("menu_id", menu.id)

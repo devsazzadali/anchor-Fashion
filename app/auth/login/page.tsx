@@ -53,6 +53,19 @@ export default function LoginPage() {
           Create Account
         </Link>
       </p>
+
+      {/* Claim link (Phase 12): guest orders created an unclaimed profile
+          keyed by phone — its owner can set a password and take it over. */}
+      <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+        Guest হিসেবে অর্ডার করেছেন?{" "}
+        <Link
+          href="/auth/claim"
+          prefetch={false}
+          className="font-semibold text-[#C9A86A] hover:text-[#b09156] hover:underline underline-offset-4 transition-colors"
+        >
+          Password সেট করে অ্যাকাউন্টটি নিজের করুন
+        </Link>
+      </p>
     </div>
   );
 }

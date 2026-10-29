@@ -68,19 +68,11 @@ export function ChangePassword() {
   };
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        setValue("current_password", saved);
-        setHasSavedPassword(true);
-      } else {
-        setValue("current_password", "");
-        setHasSavedPassword(false);
-      }
-    } catch {
-      setValue("current_password", "");
-      setHasSavedPassword(false);
-    }
+    // SECURITY: the current password is never read from localStorage
+    // (plaintext passwords must not be stored client-side). The user
+    // types it; the server verifies it during the change request.
+    setValue("current_password", "");
+    setHasSavedPassword(false);
   }, [setValue]);
 
   const onSubmit = (values: ChangePasswordValues) => {
@@ -93,9 +85,7 @@ export function ChangePassword() {
         }
 
         toast.success("Password updated successfully!");
-        try {
-          localStorage.setItem(STORAGE_KEY, values.new_password);
-        } catch {}
+        // SECURITY: do not persist the new plaintext password anywhere.
         setValue("current_password", values.new_password);
         setHasSavedPassword(true);
         setValue("new_password", "");

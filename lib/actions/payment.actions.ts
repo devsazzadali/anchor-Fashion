@@ -1,7 +1,7 @@
 "use server";
 
-import { createClient } from "../supabase/server";
-import { createAdminClient } from "../supabase/admin-client";
+import { createDbClient } from "@/lib/db/client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyAdmin, verifyManager, verifyStaff } from "../security/roles";
 import { revalidatePath } from "next/cache";
 
@@ -92,9 +92,9 @@ export async function getPaymentConfig(
   if (!Object.prototype.hasOwnProperty.call(DEFAULTS, gateway)) {
     throw new Error("Unknown payment gateway");
   }
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    const { data } = await supabase
+    const { data } = await db
       .from("settings")
       .select("value")
       .eq("key", `payment_${gateway}`)
@@ -128,11 +128,11 @@ export async function getAllPaymentConfigs(): Promise<AllPaymentConfigs> {
 }
 
 async function loadAllPaymentConfigs(): Promise<AllPaymentConfigs> {
-  const supabase = await createClient();
+  const db = await createDbClient();
   const result: AllPaymentConfigs = { ...DEFAULTS };
 
   try {
-    const { data } = await supabase
+    const { data } = await db
       .from("settings")
       .select("key, value")
       .like("key", "payment_%");
@@ -184,7 +184,7 @@ export async function updatePaymentConfig(
 ) {
   try {
     await verifyAdmin(); // Enforced: unauthorized callers must NOT reach the write below
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     let normalizedConfig: Record<string, any> = { ...config };
     if (gateway === "sslcommerz") {
@@ -212,7 +212,7 @@ export async function updatePaymentConfig(
       };
     }
 
-    const { error } = await supabase.from("settings").upsert(
+    const { error } = await db.from("settings").upsert(
       {
         key: `payment_${gateway}`,
         value: normalizedConfig as any,
@@ -252,14 +252,14 @@ export interface ManualPaymentSubmission {
 export async function recordManualPaymentTransaction(
   submission: ManualPaymentSubmission
 ) {
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   try {
     // SECURITY: never trust client-supplied amount / customer. Resolve from the order.
     const orderId = String(submission.order_id || "");
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
       return { success: false, error: "Invalid order" };
     }
-    const { data: order } = await supabase
+    const { data: order } = await db
       .from("orders")
       .select("id, customer_id, grand_total, payment_status")
       .eq("id", orderId)
@@ -291,7 +291,7 @@ export async function recordManualPaymentTransaction(
     };
 
     const rawMethod = (submission.payment_method || "").toLowerCase();
-    const { data: prov } = await supabase
+    const { data: prov } = await db
       .from("payment_providers")
       .select("id")
       .eq("code", rawMethod)
@@ -305,7 +305,7 @@ export async function recordManualPaymentTransaction(
       "";
     const transactionId = submission.transaction_id || "";
 
-    const { data: tx, error: txErr } = await supabase
+    const { data: tx, error: txErr } = await db
       .from("payment_transactions")
       .insert({
         order_id: submission.order_id,
@@ -337,7 +337,7 @@ export async function recordManualPaymentTransaction(
     // Add note to order_notes
     const noteContent = `Manual Payment Submitted: [${submission.payment_method}] Sender: ${referenceNumber || "N/A"}, TrxID/Ref: ${transactionId || "N/A"}${submission.notes ? ` - Note: ${submission.notes}` : ""}`;
     try {
-      await supabase.from("order_notes").insert({
+      await db.from("order_notes").insert({
         order_id: submission.order_id,
         author_id: submission.customer_id || null,
         note: noteContent,
@@ -359,9 +359,9 @@ export async function recordManualPaymentTransaction(
  */
 export async function getManualPaymentForOrder(orderId: string) {
   await verifyStaff();
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("payment_transactions")
       .select("*")
       .eq("order_id", orderId)
@@ -386,10 +386,10 @@ export async function approveManualPaymentAction(
   approvalNote?: string
 ) {
   await verifyManager();
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   try {
     // 0. Verify order has items before approving payment
-    const { data: items, error: itemsErr } = await supabase
+    const { data: items, error: itemsErr } = await db
       .from("order_items")
       .select("id")
       .eq("order_id", orderId);
@@ -405,7 +405,7 @@ export async function approveManualPaymentAction(
 
     // 1. Update or create payment_transactions
     if (transactionId && !transactionId.startsWith("order-manual-")) {
-      await supabase
+      await db
         .from("payment_transactions")
         .update({
           status: "completed",
@@ -414,14 +414,14 @@ export async function approveManualPaymentAction(
         })
         .eq("id", transactionId);
     } else {
-      const { data: existingTx } = await supabase
+      const { data: existingTx } = await db
         .from("payment_transactions")
         .select("id")
         .eq("order_id", orderId)
         .maybeSingle();
 
       if (existingTx) {
-        await supabase
+        await db
           .from("payment_transactions")
           .update({
             status: "completed",
@@ -430,20 +430,20 @@ export async function approveManualPaymentAction(
           })
           .eq("id", existingTx.id);
       } else {
-        const { data: orderData } = await supabase
+        const { data: orderData } = await db
           .from("orders")
           .select("payment_method, grand_total, customer_id, order_number")
           .eq("id", orderId)
           .maybeSingle();
 
         const rawMethod = (orderData?.payment_method || "").toLowerCase();
-        const { data: prov } = await supabase
+        const { data: prov } = await db
           .from("payment_providers")
           .select("id")
           .eq("code", rawMethod)
           .maybeSingle();
 
-        const { data: shippingAddr } = await supabase
+        const { data: shippingAddr } = await db
           .from("order_addresses")
           .select("phone")
           .eq("order_id", orderId)
@@ -452,7 +452,7 @@ export async function approveManualPaymentAction(
 
         const customerPhone = shippingAddr?.phone || orderData?.order_number || "";
 
-        await supabase.from("payment_transactions").insert({
+        await db.from("payment_transactions").insert({
           order_id: orderId,
           user_id: orderData?.customer_id || null,
           provider_id: prov?.id || null,
@@ -473,7 +473,7 @@ export async function approveManualPaymentAction(
     }
 
     // 2. Update orders table
-    const { error: orderErr } = await supabase
+    const { error: orderErr } = await db
       .from("orders")
       .update({
         payment_status: "paid",
@@ -486,7 +486,7 @@ export async function approveManualPaymentAction(
     if (orderErr) throw orderErr;
 
     // 3. Log to order_status_history
-    await supabase.from("order_status_history").insert({
+    await db.from("order_status_history").insert({
       order_id: orderId,
       status: "confirmed",
       notes:
@@ -495,7 +495,7 @@ export async function approveManualPaymentAction(
     });
 
     // 4. Log to order_notes
-    await supabase.from("order_notes").insert({
+    await db.from("order_notes").insert({
       order_id: orderId,
       note: `Payment Approved by Admin: Order marked as Paid & Confirmed. ${approvalNote ? `(${approvalNote})` : ""}`,
       is_customer_visible: true,
@@ -533,11 +533,11 @@ export async function rejectManualPaymentAction(
   transactionId?: string
 ) {
   await verifyManager();
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   try {
     // 1. Update or create payment_transactions
     if (transactionId && !transactionId.startsWith("order-manual-")) {
-      await supabase
+      await db
         .from("payment_transactions")
         .update({
           status: "failed",
@@ -546,14 +546,14 @@ export async function rejectManualPaymentAction(
         })
         .eq("id", transactionId);
     } else {
-      const { data: existingTx } = await supabase
+      const { data: existingTx } = await db
         .from("payment_transactions")
         .select("id")
         .eq("order_id", orderId)
         .maybeSingle();
 
       if (existingTx) {
-        await supabase
+        await db
           .from("payment_transactions")
           .update({
             status: "failed",
@@ -562,20 +562,20 @@ export async function rejectManualPaymentAction(
           })
           .eq("id", existingTx.id);
       } else {
-        const { data: orderData } = await supabase
+        const { data: orderData } = await db
           .from("orders")
           .select("payment_method, grand_total, customer_id, order_number")
           .eq("id", orderId)
           .maybeSingle();
 
         const rawMethod = (orderData?.payment_method || "").toLowerCase();
-        const { data: prov } = await supabase
+        const { data: prov } = await db
           .from("payment_providers")
           .select("id")
           .eq("code", rawMethod)
           .maybeSingle();
 
-        await supabase.from("payment_transactions").insert({
+        await db.from("payment_transactions").insert({
           order_id: orderId,
           user_id: orderData?.customer_id || null,
           provider_id: prov?.id || null,
@@ -595,7 +595,7 @@ export async function rejectManualPaymentAction(
     }
 
     // 2. Update orders table
-    await supabase
+    await db
       .from("orders")
       .update({
         payment_status: "unpaid",
@@ -604,14 +604,14 @@ export async function rejectManualPaymentAction(
       .eq("id", orderId);
 
     // 3. Log to order_notes
-    await supabase.from("order_notes").insert({
+    await db.from("order_notes").insert({
       order_id: orderId,
       note: `Payment Rejected by Admin. Reason: ${reason}`,
       is_customer_visible: true,
     });
 
     // 4. Log to order_status_history
-    await supabase.from("order_status_history").insert({
+    await db.from("order_status_history").insert({
       order_id: orderId,
       status: "pending_payment",
       notes: `Manual payment verification failed: ${reason}`,
@@ -637,10 +637,10 @@ export async function rejectManualPaymentAction(
  */
 export async function getPendingManualPaymentsAction() {
   await verifyManager();
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
   try {
     // 1. Fetch manual payment providers (bKash, Nagad, Rocket)
-    const { data: providers } = await supabase
+    const { data: providers } = await db
       .from("payment_providers")
       .select("id, code, name")
       .in("code", ["bkash", "nagad", "rocket"]);
@@ -657,7 +657,7 @@ export async function getPendingManualPaymentsAction() {
         ? `provider_id.in.(${providerIds.join(",")}),provider_id.is.null`
         : `provider_id.is.null`;
 
-    const { data: txs, error } = await supabase
+    const { data: txs, error } = await db
       .from("payment_transactions")
       .select("*")
       .or(orClause)
@@ -674,7 +674,7 @@ export async function getPendingManualPaymentsAction() {
     );
 
     // Also look up orders placed with manual payment methods
-    const { data: manualOrders } = await supabase
+    const { data: manualOrders } = await db
       .from("orders")
       .select("id, order_number, grand_total, status, payment_status, payment_method, created_at, customer_id")
       .in("payment_method", [
@@ -696,7 +696,7 @@ export async function getPendingManualPaymentsAction() {
     // Fetch any missing orders referenced by existing transactions
     const missingOrderIds = orderIds.filter((id: string) => !orderMap.has(id));
     if (missingOrderIds.length > 0) {
-      const { data: moreOrders } = await supabase
+      const { data: moreOrders } = await db
         .from("orders")
         .select("id, order_number, grand_total, status, payment_status, payment_method, created_at, customer_id")
         .in("id", missingOrderIds);
@@ -710,7 +710,7 @@ export async function getPendingManualPaymentsAction() {
     const allOrderIds: string[] = Array.from(
       new Set([...orderIds, ...(manualOrders || []).map((o: any) => o.id)])
     );
-    const { data: itemRows } = await supabase
+    const { data: itemRows } = await db
       .from("order_items")
       .select("order_id")
       .in("order_id", allOrderIds);

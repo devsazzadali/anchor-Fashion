@@ -732,11 +732,11 @@ export function PrintBarcodeModal({
                           </div>
 
                           {/* Right Column: Brand Name above Barcode + Crisp Vector Barcode */}
-                          <div className="flex flex-col items-center justify-center text-center">
+                          <div className="flex flex-1 min-w-0 flex-col items-center justify-center text-center">
                             <span className="text-[8.5px] font-bold tracking-wider uppercase text-zinc-900 leading-none mb-0.5">
                               {lbl.brandName || "Anchor Fashion"}
                             </span>
-                            <div className="barcode-svg-clean flex items-center justify-center">
+                            <div className="barcode-svg-clean flex w-full items-center justify-center">
                               <ClientBarcode
                                 value={lbl.barcode || "040050336332"}
                                 format="CODE128"
@@ -746,6 +746,8 @@ export function PrintBarcodeModal({
                                 margin={0}
                                 textMargin={1}
                                 displayValue={true}
+                                fit
+                                className="w-full"
                               />
                             </div>
                           </div>

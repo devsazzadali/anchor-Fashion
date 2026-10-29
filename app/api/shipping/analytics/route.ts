@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 
 /**
@@ -13,29 +13,29 @@ export async function GET(req: Request) {
     const days = parseInt(url.searchParams.get("days") ?? "30", 10);
     const dateFrom = new Date(Date.now() - days * 86400_000).toISOString();
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     const [statusCounts, courierCounts, dailyCounts, deliveryRate] =
       await Promise.all([
         // Status breakdown
-        supabase.from("shipments").select("status").gte("created_at", dateFrom),
+        db.from("shipments").select("status").gte("created_at", dateFrom),
 
         // Per-courier breakdown
-        supabase
+        db
           .from("shipments")
           .select("courier_provider_code, status")
           .gte("created_at", dateFrom)
           .not("courier_provider_code", "is", null),
 
         // Daily volume (last N days)
-        supabase
+        db
           .from("shipments")
           .select("created_at, status")
           .gte("created_at", dateFrom)
           .order("created_at", { ascending: true }),
 
         // Overall delivery rate
-        supabase
+        db
           .from("shipments")
           .select("status")
           .gte("created_at", dateFrom)

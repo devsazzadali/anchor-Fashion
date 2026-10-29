@@ -159,7 +159,7 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
                   </TableRow>
                 ) : (
                   filteredCoupons.map((coupon) => {
-                    const isExpired = new Date() > new Date(coupon.valid_until);
+                    const isExpired = coupon.valid_until ? new Date() > new Date(coupon.valid_until) : false;
                     const usageText = coupon.usage_limit
                       ? `${coupon.used_count} / ${coupon.usage_limit}`
                       : `${coupon.used_count} / Unlimited`;
@@ -197,7 +197,7 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {new Date(coupon.valid_until).toLocaleDateString()}
+                          {coupon.valid_until ? new Date(coupon.valid_until).toLocaleDateString() : "No expiry"}
                         </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>

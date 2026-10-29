@@ -14,7 +14,7 @@ function AuthCodeErrorContent() {
   });
 
   useEffect(() => {
-    // In browsers, Supabase often appends error parameters in the hash fragment:
+    // In browsers, the auth provider often appends error parameters in the hash fragment:
     // e.g. #error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired
     if (typeof window !== "undefined" && window.location.hash) {
       try {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client"; // Assuming client side supabase
+import { createDbClient } from "@/lib/db/client"; // Assuming client side db
 import { Bell } from "lucide-react";
 
 interface Notification {
@@ -15,7 +15,7 @@ export function InAppNotificationCenter() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const supabase = createClient();
+  const db = createDbClient();
 
   useEffect(() => {
     fetchNotifications();
@@ -25,10 +25,10 @@ export function InAppNotificationCenter() {
   const fetchNotifications = async () => {
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = await db.auth.getSession();
     if (!session) return;
 
-    const { data } = await supabase
+    const { data } = await db
       .from("notifications")
       .select("*")
       .eq("user_id", session.user.id)
@@ -44,10 +44,10 @@ export function InAppNotificationCenter() {
   const setupRealtime = async () => {
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = await db.auth.getSession();
     if (!session) return;
 
-    supabase
+    db
       .channel("public:notifications")
       .on(
         "postgres_changes",
@@ -68,7 +68,7 @@ export function InAppNotificationCenter() {
   };
 
   const markAsRead = async (id: string) => {
-    await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+    await db.from("notifications").update({ is_read: true }).eq("id", id);
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
@@ -78,10 +78,10 @@ export function InAppNotificationCenter() {
   const markAllAsRead = async () => {
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = await db.auth.getSession();
     if (!session) return;
 
-    await supabase
+    await db
       .from("notifications")
       .update({ is_read: true })
       .eq("user_id", session.user.id)

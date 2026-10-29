@@ -4,16 +4,16 @@ This guide details the implementation and usage of the Enterprise Database Layer
 
 ## 1. Database Clients
 
-We export specialized clients from `lib/supabase/` to ensure security and proper context:
+We export specialized clients from `lib/db/` to ensure security and proper context:
 
-- `createClient()` (Browser): Use only in React Client Components (`"use client"`).
-- `createClient()` (Server): Use in Server Components, Server Actions, Route Handlers.
+- `createDbClient()` (Browser): Use only in React Client Components (`"use client"`).
+- `createDbClient()` (Server): Use in Server Components, Server Actions, Route Handlers.
 - `createAdminClient()`: Use strictly in secure backends when you must bypass RLS.
 - `createMiddlewareClient()`: Used exclusively inside `middleware.ts`.
 
 ## 2. Repositories
 
-The Repository pattern (`database/repositories/`) decouples business logic from Supabase syntax.
+The Repository pattern (`database/repositories/`) decouples business logic from Neon syntax.
 
 - Extend `CrudRepository` for standard tables.
 - Use `applyPagination` and `applySorting` from `database/utils/repository-helpers.ts` for listing endpoints.
@@ -41,7 +41,7 @@ const updateProfile = createProtectedAction(
 
 ## 4. Error Handling
 
-Never throw raw Supabase errors to the frontend.
+Never throw raw Neon errors to the frontend.
 Wrap calls using `handlePostgresError(error)` from `database/utils/error-handler.ts` which returns a standardized `DatabaseError`.
 
 ## 5. Caching Strategy

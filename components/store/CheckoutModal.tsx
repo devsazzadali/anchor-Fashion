@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { totalVatAmount } from '@/lib/utils/vat';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -38,6 +39,7 @@ interface CartItem {
   quantity: number;
   size?: string;
   color?: string;
+  vat_percent?: number;
 }
 
 interface CheckoutModalProps {
@@ -72,8 +74,19 @@ export default function CheckoutModal({ isOpen, onClose, items, onOrderComplete 
   const createAccountChecked = watch('createAccount');
 
   const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const deliveryFee = selectedCity === 'Dhaka' ? 80 : 150;
-  const total = subtotal + deliveryFee;
+  // Same delivery schedule as the main checkout (was ৳80 for Dhaka here,
+  // ৳100 everywhere else — the server now charges the unified rate).
+  const deliveryFee = selectedCity === 'Dhaka' ? 100 : 150;
+  // Per-product VAT added on top of the selling price — identical math to
+  // the server (lib/utils/vat), so the displayed total is the charged total.
+  const vatAmount = totalVatAmount(
+    items.map((item) => ({
+      unitPrice: item.price,
+      quantity: item.quantity,
+      vatPercent: item.vat_percent ?? 0,
+    }))
+  );
+  const total = subtotal + deliveryFee + vatAmount;
 
   const onSubmit = async (values: CheckoutModalValues) => {
     setLoading(true);
@@ -293,6 +306,12 @@ export default function CheckoutModal({ isOpen, onClose, items, onOrderComplete 
                   <span>Delivery Fee</span>
                   <span>৳{deliveryFee.toLocaleString()}</span>
                 </div>
+                {vatAmount > 0 && (
+                  <div className="flex justify-between text-[#888]">
+                    <span>VAT</span>
+                    <span>৳{vatAmount.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="pt-4 border-t border-[#333] flex justify-between text-xl font-bold text-white">
                   <span>Total</span>
                   <span className="text-[#b8955e]">৳{total.toLocaleString()}</span>

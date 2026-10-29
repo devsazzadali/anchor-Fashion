@@ -104,10 +104,22 @@ export async function sendCodOtpAction(
   try {
     const parsedData = checkoutFormSchema.parse(formData);
     const { userId } = await getSessionIdentifiers();
-    const summary = await OrderService.calculateSummary(
-      parsedData.shipping.shipping_method || "standard",
-      userId
-    ).catch(() => null);
+    // Resolve the cart from the checkout session — previously the shipping
+    // method string was passed as the cartId, so the summary (and the order
+    // total quoted in the OTP email) was computed from the wrong/empty cart.
+    const checkoutSession = await prisma.checkoutSession
+      .findUnique({
+        where: { id: checkoutSessionId },
+        select: { cartId: true },
+      })
+      .catch(() => null);
+    const summary = checkoutSession?.cartId
+      ? await OrderService.calculateSummary(
+          checkoutSession.cartId,
+          userId,
+          parsedData.shipping.shipping_method
+        ).catch(() => null)
+      : null;
 
     const result = await CodOtpService.initiateVerification({
       sessionId: checkoutSessionId,
@@ -314,6 +326,23 @@ export async function processCheckoutAction(
     } catch (notifErr) {
       console.warn("[Checkout] Error triggering order notification:", notifErr);
     }
+
+    // Phase 8: staff notification EMAIL on the new-order event (the in-app
+    // bell above already existed; no email was ever sent to admins or
+    // managers). Fire-and-forget; the helper never throws.
+    void (async () => {
+      try {
+        const { notifyStaffOrderEvent } = await import(
+          "@/lib/notifications/order-notifications"
+        );
+        await notifyStaffOrderEvent({ kind: "new_order", orderId: order.id });
+      } catch (staffMailErr) {
+        console.warn(
+          "[Checkout] Staff new-order email failed:",
+          staffMailErr
+        );
+      }
+    })();
 
     // 5. If Manual Payment (bKash, Nagad, Rocket, Bank Transfer), record transaction for Admin Approval
     const methodUpper = (order.payment_method || "").toUpperCase();

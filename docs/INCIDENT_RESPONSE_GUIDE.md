@@ -9,9 +9,9 @@
 - **Symptom**: 500/502/504 errors on all routes.
 - **Action**: Check Vercel Status Page. If Vercel is up, check recent deployment logs. Execute an Instant Rollback to the previous stable build.
 
-## 2. Database Failure (Supabase)
+## 2. Database Failure (Neon)
 - **Symptom**: `database: DOWN` on `/api/health`. 
-- **Action**: Check Supabase Status. If regional outage, communicate to users. If accidental data deletion, initiate Point-In-Time-Recovery (PITR).
+- **Action**: Check Neon Status. If regional outage, communicate to users. If accidental data deletion, initiate Point-In-Time-Recovery (PITR).
 
 ## 3. Payment Gateway / Webhook Failure
 - **Symptom**: Orders remain in "Pending Payment" despite successful charges.

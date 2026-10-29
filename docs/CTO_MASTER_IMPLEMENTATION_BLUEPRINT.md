@@ -16,7 +16,7 @@ Anchor Fashion aims to dominate the premium fashion e-commerce market in Banglad
 
 ### Technical Vision
 
-To build a resilient, scalable, and fully automated enterprise commerce ecosystem utilizing modern composable architecture. The platform leverages Next.js at the edge (Vercel) for hyper-fast frontend delivery, Supabase (PostgreSQL) for robust relational data and authentication, and Google Gemini for pervasive AI intelligence across all business domains.
+To build a resilient, scalable, and fully automated enterprise commerce ecosystem utilizing modern composable architecture. The platform leverages Next.js at the edge (Vercel) for hyper-fast frontend delivery, Neon (PostgreSQL) for robust relational data and authentication, and Google Gemini for pervasive AI intelligence across all business domains.
 
 ### Architecture Principles
 
@@ -61,7 +61,7 @@ The platform is strictly categorized into the following domain-driven modules:
 | **Courier**       | Logistics API Integrations (Pathao, RedX, eCourier), Live Tracking, Routing Logic    |
 | **Notifications** | Email (Resend/SendGrid), PWA Push Notifications, SMS, In-App Alerts                  |
 | **Security**      | WAF Config, Rate Limiting, Threat Detection, Immutable Audit Trails                  |
-| **DevOps**        | CI/CD Pipelines, Infrastructure as Code (IaC), Vercel & Supabase Config              |
+| **DevOps**        | CI/CD Pipelines, Infrastructure as Code (IaC), Vercel & Neon Config              |
 | **Operations**    | System Monitoring, Application Logging, Automated Backups, SRE                       |
 | **Reporting**     | Automated PDF/CSV Generation, Scheduled Executive Reports                            |
 | **Support**       | Helpdesk Ticketing, Live Chat (AI + Human Handoff), FAQ Management                   |
@@ -77,7 +77,7 @@ The platform is strictly categorized into the following domain-driven modules:
 
 ### Critical Path (Must be built sequentially)
 
-1.  **Foundation:** Supabase DB Schema & RLS -> Authentication (GoTrue)
+1.  **Foundation:** Neon DB Schema & RLS -> Authentication (GoTrue)
 2.  **Catalog:** CMS Core -> Product Data Model -> Search (pgvector/FTS)
 3.  **Commerce Core:** User Profiles -> Shopping Cart
 4.  **Transaction:** Checkout -> Payments (Gateways) -> Order Creation
@@ -107,7 +107,7 @@ The delivery is structured in phased milestones to ensure continuous value deliv
 ### Phase 1: Foundation (Weeks 1-3)
 
 - **Objectives:** Establish environments, DB schema, IaC, and security baseline.
-- **Deliverables:** Supabase project setup, Vercel environments, CI/CD pipelines, Auth system, Base RLS policies.
+- **Deliverables:** Neon project setup, Vercel environments, CI/CD pipelines, Auth system, Base RLS policies.
 
 ### Phase 2: Core Commerce (Weeks 4-6)
 
@@ -160,12 +160,12 @@ To execute this blueprint, the engineering organization must be structured as fo
 | Team                | Primary Responsibilities                                                                      | Technologies                                         |
 | :------------------ | :-------------------------------------------------------------------------------------------- | :--------------------------------------------------- |
 | **Frontend/PWA**    | UI/UX implementation, Edge rendering, State management, Core Web Vitals, PWA Service Workers. | Next.js, React, TailwindCSS, Zustand/Redux           |
-| **Backend/API**     | API Routes, Edge Functions, Webhooks, Payment/Courier integrations, Business logic.           | Next.js API, Supabase Edge Functions (Deno), Node.js |
-| **Database**        | Schema design, Migrations, RLS Policies, pgvector, Stored Procedures, Performance tuning.     | PostgreSQL (Supabase), SQL                           |
-| **DevOps & SecOps** | CI/CD, Branch environments, WAF, Secret management, Observability, IaC.                       | GitHub Actions, Vercel, Supabase CLI                 |
+| **Backend/API**     | API Routes, Edge Functions, Webhooks, Payment/Courier integrations, Business logic.           | Next.js API, serverless functions, Node.js |
+| **Database**        | Schema design, Migrations, RLS Policies, pgvector, Stored Procedures, Performance tuning.     | PostgreSQL (Neon), SQL                           |
+| **DevOps & SecOps** | CI/CD, Branch environments, WAF, Secret management, Observability, IaC.                       | GitHub Actions, Vercel, Neon CLI                 |
 | **QA Automation**   | E2E Testing, API Testing, Load Testing, Visual Regression.                                    | Cypress/Playwright, Jest, k6                         |
 | **AI Engineering**  | Prompt orchestration, RAG pipelines, Gemini API integration, Vector embeddings.               | Google Gemini, LangChain/LlamaIndex, pgvector        |
-| **Data Platform**   | ETL/ELT pipelines, Data warehousing, BI dashboards.                                           | Supabase (Read Replicas), Looker/Metabase            |
+| **Data Platform**   | ETL/ELT pipelines, Data warehousing, BI dashboards.                                           | Neon (Read Replicas), Looker/Metabase            |
 | **Product & UI/UX** | Requirements gathering, Wireframing, Design System (Figma), User testing.                     | Figma, Jira/Linear                                   |
 
 ---
@@ -187,7 +187,7 @@ To execute this blueprint, the engineering organization must be structured as fo
 
 ### Database & API Strategy
 
-- **Database-First Strategy:** Define data models, relations, and RLS policies in Supabase _before_ writing API/Frontend code. The DB is the source of truth for schema and security.
+- **Database-First Strategy:** Define data models, relations, and RLS policies in Neon _before_ writing API/Frontend code. The DB is the source of truth for schema and security.
 - **API Contract Strategy:** Define TypeScript interfaces representing API requests/responses immediately after DB design. Frontend and Backend teams use these contracts to work in parallel.
 - **Migration Order:** Always: `Schema change` -> `RLS change` -> `Edge Function update` -> `Frontend update`.
 
@@ -198,21 +198,21 @@ To execute this blueprint, the engineering organization must be structured as fo
 ### Testing Pyramid & Quality Gates
 
 1.  **Unit Tests (Jest/Vitest):** Business logic, util functions, price calculations. _Gate: >80% coverage._
-2.  **API/Integration Tests:** Testing Supabase Edge Functions and Next.js Route Handlers. _Gate: 100% of critical paths (Checkout, Auth)._
+2.  **API/Integration Tests:** Testing serverless functions and Next.js Route Handlers. _Gate: 100% of critical paths (Checkout, Auth)._
 3.  **E2E Tests (Playwright):** Automated headless browser tests for critical user journeys. _Gate: Must pass on Vercel Preview Deployments before Merge._
 4.  **Load Testing (k6):** Simulating flash-sale traffic on Checkout and DB read replicas. _Gate: P95 latency < 500ms at 5,000 concurrent users._
 
 ### Deployment Plan
 
-1.  **Development:** Local development using `supabase start` and `next dev`.
-2.  **Testing (Preview):** Vercel Preview deployments generated automatically on every PR. Connected to a Supabase Staging project.
+1.  **Development:** Local development using `the local dev server` and `next dev`.
+2.  **Testing (Preview):** Vercel Preview deployments generated automatically on every PR. Connected to a Neon Staging project.
 3.  **Staging:** Merges to `main` auto-deploy to Staging environment. Used for QA sign-off and UAT.
 4.  **Production:** Tagged releases trigger production deployment.
 
 ### Rollback Strategy
 
 - **Frontend:** Vercel Instant Rollback (1-click atomic rollback).
-- **Database:** Supabase Point-in-Time Recovery (PITR). Migrations must be written with `down` steps when applicable, but PITR is the ultimate failsafe.
+- **Database:** Neon Point-in-Time Recovery (PITR). Migrations must be written with `down` steps when applicable, but PITR is the ultimate failsafe.
 
 ---
 
@@ -223,9 +223,9 @@ Before public launch, the following must be unequivocally verified:
 ### Security & Compliance
 
 - [ ] WAF enabled and configured on Vercel.
-- [ ] Supabase RLS policies audited (no accidental public writes).
+- [ ] Neon RLS policies audited (no accidental public writes).
 - [ ] API Rate limiting active on authentication and checkout routes.
-- [ ] Secrets rotated and securely stored in Vercel/Supabase vaults.
+- [ ] Secrets rotated and securely stored in Vercel/Neon vaults.
 - [ ] PCI-DSS compliance verified (No raw card data touches Anchor Fashion servers).
 
 ### Performance & SEO
@@ -239,7 +239,7 @@ Before public launch, the following must be unequivocally verified:
 
 - [ ] Application Performance Monitoring (APM) and Error Tracking (e.g., Sentry) active.
 - [ ] Structured logging configured for all edge functions and API routes.
-- [ ] Supabase daily logical backups + PITR enabled.
+- [ ] Neon daily logical backups + PITR enabled.
 - [ ] Uptime monitoring (e.g., Better Stack/Pingdom) alerting configured for on-call engineers.
 
 ---
@@ -259,10 +259,10 @@ Before public launch, the following must be unequivocally verified:
 
 Once the enterprise core is stabilized, the engineering organization will shift to:
 
-1.  **Mobile App Evolution:** Transitioning the PWA into fully compiled Native Apps (React Native/Expo) utilizing the exact same Supabase backend and Next.js APIs.
+1.  **Mobile App Evolution:** Transitioning the PWA into fully compiled Native Apps (React Native/Expo) utilizing the exact same Neon backend and Next.js APIs.
 2.  **Marketplace Architecture:** Expanding the DB schema to support multi-vendor inventory and split payments.
 3.  **Advanced Machine Learning:** Moving beyond LLMs to predictive ML models for dynamic pricing and deep inventory demand forecasting.
-4.  **Multi-Region Expansion:** Utilizing Supabase Read Replicas across different geographic regions and Vercel Edge caching to support international latency requirements.
+4.  **Multi-Region Expansion:** Utilizing Neon Read Replicas across different geographic regions and Vercel Edge caching to support international latency requirements.
 5.  **Autonomous AI Agents:** Upgrading Gemini integrations from reactive tools to proactive agents (e.g., an AI agent that automatically reorders low-stock items based on trend analysis).
 
 ---
@@ -278,7 +278,7 @@ As the CTO, I mandate the following principles for the engineering organization:
 
 ### Critical Success Factors
 
-- **Database Design:** The entire system relies on the Supabase PostgreSQL schema. Spend disproportionate time getting the schema, indexes, and constraints right in Phase 1. Changing schema later is exponentially more expensive.
+- **Database Design:** The entire system relies on the Neon PostgreSQL schema. Spend disproportionate time getting the schema, indexes, and constraints right in Phase 1. Changing schema later is exponentially more expensive.
 - **Edge Compute:** Relentlessly push processing to the Vercel Edge. The closer the code is to the user, the faster the site, and the higher the conversion rate.
 
 ### Common Mistakes to Avoid
@@ -294,7 +294,7 @@ Technology serves the business. Every architectural decision, from using Next.js
 ---
 
 **Document Status:** FINAL / APPROVED
-**Target Architecture:** Vercel (Next.js) + Supabase (PostgreSQL) + Google Gemini
+**Target Architecture:** Vercel (Next.js) + Neon (PostgreSQL) + Google Gemini
 **Owner:** Office of the Chief Technology Officer (CTO)
 
 ---

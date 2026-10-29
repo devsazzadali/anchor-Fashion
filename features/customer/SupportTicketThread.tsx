@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Send, Loader2, User, Headset, Clock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { replyTicketAction } from "@/app/actions/customer.actions";
-import { createClient } from "@/lib/supabase/client";
+import { createDbClient } from "@/lib/db/client";
 
 interface Message {
   id: string;
@@ -47,8 +47,8 @@ export function SupportTicketThread({
   useEffect(() => {
     if (!ticketId) return;
 
-    const supabase = createClient();
-    const channel = supabase
+    const db = createDbClient();
+    const channel = db
       .channel(`customer-ticket-${ticketId}`)
       .on(
         "postgres_changes",
@@ -75,7 +75,7 @@ export function SupportTicketThread({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      db.removeChannel(channel);
     };
   }, [ticketId]);
 

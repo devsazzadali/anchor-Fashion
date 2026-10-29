@@ -13,6 +13,7 @@ interface Product {
   name: string;
   price: number;
   sale_price?: number;
+  vat_percent?: number;
   category: string;
   image_url: string;
   is_featured?: boolean;

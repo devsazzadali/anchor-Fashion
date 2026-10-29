@@ -12,7 +12,7 @@ Welcome to the v1.0.0 enterprise release of the Anchor Fashion platform. This re
 ## Architecture
 - **Framework**: Next.js 16 (App Router) with Turbopack.
 - **State Management**: Zustand (Client) and React Query (Server).
-- **Database**: Supabase (PostgreSQL) with Row-Level Security (RLS) and Prisma/Drizzle schemas mapped to Repositories.
+- **Database**: Neon (PostgreSQL) with Row-Level Security (RLS) and Prisma/Drizzle schemas mapped to Repositories.
 - **Styling**: Tailwind CSS, Radix UI primitives, and Framer Motion for micro-interactions.
 
 ## Security Improvements
@@ -26,8 +26,8 @@ Welcome to the v1.0.0 enterprise release of the Anchor Fashion platform. This re
 - Third-party scripts (GA4, Meta Pixel) loaded non-blockingly via `@next/third-parties`.
 
 ## Infrastructure Improvements
-- Integrated `ObservabilityService` routing logs, metrics, and incident alerts to centralized Supabase tables.
+- Integrated `ObservabilityService` routing logs, metrics, and incident alerts to centralized Neon tables.
 - Implemented `/api/health` liveness/readiness probes for container orchestration and load balancing.
 
 ## Known Limitations
-- Background jobs currently rely on Vercel Cron or Supabase edge functions; true persistent worker queues (e.g., Redis BullMQ) are slated for v1.1.0.
+- Background jobs currently rely on Vercel Cron or Neon edge functions; true persistent worker queues (e.g., Redis BullMQ) are slated for v1.1.0.

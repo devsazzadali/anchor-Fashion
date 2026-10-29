@@ -11,6 +11,7 @@ import { useSession } from "@/hooks/use-session";
 import { authClient } from "@/lib/auth/client";
 import { useRouter, usePathname } from "next/navigation";
 import { cn, formatCurrency } from "@/lib/utils";
+import { priceWithVat } from "@/lib/utils/vat";
 import { toast } from "sonner";
 import { ProductQuickView } from "./product-quick-view";
 import { ADMIN_ROLES } from "@/lib/constants/auth";
@@ -59,6 +60,13 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const discountPercent =
     product.discount ??
     (hasDiscount ? Math.round(((comparePrice - price) / comparePrice) * 100) : null);
+
+  // Display prices are VAT-inclusive: per-product VAT is added on top of the
+  // selling price (lib/utils/vat.ts). Discount math above uses pre-VAT prices;
+  // the ratio is unchanged by the uniform VAT factor.
+  const vatPercent = Number(product.vat_percent ?? product.vatPercent ?? 0);
+  const displayPrice = priceWithVat(price, vatPercent);
+  const displayComparePrice = comparePrice > 0 ? priceWithVat(comparePrice, vatPercent) : comparePrice;
 
   // Check wishlist state
   const isWished =
@@ -341,12 +349,15 @@ export function ProductCard({ product, className }: ProductCardProps) {
           <div className="mt-2.5 pt-2 border-t border-zinc-100/70 flex items-center justify-between">
             <div className="flex flex-wrap items-baseline gap-1.5">
               <span className="text-[14px] sm:text-[15px] font-semibold text-zinc-900">
-                {formatCurrency(price)}
+                {formatCurrency(displayPrice)}
               </span>
               {hasDiscount && (
                 <span className="text-[11px] sm:text-xs text-zinc-400 line-through">
-                  {formatCurrency(comparePrice)}
+                  {formatCurrency(displayComparePrice)}
                 </span>
+              )}
+              {vatPercent > 0 && (
+                <span className="text-[10px] text-zinc-400">incl. VAT</span>
               )}
             </div>
 

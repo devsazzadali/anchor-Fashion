@@ -48,6 +48,7 @@ import { PrintBarcodeModal, BarcodeLabelData } from "@/components/admin/inventor
 import { toggleProductPublishStatusAction } from "@/lib/actions/admin/inventory-master.actions";
 import { toast } from "sonner";
 import { exportToCsv } from "@/lib/utils/export";
+import { priceWithVat } from "@/lib/utils/vat";
 
 interface InventoryMasterHubClientProps {
   initialMasterData: any;
@@ -178,7 +179,8 @@ export function InventoryMasterHubClient({
         barcode: v.barcode || item.barcode,
         color,
         size,
-        price: item.basePrice || item.price || 0,
+        // Sticker prints "(Inc.VAT)" — the price must be VAT-inclusive.
+        price: priceWithVat(item.basePrice || item.price || 0, item.vatPercent || 0),
         stock: variantStock > 0 ? variantStock : 1,
         styleCode: item.sku || v.sku,
         categoryName: catName,
@@ -192,7 +194,7 @@ export function InventoryMasterHubClient({
         productName: item.name,
         sku: item.sku,
         barcode: item.barcode,
-        price: item.basePrice || item.price || 0,
+        price: priceWithVat(item.basePrice || item.price || 0, item.vatPercent || 0),
         stock: item.totalStock > 0 ? item.totalStock : 1,
         styleCode: item.sku,
         categoryName: catName,

@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { db } from "@/lib/db/client";
 import { AIGovernanceAction } from "./types";
 
 export class AIGovernance {
@@ -28,7 +28,7 @@ export class AIGovernance {
       status = "APPROVED";
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("ai_governance_actions")
       .insert({
         action_type: actionType,
@@ -61,7 +61,7 @@ export class AIGovernance {
     actionId: string,
     adminId: string
   ): Promise<boolean> {
-    const { error } = await supabase
+    const { error } = await db
       .from("ai_governance_actions")
       .update({
         status: "APPROVED",

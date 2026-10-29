@@ -36,7 +36,7 @@ lib/couriers/
 
 ## 2. Database Structure
 
-Logistics data is managed in Supabase PostgreSQL:
+Logistics data is managed in Neon PostgreSQL:
 
 - `courier_providers`: Courier configuration, active flag, sandbox toggle, priority, and credentials.
 - `shipments`: Core consignment records linking to `orders`, tracking codes, COD amounts, and shipping statuses.

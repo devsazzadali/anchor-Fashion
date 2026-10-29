@@ -13,7 +13,7 @@ The Anchor Fashion E-commerce Platform adopts a rigorous, multi-layered testing 
 
 ### 1.2 Integration Testing
 
-- **Framework**: Vitest with MSW (Mock Service Worker) / Supabase local testing.
+- **Framework**: Vitest with MSW (Mock Service Worker) / Neon local testing.
 - **Scope**: Component interactions, API route handlers, and database interactions (RLS, triggers).
 - **Execution**: Runs on every Pull Request to ensure integrated parts function correctly.
 
@@ -83,7 +83,7 @@ Triggered on push to `develop` and `main`, and on Pull Requests.
 Triggered upon merge to specific branches.
 
 - **Merge to `develop`**: Vercel deploys to Staging environment. Playwright E2E tests run against Staging.
-- **Merge to `main`**: Vercel deploys to Production (Blue/Green). Supabase DB migrations applied automatically via GitHub Actions.
+- **Merge to `main`**: Vercel deploys to Production (Blue/Green). Neon DB migrations applied automatically via GitHub Actions.
 
 ---
 
@@ -93,11 +93,11 @@ Triggered upon merge to specific branches.
 
 - **Edge Network**: Leverage Vercel Edge Network for caching static assets and global API routing.
 - **Blue/Green Deployments**: Vercel provides atomic, immutable deployments. The new version is built, and if successful, traffic is instantly swapped.
-- **Rollback Strategy**: Instant rollbacks via Vercel dashboard or CLI (`vercel rollback`). Database rollbacks require manual intervention using `supabase db down`.
+- **Rollback Strategy**: Instant rollbacks via Vercel dashboard or CLI (`vercel rollback`). Database rollbacks require manual intervention using `neon db down`.
 
 ### 4.2 Database Migration Strategy
 
-- **Supabase CLI**: Migrations are version-controlled in `supabase/migrations`.
+- **Neon CLI**: Migrations are version-controlled in `prisma/migrations`.
 - **Execution**: Migrations run automatically via GitHub Action **after** successful Vercel build but **before** traffic swap.
 - **Backward Compatibility**: All database migrations MUST be backward compatible to support zero-downtime deployments.
 
@@ -127,7 +127,7 @@ Triggered upon merge to specific branches.
 
 - **Application Performance Monitoring (APM)**: Vercel Analytics / Sentry.
 - **Error Tracking**: Sentry (Real-time alerting for unhandled exceptions).
-- **Database Health**: Supabase Dashboard / pg_stat_statements.
+- **Database Health**: Neon Dashboard / pg_stat_statements.
 
 ### 6.2 Incident Management (SRE)
 
@@ -144,8 +144,8 @@ Before the initial production launch, the following must be validated:
 - [ ] All Unit & E2E tests pass on `main`.
 - [ ] k6 Load test validates handling of 500+ Concurrent Users (VUs) with p(95) latency < 500ms.
 - [ ] Vercel Environment Variables verified in Production.
-- [ ] Supabase Database Password rotated and updated in GitHub Secrets.
-- [ ] Supabase Point-in-Time Recovery (PITR) enabled.
+- [ ] Neon Database Password rotated and updated in GitHub Secrets.
+- [ ] Neon Point-in-Time Recovery (PITR) enabled.
 - [ ] Custom Domain SSL provisioned on Vercel.
 - [ ] Sentry / Analytics integrations active.
 

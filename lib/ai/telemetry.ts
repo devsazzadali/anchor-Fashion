@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { db } from "@/lib/db/client";
 import { AILogEntry } from "./types";
 
 export class AITelemetry {
@@ -7,7 +7,7 @@ export class AITelemetry {
    */
   static logRequest(entry: AILogEntry) {
     // Fire and forget
-    supabase
+    db
       .from("ai_request_logs")
       .insert([
         {

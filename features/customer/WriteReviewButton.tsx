@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createDbClient } from "@/lib/db/client";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -133,7 +133,7 @@ export function WriteReviewButton({
   const uploadImages = async (): Promise<string[]> => {
     if (files.length === 0) return [];
     
-    const supabase = createClient();
+    const db = createDbClient();
     const uploadedUrls: string[] = [];
 
     for (const file of files) {
@@ -141,7 +141,7 @@ export function WriteReviewButton({
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `${form.getValues("productId")}/${fileName}`;
 
-      const { data, error } = await supabase.storage
+      const { data, error } = await db.storage
         .from('review_images')
         .upload(filePath, file);
 
@@ -149,7 +149,7 @@ export function WriteReviewButton({
         console.error("Upload error:", error);
         toast.error(`Failed to upload ${file.name}`);
       } else if (data) {
-        const { data: { publicUrl } } = supabase.storage
+        const { data: { publicUrl } } = db.storage
           .from('review_images')
           .getPublicUrl(data.path);
         uploadedUrls.push(publicUrl);
@@ -195,10 +195,10 @@ export function WriteReviewButton({
   };
 
   const handleOpenClick = async () => {
-    const supabase = createClient();
+    const db = createDbClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
     if (!user) {
       toast.error("Please sign in to write a product review.");

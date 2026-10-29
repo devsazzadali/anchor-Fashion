@@ -39,8 +39,8 @@ Performance is optimized for a sub-2-second Time to Interactive (TTI) globally.
 
 ## 5. Backup & Recovery Strategy
 
-- **Database Backup:** Continuous archiving (WAL) via Supabase, with Point-in-Time Recovery (PITR) up to 7 days, and daily snapshots stored in cold storage for 1 year.
-- **Storage Backup:** Supabase Storage buckets (S3-compatible) are versioned and replicated cross-region.
+- **Database Backup:** Continuous archiving (WAL) via Neon, with Point-in-Time Recovery (PITR) up to 7 days, and daily snapshots stored in cold storage for 1 year.
+- **Storage Backup:** Neon Storage buckets (S3-compatible) are versioned and replicated cross-region.
 - **RPO/RTO:**
   - Recovery Point Objective (RPO): 15 minutes.
   - Recovery Time Objective (RTO): 1 hour.
@@ -66,7 +66,7 @@ anchor-fashion/
 
 ## 7. Enterprise Best Practices Checklist
 
-- [x] Passwords must never be stored in plain text (Supabase Auth handles this).
+- [x] Passwords must never be stored in plain text (Neon Auth handles this).
 - [x] Secrets must never be committed to source control (validated via pre-commit hooks).
 - [x] Security headers must achieve an A+ on Mozilla Observatory.
 - [x] Core Web Vitals must be strictly monitored (LCP < 2.5s, FID < 100ms, CLS < 0.1).

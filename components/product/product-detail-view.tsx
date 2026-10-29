@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Share2,
   Check,
-  Flame,
   CreditCard,
   ChevronRight,
   PackageCheck,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { jost } from "@/lib/fonts";
+import { priceWithVat } from "@/lib/utils/vat";
 import { toast } from "sonner";
 
 export interface ProductDetailViewProps {
@@ -153,6 +153,9 @@ export function ProductDetailView({
       ? Math.round(((comparePrice - currentPrice) / comparePrice) * 100)
       : null;
 
+  // Per-product VAT % — displayed prices add VAT on top of the selling price.
+  const vatPercent = Number(product.vat_percent ?? product.vatPercent ?? 0);
+
   return (
     <div className="min-h-screen bg-[#FCFCFD] pb-24 pt-3">
       {/* Analytics & View Tracking */}
@@ -162,8 +165,8 @@ export function ProductDetailView({
       <FloatingPurchaseCard
         productId={product.id}
         productName={product.name}
-        productPrice={currentPrice}
-        compareAtPrice={comparePrice}
+        productPrice={priceWithVat(currentPrice, vatPercent)}
+        compareAtPrice={comparePrice ? priceWithVat(comparePrice, vatPercent) : comparePrice}
         productImage={
           typeof currentGalleryImages[0] === "string"
             ? currentGalleryImages[0]
@@ -286,7 +289,7 @@ export function ProductDetailView({
                       <svg
                         key={i}
                         className={`h-3.5 w-3.5 ${
-                          i < Math.floor(averageRating > 0 ? averageRating : 5)
+                          i < Math.floor(averageRating)
                             ? "fill-current"
                             : "fill-muted text-gray-200"
                         }`}
@@ -298,11 +301,13 @@ export function ProductDetailView({
                     ))}
                   </div>
                   <span className="font-semibold text-zinc-800 underline-offset-4 group-hover:underline">
-                    {averageRating > 0 ? averageRating.toFixed(1) : "5.0"}
+                    {averageRating > 0 ? averageRating.toFixed(1) : "No reviews yet"}
                   </span>
-                  <span className="text-zinc-400">
-                    ({totalReviews} {totalReviews === 1 ? "review" : "reviews"})
-                  </span>
+                  {totalReviews > 0 && (
+                    <span className="text-zinc-400">
+                      ({totalReviews} {totalReviews === 1 ? "review" : "reviews"})
+                    </span>
+                  )}
                 </a>
 
                 {/* Instant In-Stock Assurance */}
@@ -314,13 +319,6 @@ export function ProductDetailView({
                 )}
               </div>
 
-              {/* Live Interest & High Demand Banner */}
-              <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-orange-200/70 bg-gradient-to-r from-orange-50/90 to-amber-50/70 px-3.5 py-2.5 text-xs text-orange-950 shadow-sm">
-                <Flame className="h-4 w-4 text-orange-600 animate-pulse shrink-0" />
-                <span>
-                  High demand piece: <strong>14 shoppers</strong> are viewing this right now.
-                </span>
-              </div>
             </div>
 
             {/* Variant Selector + Price & Dynamic SKU + Add to Cart */}
@@ -332,6 +330,7 @@ export function ProductDetailView({
                 productName={product.name}
                 productPrice={product.base_price}
                 productSalePrice={product.sale_price}
+                productVatPercent={vatPercent}
                 productSku={product.sku}
                 productImages={
                   typeof currentGalleryImages[0] === "string"

@@ -4,7 +4,7 @@
 
 - **Node.js**: Version 20.x or higher
 - **Package Manager**: npm (or pnpm/yarn)
-- **Supabase Account**: You must have access to the Anchor Fashion Supabase project, or create a new one for local development.
+- **Neon Account**: You must have access to the Anchor Fashion Neon project, or create a new one for local development.
 
 ## 1. Clone and Install
 
@@ -25,9 +25,9 @@ We need to configure our environment variables to connect to our backend and thi
    cp .env.example .env.local
    ```
 2. Open `.env.local` and replace the placeholder values. At a minimum, you must configure:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `DATABASE_URL`
+   - `DIRECT_URL`
+   - `NEON_AUTH_BASE_URL`
 
 ## 3. Local Development Server
 
@@ -51,4 +51,4 @@ npm run start
 ## Common Issues
 
 - **Compile Errors**: Ensure you have run `npm install --legacy-peer-deps` correctly.
-- **Supabase Auth / Data fetching fails**: Verify your `.env.local` keys are exact and that your local/remote Supabase instance has the necessary schemas/migrations.
+- **Neon Auth / Data fetching fails**: Verify your `.env.local` keys are exact and that your local/remote Neon instance has the necessary schemas/migrations.

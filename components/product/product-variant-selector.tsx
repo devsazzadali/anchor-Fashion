@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { ProductActions } from "./product-actions";
 import { cn, formatCurrency } from "@/lib/utils";
+import { priceWithVat } from "@/lib/utils/vat";
 import { Check, AlertCircle, Zap, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { SizeGuideModal } from "./size-guide-modal";
@@ -68,6 +69,8 @@ export interface ProductVariantSelectorProps {
   productName?: string;
   productPrice?: number;
   productSalePrice?: number | null;
+  /** Per-product VAT % — displayed prices include VAT (added on top). */
+  productVatPercent?: number;
   productSku?: string;
   productImages?: string[];
   productMedia?: ProductMediaItem[];
@@ -258,6 +261,7 @@ export function ProductVariantSelector({
   productName = "Product",
   productPrice = 0,
   productSalePrice = null,
+  productVatPercent = 0,
   productSku = "",
   productImages = [],
   productMedia = [],
@@ -513,21 +517,32 @@ export function ProductVariantSelector({
       ? "Please select all required product options before adding to cart."
       : null;
 
+  // Displayed prices are VAT-inclusive (VAT added on top of the selling
+  // price). effectivePrice/compareAtPrice themselves stay pre-VAT — they feed
+  // variant-change callbacks and cart actions whose totals the server
+  // recomputes with the same VAT rule.
+  const displayEffectivePrice = priceWithVat(effectivePrice, productVatPercent);
+  const displayCompareAtPrice =
+    compareAtPrice != null ? priceWithVat(compareAtPrice, productVatPercent) : null;
+
   return (
     <div className="space-y-6">
       {/* Price & SKU Bar */}
       <div className="flex flex-wrap items-baseline justify-between gap-4 border-b border-gray-100 pb-4">
         <div className="flex flex-wrap items-baseline gap-3">
           <span className="text-3xl font-semibold tracking-tight text-gray-950 font-sans">
-            {formatCurrency(effectivePrice)}
+            {formatCurrency(displayEffectivePrice)}
           </span>
-          {compareAtPrice && compareAtPrice > effectivePrice && (
+          {productVatPercent > 0 && (
+            <span className="text-xs text-gray-400">incl. VAT</span>
+          )}
+          {displayCompareAtPrice && displayCompareAtPrice > displayEffectivePrice && (
             <>
               <span className="text-lg text-gray-400 line-through">
-                {formatCurrency(compareAtPrice)}
+                {formatCurrency(displayCompareAtPrice)}
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/70 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                Save {formatCurrency(compareAtPrice - effectivePrice)} ({Math.round(((compareAtPrice - effectivePrice) / compareAtPrice) * 100)}% OFF)
+                Save {formatCurrency(displayCompareAtPrice - displayEffectivePrice)} ({Math.round(((displayCompareAtPrice - displayEffectivePrice) / displayCompareAtPrice) * 100)}% OFF)
               </span>
             </>
           )}

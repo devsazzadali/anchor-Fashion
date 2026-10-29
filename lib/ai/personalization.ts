@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { db } from "@/lib/db/client";
 import { PersonalizationContext } from "./types";
 
 export class AIPersonalizationEngine {
@@ -7,7 +7,7 @@ export class AIPersonalizationEngine {
    * If it doesn't exist, returns a default empty context.
    */
   static async getContext(userId: string): Promise<PersonalizationContext> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("ai_user_context_vectors")
       .select(
         "explicit_preferences, implicit_preferences, risk_score, lifetime_value_predicted"
@@ -46,7 +46,7 @@ export class AIPersonalizationEngine {
     const context = await this.getContext(userId);
     const merged = { ...context.implicitPreferences, ...newPreferences };
 
-    await supabase.from("ai_user_context_vectors").upsert({
+    await db.from("ai_user_context_vectors").upsert({
       user_id: userId,
       implicit_preferences: merged,
       last_computed_at: new Date().toISOString(),

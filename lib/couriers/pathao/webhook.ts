@@ -21,14 +21,26 @@ export async function handlePathaoWebhook(
 ): Promise<WebhookResult> {
   const data = payload as PathaoWebhookPayload;
 
-  // If secret configured, verify signature header
-  if (webhookSecret && headers) {
-    const signature =
-      headers["x-pathao-signature"] ||
-      headers["x-signature"] ||
-      headers["authorization"];
-    if (signature && typeof signature === "string" && signature.includes(webhookSecret)) {
-      // Authenticated
+  // If a secret is configured, the signature header must match it
+  // exactly (raw value or "Bearer <secret>"). The previous check used a
+  // substring `includes` and — worse — fell through and processed the
+  // webhook even when verification failed.
+  if (webhookSecret) {
+    const raw =
+      headers?.["x-pathao-signature"] ||
+      headers?.["x-signature"] ||
+      headers?.["authorization"];
+    const signature = Array.isArray(raw) ? raw[0] : raw;
+    const ok =
+      typeof signature === "string" &&
+      (signature === webhookSecret || signature === `Bearer ${webhookSecret}`);
+    if (!ok) {
+      return {
+        success: false,
+        handled: false,
+        message: "Invalid Pathao webhook signature",
+        rawPayload: payload,
+      };
     }
   }
 

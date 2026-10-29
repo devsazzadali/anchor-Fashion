@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 import { prisma } from "@/lib/prisma";
 import path from "path";
@@ -134,7 +134,7 @@ export async function uploadImageAction(formData: FormData): Promise<{
 }
 
 /**
- * Delete image from Supabase Storage and remove metadata from Neon PostgreSQL
+ * Delete image from media storage and remove metadata from Neon PostgreSQL
  */
 export async function deleteImageAction(
   storagePath: string,
@@ -155,8 +155,8 @@ export async function deleteImageAction(
       return { success: false, error: "Invalid storage path" };
     }
 
-    const supabase = createAdminClient();
-    await supabase.storage.from(bucket).remove([storagePath]);
+    const db = createAdminDbClient();
+    await db.storage.from(bucket).remove([storagePath]);
 
     await prisma.media.deleteMany({
       where: { storagePath },

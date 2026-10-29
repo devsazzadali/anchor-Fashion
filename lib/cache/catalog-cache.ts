@@ -185,7 +185,7 @@ export const getCachedHeroSlides = unstable_cache(
  * Cached Featured Promo Banner Fetcher
  */
 export const getCachedFeaturedPromoBanner = unstable_cache(
-  async (): Promise<FeaturedPromoBannerData> => getFeaturedPromoBanner(),
+  async (): Promise<FeaturedPromoBannerData | null> => getFeaturedPromoBanner(),
   ["homepage-featured-promo-banner"],
   {
     tags: [CACHE_TAGS.HOMEPAGE, CACHE_TAGS.CATALOG],

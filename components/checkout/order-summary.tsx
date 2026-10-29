@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, ShieldCheck } from "lucide-react";
 import { applyCouponAction, removeCouponAction } from "@/actions/checkout.actions";
 import { useToast } from "@/hooks/use-toast";
+import { totalVatAmount } from "@/lib/utils/vat";
 
 export function OrderSummary() {
   const { cart } = useCartStore();
@@ -37,7 +38,23 @@ export function OrderSummary() {
   const shippingMethod = formData.shipping?.shipping_method;
   const shippingFee =
     subtotal > 0 ? (shippingMethod === "home_delivery_outside" ? 150 : 100) : 0;
-  const tax = Math.max(0, subtotal * 0.15); // 15% VAT
+  // Real per-product VAT (each product's vat_percent, added on top of its
+  // selling price) — identical to the server's OrderService.calculateSummary.
+  // (This replaces a hardcoded 15% "estimated tax" that the server never
+  // actually charged, so the displayed total now matches the charged total.)
+  const resolveItemPrice = (item: any) =>
+    item.variant?.sale_price ||
+    item.variant?.price ||
+    item.product?.sale_price ||
+    item.product?.price ||
+    0;
+  const tax = totalVatAmount(
+    items.map((item) => ({
+      unitPrice: resolveItemPrice(item),
+      quantity: item.quantity,
+      vatPercent: (item.product as any)?.vat_percent ?? 0,
+    }))
+  );
   const discount = appliedCoupon ? appliedCoupon.discount : 0;
   const total = Math.max(0, subtotal + shippingFee + tax - discount);
 
@@ -174,7 +191,7 @@ export function OrderSummary() {
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">Estimated Tax (15%)</span>
+          <span className="text-slate-500">VAT</span>
           <span className="font-medium">{formatCurrency(tax)}</span>
         </div>
         {discount > 0 && (

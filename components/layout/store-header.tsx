@@ -62,368 +62,6 @@ interface NavLinkItem {
   };
 }
 
-const CATEGORY_EDITORIAL_CONFIG: Record<
-  string,
-  {
-    leftCard: Omit<MegaMenuCard, "href"> & { href?: string };
-    rightCards: Array<Omit<MegaMenuCard, "href"> & { href?: string }>;
-    curatedColumns?: MegaMenuColumn[];
-  }
-> = {
-  panjabi: {
-    leftCard: {
-      tag: "FEATURED",
-      title: "Festive Panjabi",
-      subtitle: "Royal Silks & Dobby",
-      src: "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=1000&q=80",
-      alt: "Festive Panjabi Collection",
-      ctaText: "Shop Collection",
-    },
-    curatedColumns: [
-      {
-        title: "OCCASION & STYLE",
-        links: [
-          { label: "Festive & Eid Edit", href: "/categories/panjabi?occasion=festive" },
-          { label: "Royal Wedding Special", href: "/categories/panjabi?occasion=wedding" },
-          { label: "Casual Ethnic Wear", href: "/categories/panjabi?occasion=casual" },
-          { label: "Handcrafted Embroidery", href: "/categories/panjabi?style=embroidered" },
-          { label: "Father & Son Combo", href: "/categories/panjabi?collection=combo" },
-        ],
-      },
-      {
-        title: "FABRICS & WEAVES",
-        links: [
-          { label: "100% Luxury Cotton", href: "/categories/panjabi?fabric=cotton" },
-          { label: "Pure Silk & Jacquard", href: "/categories/panjabi?fabric=silk" },
-          { label: "Festive Linen Panjabi", href: "/categories/panjabi?fabric=linen" },
-          { label: "Viscose & Modal Touch", href: "/categories/panjabi?fabric=modal" },
-          { label: "Dobby & Texture Weave", href: "/categories/panjabi?fabric=dobby" },
-        ],
-      },
-      {
-        title: "DISCOVER MORE",
-        links: [
-          { label: "New Arrivals", href: "/categories/panjabi?sort=newest" },
-          { label: "Best Sellers", href: "/categories/panjabi?sort=bestselling" },
-          { label: "Matching Pajamas", href: "/categories/bottom" },
-          { label: "Festive Waistcoats", href: "/categories/outerwear" },
-          { label: "Panjabi Size Guide", href: "/size-guide" },
-        ],
-      },
-    ],
-    rightCards: [
-      {
-        tag: "SIGNATURE",
-        title: "Royal Silk & Jacquard",
-        src: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=1000&q=80",
-        alt: "Royal Silk Panjabi",
-        href: "/categories/premium-panjabi",
-        ctaText: "Explore",
-      },
-      {
-        tag: "HANDCRAFTED",
-        title: "Premium Kabli Suits",
-        src: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=1000&q=80",
-        alt: "Premium Kabli Suit",
-        href: "/categories/kabli-set",
-        ctaText: "View All",
-      },
-    ],
-  },
-  shirt: {
-    leftCard: {
-      tag: "EDITORIAL",
-      title: "Executive Shirts",
-      subtitle: "Sharp Tailoring & Comfort",
-      src: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=1000&q=80",
-      alt: "Executive Shirts",
-      ctaText: "Shop Shirts",
-    },
-    curatedColumns: [
-      {
-        title: "PATTERNS & STYLES",
-        links: [
-          { label: "Classic Solid Colors", href: "/categories/shirt?pattern=solid" },
-          { label: "Business Oxford Stripes", href: "/categories/shirt?pattern=stripe" },
-          { label: "Smart Windowpane Checks", href: "/categories/shirt?pattern=check" },
-          { label: "Resort Cuban Collar", href: "/categories/shirt?style=cuban" },
-          { label: "Micro Print Casual", href: "/categories/shirt?pattern=micro-print" },
-        ],
-      },
-      {
-        title: "FABRICS & TECH",
-        links: [
-          { label: "Non-Iron Wrinkle Free", href: "/categories/shirt?tech=non-iron" },
-          { label: "Pure French Linen", href: "/categories/shirt?fabric=linen" },
-          { label: "100% Giza Cotton", href: "/categories/shirt?fabric=cotton" },
-          { label: "Stretch Performance", href: "/categories/shirt?tech=stretch" },
-          { label: "Poplin & Twill Weave", href: "/categories/shirt?fabric=twill" },
-        ],
-      },
-      {
-        title: "FITS & HIGHLIGHTS",
-        links: [
-          { label: "Tailored Slim Fit", href: "/categories/shirt?fit=slim" },
-          { label: "Classic Regular Fit", href: "/categories/shirt?fit=regular" },
-          { label: "New Season Drop", href: "/categories/shirt?sort=newest" },
-          { label: "Best Selling Shirts", href: "/categories/shirt?sort=bestselling" },
-          { label: "Shirt Size Guide", href: "/size-guide" },
-        ],
-      },
-    ],
-    rightCards: [
-      {
-        tag: "NEW SEASON",
-        title: "Pure French Linen",
-        src: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=1000&q=80",
-        alt: "French Linen Shirt",
-        href: "/categories/linen-shirt",
-        ctaText: "Discover",
-      },
-      {
-        tag: "WORKWEAR",
-        title: "Non-Iron Business Fit",
-        src: "https://images.unsplash.com/photo-1603252109303-2751441dd157?w=1000&q=80",
-        alt: "Formal Business Shirt",
-        href: "/categories/formal-shirt",
-        ctaText: "View All",
-      },
-    ],
-  },
-  polo: {
-    leftCard: {
-      tag: "BEST SELLER",
-      title: "Premium Polo",
-      subtitle: "Sporty Luxury Everyday",
-      src: "https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=1000&q=80",
-      alt: "Premium Polo Collection",
-      ctaText: "Shop Polos",
-    },
-    curatedColumns: [
-      {
-        title: "COLLARS & FITS",
-        links: [
-          { label: "Classic Rib Collar", href: "/categories/polo?collar=rib" },
-          { label: "Mandarin & Zipper Polo", href: "/categories/polo?collar=zipper" },
-          { label: "Tipped Contrast Collar", href: "/categories/polo?collar=tipped" },
-          { label: "Drop Shoulder Loose Fit", href: "/categories/drop-shoulder-polo" },
-          { label: "Tailored Slim Fit", href: "/categories/polo?fit=slim" },
-        ],
-      },
-      {
-        title: "FABRICS & TEXTURES",
-        links: [
-          { label: "Mercerized Cotton Knit", href: "/categories/polo?fabric=mercerized" },
-          { label: "Honeycomb Piqué Knit", href: "/categories/polo?fabric=pique" },
-          { label: "Textured Waffle Polo", href: "/categories/polo?fabric=waffle" },
-          { label: "Breathable Cotton Blend", href: "/categories/polo?fabric=blend" },
-        ],
-      },
-      {
-        title: "CURATED PICKS",
-        links: [
-          { label: "New Arrivals", href: "/categories/polo?sort=newest" },
-          { label: "Iconic Best Sellers", href: "/categories/polo?sort=bestselling" },
-          { label: "Solid Color Essentials", href: "/categories/polo?pattern=solid" },
-          { label: "Polo Size Guide", href: "/size-guide" },
-        ],
-      },
-    ],
-    rightCards: [
-      {
-        tag: "TRENDING",
-        title: "Drop Shoulder Street Polo",
-        src: "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=1000&q=80",
-        alt: "Drop Shoulder Polo",
-        href: "/categories/drop-shoulder-polo",
-        ctaText: "Explore",
-      },
-      {
-        tag: "LUXURY KNIT",
-        title: "Mercerized Luxury Knits",
-        src: "https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=1000&q=80",
-        alt: "Mercerized Polo",
-        href: "/categories/premium-polo",
-        ctaText: "View All",
-      },
-    ],
-  },
-  "t-shirt": {
-    leftCard: {
-      tag: "ESSENTIAL",
-      title: "Heavyweight Tees",
-      subtitle: "Pure Minimalist Comfort",
-      src: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1000&q=80",
-      alt: "T-Shirt Collection",
-      ctaText: "Shop T-Shirts",
-    },
-    curatedColumns: [
-      {
-        title: "SILHOUETTES & CUTS",
-        links: [
-          { label: "Oversized Boxy Cut", href: "/categories/oversized-t-shirt" },
-          { label: "Classic Crew Neck", href: "/categories/t-shirt?neck=crew" },
-          { label: "Modern V-Neck", href: "/categories/t-shirt?neck=vneck" },
-          { label: "Full Sleeve T-Shirts", href: "/categories/t-shirt?sleeve=full" },
-          { label: "Pocket Tee Editions", href: "/categories/t-shirt?style=pocket" },
-        ],
-      },
-      {
-        title: "FABRICS & WEIGHTS",
-        links: [
-          { label: "Heavyweight 240+ GSM", href: "/categories/t-shirt?gsm=heavy" },
-          { label: "100% Organic Combed Cotton", href: "/categories/t-shirt?fabric=organic" },
-          { label: "Ultra-Soft Supima", href: "/categories/t-shirt?fabric=supima" },
-          { label: "Summer Featherweight", href: "/categories/t-shirt?gsm=light" },
-        ],
-      },
-      {
-        title: "DISCOVER",
-        links: [
-          { label: "Graphic Print Drops", href: "/categories/printed-t-shirt" },
-          { label: "Minimalist Solid Packs", href: "/categories/basic-t-shirt" },
-          { label: "New In T-Shirts", href: "/categories/t-shirt?sort=newest" },
-          { label: "Best Sellers", href: "/categories/t-shirt?sort=bestselling" },
-          { label: "T-Shirt Size Guide", href: "/size-guide" },
-        ],
-      },
-    ],
-    rightCards: [
-      {
-        tag: "STREETWEAR",
-        title: "Oversized & Graphic Drops",
-        src: "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=1000&q=80",
-        alt: "Oversized Graphic T-Shirt",
-        href: "/categories/oversized-t-shirt",
-        ctaText: "Explore",
-      },
-      {
-        tag: "DAILY ESSENTIAL",
-        title: "240 GSM Heavyweights",
-        src: "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=1000&q=80",
-        alt: "Heavyweight Cotton T-Shirt",
-        href: "/categories/premium-t-shirt",
-        ctaText: "View All",
-      },
-    ],
-  },
-  bottom: {
-    leftCard: {
-      tag: "TAILORED",
-      title: "Denim & Trousers",
-      subtitle: "Perfect Fit & Motion",
-      src: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=1000&q=80",
-      alt: "Bottoms Collection",
-      ctaText: "Shop Bottoms",
-    },
-    curatedColumns: [
-      {
-        title: "DENIM FITS & WASHES",
-        links: [
-          { label: "Slim Tapered Denim", href: "/categories/denim?fit=slim" },
-          { label: "Classic Straight Leg", href: "/categories/denim?fit=straight" },
-          { label: "Raw Deep Indigo", href: "/categories/denim?wash=indigo" },
-          { label: "Vintage Blue Wash", href: "/categories/denim?wash=vintage" },
-          { label: "Stretch Motion Denim", href: "/categories/denim?tech=stretch" },
-        ],
-      },
-      {
-        title: "CHINOS & TROUSERS",
-        links: [
-          { label: "4-Way Stretch Chinos", href: "/categories/chino?tech=stretch" },
-          { label: "Pleated Dress Trousers", href: "/categories/formal-trouser?style=pleated" },
-          { label: "Easy Care Office Pants", href: "/categories/formal-trouser?tech=easycare" },
-          { label: "Multi-Pocket Utility Cargo", href: "/categories/cargo" },
-          { label: "Casual Cotton Drawstring", href: "/categories/casual-trouser" },
-        ],
-      },
-      {
-        title: "HIGHLIGHTS",
-        links: [
-          { label: "New Arrivals", href: "/categories/bottom?sort=newest" },
-          { label: "Top Rated Trousers", href: "/categories/bottom?sort=bestselling" },
-          { label: "Trouser Size & Fit Guide", href: "/size-guide" },
-        ],
-      },
-    ],
-    rightCards: [
-      {
-        tag: "DENIM LAB",
-        title: "Japanese Selvedge Denim",
-        src: "https://images.unsplash.com/photo-1582552938357-32b906df40cb?w=1000&q=80",
-        alt: "Premium Denim Jeans",
-        href: "/categories/denim",
-        ctaText: "Explore",
-      },
-      {
-        tag: "COMFORT TECH",
-        title: "4-Way Stretch Chinos",
-        src: "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=1000&q=80",
-        alt: "Stretch Chino Pants",
-        href: "/categories/chino",
-        ctaText: "View All",
-      },
-    ],
-  },
-  outerwear: {
-    leftCard: {
-      tag: "SIGNATURE",
-      title: "Jackets & Blazers",
-      subtitle: "Refined Layering Pieces",
-      src: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=1000&q=80",
-      alt: "Outerwear Collection",
-      ctaText: "Shop Outerwear",
-    },
-    curatedColumns: [
-      {
-        title: "MATERIALS & FABRICS",
-        links: [
-          { label: "Heavy Cotton Twill", href: "/categories/outerwear?material=twill" },
-          { label: "Denim Trucker Jackets", href: "/categories/outerwear?material=denim" },
-          { label: "Suede Touch Overshirts", href: "/categories/outerwear?material=suede" },
-          { label: "Weather-Resistant Shell", href: "/categories/lightweight-jacket" },
-          { label: "Raw Silk Waistcoats", href: "/categories/waistcoat" },
-        ],
-      },
-      {
-        title: "OCCASIONS",
-        links: [
-          { label: "Smart Casual Layering", href: "/categories/outerwear?style=smart-casual" },
-          { label: "Festive Wedding Waistcoat", href: "/categories/waistcoat" },
-          { label: "Weekend Windbreakers", href: "/categories/lightweight-jacket" },
-          { label: "Casual Tailored Blazer", href: "/categories/casual-blazer" },
-        ],
-      },
-      {
-        title: "CURATED PICKS",
-        links: [
-          { label: "New In Outerwear", href: "/categories/outerwear?sort=newest" },
-          { label: "Best Selling Jackets", href: "/categories/outerwear?sort=bestselling" },
-          { label: "Outerwear Size Guide", href: "/size-guide" },
-        ],
-      },
-    ],
-    rightCards: [
-      {
-        tag: "MODERN LAYER",
-        title: "Utilitarian Overshirts",
-        src: "https://images.unsplash.com/photo-1544441893-675973e31985?w=1000&q=80",
-        alt: "Utilitarian Overshirt",
-        href: "/categories/overshirt",
-        ctaText: "Explore",
-      },
-      {
-        tag: "TRADITIONAL",
-        title: "Festive Waistcoats",
-        src: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=1000&q=80",
-        alt: "Embroidered Waistcoat",
-        href: "/categories/waistcoat",
-        ctaText: "View All",
-      },
-    ],
-  },
-};
-
 function NavItem({
   link,
   setActiveMenu,
@@ -730,22 +368,18 @@ export function StoreHeader({
       )
       .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
 
-    // Fallback if no categories are configured yet
+    // Fallback if no categories are configured yet: utility links only.
+    // (Phase 9: no fabricated category names — the nav is DB-driven.)
     if (topLevelCategories.length === 0) {
       return [
+        { label: "ALL PRODUCTS", href: "/products" },
         { label: "NEW ARRIVALS", href: "/products?sort=newest" },
-        { label: "MEN", href: "/categories/men" },
-        { label: "WOMEN", href: "/categories/women" },
-        { label: "KIDS", href: "/categories/kids" },
-        { label: "ACCESSORIES", href: "/categories/accessories" },
       ];
     }
 
     const links: NavLinkItem[] = [];
 
     topLevelCategories.forEach((topCat) => {
-      const slugKey = topCat.slug.toLowerCase();
-      const editorial = CATEGORY_EDITORIAL_CONFIG[slugKey];
       const children = categories.filter(
         (c) => c.parent_id === topCat.id && c.is_active !== false
       );
@@ -809,58 +443,35 @@ export function StoreHeader({
         });
       }
 
-      // Add curated editorial columns (Occasions, Fabrics, Styling, etc.)
-      if (editorial?.curatedColumns) {
-        editorial.curatedColumns.forEach((cCol) => {
-          columns.push(cCol);
-        });
-      }
+      // Phase 9: mega-menu cards are derived ONLY from the category tree in
+      // the database (admin-managed). The previous hardcoded per-slug
+      // "editorial" config (Unsplash stock photos + links to categories that
+      // may not exist) was removed — no hardcode rule.
+      const leftCard: MegaMenuCard | undefined = topCat.image_url
+        ? {
+            tag: "FEATURED",
+            title: topCat.name,
+            subtitle: "Explore the collection",
+            src: topCat.image_url,
+            alt: topCat.name,
+            href: `/categories/${topCat.slug}`,
+            ctaText: "Shop Collection",
+          }
+        : undefined;
 
-      // Construct left and right lifestyle cards
-      const leftCard: MegaMenuCard = {
-        tag: editorial?.leftCard?.tag || "FEATURED",
-        title: editorial?.leftCard?.title || topCat.name,
-        subtitle: editorial?.leftCard?.subtitle || "Premium Collection",
-        src:
-          editorial?.leftCard?.src ||
-          topCat.image_url ||
-          "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1000&q=80",
-        alt: editorial?.leftCard?.alt || topCat.name,
-        href: editorial?.leftCard?.href || `/categories/${topCat.slug}`,
-        ctaText: editorial?.leftCard?.ctaText || "Shop Collection",
-      };
-
-      const rightCards: MegaMenuCard[] = editorial?.rightCards
-        ? editorial.rightCards.map((rc) => ({
-            tag: rc.tag,
-            title: rc.title,
-            src: rc.src,
-            alt: rc.alt,
-            href: rc.href || `/categories/${topCat.slug}`,
-            ctaText: rc.ctaText,
-          }))
-        : [
-            {
-              tag: "TRENDING",
-              title: `New Season ${topCat.name}`,
-              src:
-                topCat.image_url ||
-                "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1000&q=80",
-              alt: topCat.name,
-              href: `/categories/${topCat.slug}?sort=newest`,
-              ctaText: "Explore",
-            },
-            {
-              tag: "LOOKBOOK",
-              title: `Signature ${topCat.name}`,
-              src:
-                topCat.image_url ||
-                "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1000&q=80",
-              alt: topCat.name,
-              href: `/categories/${topCat.slug}?sort=bestselling`,
-              ctaText: "View All",
-            },
-          ];
+      // Right cards spotlight up to two child categories that have their own
+      // admin-uploaded image.
+      const rightCards: MegaMenuCard[] = children
+        .filter((c) => !!c.image_url)
+        .slice(0, 2)
+        .map((c) => ({
+          tag: "EXPLORE",
+          title: c.name,
+          src: c.image_url as string,
+          alt: c.name,
+          href: `/categories/${c.slug}`,
+          ctaText: "Explore",
+        }));
 
       links.push({
         label: topCat.name.toUpperCase(),

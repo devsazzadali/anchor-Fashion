@@ -13,7 +13,7 @@ import {
   invalidateCollectionCache,
 } from "@/lib/cache/invalidate-catalog";
 import { LoyaltyService } from "@/services/loyalty.service";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminDbClient } from "@/lib/db/client";
 
 const IdSchema = z.object({ id: z.string().uuid() });
 
@@ -146,18 +146,19 @@ export const approveReviewAction = createAdminAction(
   async ({ id }) => {
     await ReviewRepository.approveReview(id);
     
-    // Fetch review to get the customer id
-    const supabase = createAdminClient();
-    const { data: review } = await supabase
-      .from("customer_reviews")
-      .select("customer_id")
+    // Fetch review to get the author id (reviews live in `reviews`; the old
+    // `customer_reviews` table does not exist, so the points never issued)
+    const db = createAdminDbClient();
+    const { data: review } = await db
+      .from("reviews")
+      .select("user_id")
       .eq("id", id)
       .single();
-      
-    if (review?.customer_id) {
+
+    if (review?.user_id) {
       try {
         await LoyaltyService.earnPoints({
-          userId: review.customer_id,
+          userId: review.user_id,
           points: 50,
           referenceType: 'REVIEW',
           referenceId: id,

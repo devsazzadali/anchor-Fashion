@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { subscribeNewsletterAction } from "@/lib/actions/newsletter.actions";
 
 const newsletterSchema = z.object({
   email: z.string().trim().email("Please enter a valid email address"),
@@ -27,10 +28,15 @@ export function NewsletterSection() {
   });
 
   const onSubmit = async (values: NewsletterFormValues) => {
-    // Simulate brief network delay for UX
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    const res = await subscribeNewsletterAction(values.email);
+    if (!res.success) {
+      toast.error(res.error || "Could not complete your subscription.");
+      return;
+    }
     toast.success(
-      `You're on the list! 🎉 Check ${values.email} for your 10% off code.`
+      res.alreadySubscribed
+        ? "You're already on the list — welcome back!"
+        : "You're on the list! Member offers and new arrivals will land in your inbox."
     );
     reset();
   };
@@ -61,12 +67,12 @@ export function NewsletterSection() {
             Be The First to Know.
           </h2>
           <p className="mb-10 text-sm font-light leading-relaxed text-gray-500">
-            Subscribe and unlock{" "}
+            Subscribe for{" "}
             <strong className="font-medium text-[#1A1A1A]">
-              10% off your first order
+              early access to new arrivals
             </strong>
-            . Get early access to new arrivals, exclusive offers, and style
-            inspiration — straight to your inbox.
+            , exclusive member offers, and style inspiration — straight to
+            your inbox.
           </p>
 
           {/* Form */}

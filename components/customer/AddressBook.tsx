@@ -5,6 +5,7 @@ import { CustomerAddress } from "@/types/customer.types";
 import {
   createAddressAction,
   deleteAddressAction,
+  updateAddressAction,
 } from "@/app/actions/customer.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ interface AddressBookProps {
 
 export function AddressBook({ addresses }: AddressBookProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomerAddress | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const {
@@ -94,14 +96,38 @@ export function AddressBook({ addresses }: AddressBookProps) {
 
     startTransition(async () => {
       try {
-        await createAddressAction(formData);
-        toast.success("Address added successfully");
+        if (editing) {
+          await updateAddressAction(editing.id, formData);
+          toast.success("Address updated successfully");
+        } else {
+          await createAddressAction(formData);
+          toast.success("Address added successfully");
+        }
+        setEditing(null);
         reset();
         setIsOpen(false);
       } catch (error: any) {
-        toast.error(error.message || "Failed to add address");
+        toast.error(error.message || "Failed to save address");
       }
     });
+  };
+
+  const startEdit = (address: CustomerAddress) => {
+    setEditing(address);
+    reset({
+      first_name: address.first_name || "",
+      last_name: address.last_name || "",
+      phone: address.phone || "",
+      address_line_1: address.address_line_1 || "",
+      address_line_2: address.address_line_2 || "",
+      city: address.city || "",
+      state: address.state || "",
+      zip: address.zip || "",
+      country: address.country || "BD",
+      is_default_shipping: !!address.is_default_shipping,
+      is_default_billing: !!address.is_default_billing,
+    });
+    setIsOpen(true);
   };
 
   const handleDelete = (id: string) => {
@@ -123,13 +149,27 @@ export function AddressBook({ addresses }: AddressBookProps) {
           open={isOpen}
           onOpenChange={(val) => {
             setIsOpen(val);
-            if (!val) reset();
+            if (!val) {
+              setEditing(null);
+              reset();
+            }
           }}
         >
-          <DialogTrigger render={<Button />}>Add New Address</DialogTrigger>
+          <DialogTrigger
+            render={
+              <Button
+                onClick={() => {
+                  setEditing(null);
+                  reset();
+                }}
+              />
+            }
+          >
+            Add New Address
+          </DialogTrigger>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add Address</DialogTitle>
+              <DialogTitle>{editing ? "Edit Address" : "Add Address"}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit(onSubmit)} className="mt-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -316,7 +356,11 @@ export function AddressBook({ addresses }: AddressBookProps) {
                 <p>{address.country}</p>
               </CardContent>
               <CardFooter className="justify-end gap-2 pt-0">
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => startEdit(address)}
+                >
                   Edit
                 </Button>
                 <Button

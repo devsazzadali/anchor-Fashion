@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { invalidateProductCache } from "@/lib/cache/invalidate-catalog";
 
 import { generateEAN13Sync } from "@/lib/utils/barcode";
+import { verifyStaff } from "@/lib/security/roles";
 import { generateUniqueProductCode, formatVariantSku } from "@/lib/utils/product-code";
 
 export async function generateEAN13BarcodeAction(prefix = "89420"): Promise<string> {
@@ -16,6 +17,8 @@ export async function generateProductCodeAction(params: {
   categoryNameOrId?: string;
   brandPrefix?: string;
 }): Promise<string> {
+  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyStaff();
   let categoryNameOrSlug = params.categoryNameOrId;
   if (params.categoryNameOrId && params.categoryNameOrId.length > 20) {
     try {
@@ -44,6 +47,8 @@ export interface InventoryMasterIntakeInput {
   categoryId: string;
   basePrice: number;
   costPrice: number;
+  /** Per-product VAT % — charged on top of the selling price (default 0). */
+  vatPercent?: number;
   totalQuantity: number;
   colorVariants: ColorSizeMatrixItem[];
   publishImmediately?: boolean;
@@ -90,11 +95,14 @@ async function ensureDefaultWarehouseId(preferredId?: string): Promise<string> {
  */
 export async function createInventoryMasterIntakeAction(input: InventoryMasterIntakeInput) {
   try {
+  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyStaff();
     const {
       name,
       categoryId,
       basePrice,
       costPrice,
+      vatPercent = 0,
       colorVariants,
       publishImmediately = false,
       warehouseId,
@@ -127,7 +135,12 @@ export async function createInventoryMasterIntakeAction(input: InventoryMasterIn
     const baseSku = input.skuPrefix?.trim() || (await generateUniqueProductCode(name, category?.name || category?.slug));
     const baseBarcode = input.barcodeBase?.trim() || generateEAN13Sync();
 
-    const status = publishImmediately ? "ACTIVE" : "DRAFT";
+    // INVENTORY-FIRST LAW (owner): intake always lands as DRAFT. A product goes
+    // live only through the Add Product publish flow (ProductForm), never
+    // directly from intake. `publishImmediately` is still accepted for API
+    // compatibility but no longer activates the product — the intake dialog
+    // routes the user into the publish flow instead.
+    const status = "DRAFT";
 
     // Pre-calculate all variant plans in memory before DB transaction
     interface PreparedVariant {
@@ -165,6 +178,7 @@ export async function createInventoryMasterIntakeAction(input: InventoryMasterIn
         slug,
         basePrice,
         costPrice,
+        vatPercent: Math.max(0, Number(vatPercent) || 0),
         sku: baseSku,
         barcode: baseBarcode,
         status,
@@ -287,7 +301,9 @@ export async function getInventoryMasterListAction(params?: {
   page?: number;
 }) {
   try {
-    const search = params?.search?.trim() || "";
+    const search = params?.search?.trim() || "";  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyStaff();
+
     const status = params?.status || "ALL";
     const categoryId = params?.categoryId;
     const limit = params?.limit || 50;
@@ -483,6 +499,7 @@ export async function getInventoryMasterListAction(params?: {
           : [],
         basePrice: sellingPrice,
         costPrice,
+        vatPercent: Number(p.vatPercent || 0),
         unitProfit,
         profitMarginPercent: Math.round(profitMarginPercent * 10) / 10,
         totalAvailable,
@@ -547,7 +564,9 @@ export async function dispatchToBranchAction(input: {
   dispatchedBy?: string;
 }) {
   try {
-    const { sourceWarehouseId, destinationBranchId, variantId, quantity, notes, dispatchedBy } = input;
+    const { sourceWarehouseId, destinationBranchId, variantId, quantity, notes, dispatchedBy } = input;  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyStaff();
+
 
     if (!sourceWarehouseId) throw new Error("Source warehouse is required.");
     if (!destinationBranchId) throw new Error("Destination branch is required.");
@@ -694,7 +713,9 @@ export async function getBranchTransfersReportAction(params?: {
   limit?: number;
 }) {
   try {
-    const limit = params?.limit || 100;
+    const limit = params?.limit || 100;  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyStaff();
+
     const branchWhere = params?.branchId ? { destinationBranchId: params.branchId } : undefined;
 
     const [transfers, allBranches] = await Promise.all([
@@ -813,6 +834,8 @@ export async function getBranchTransfersReportAction(params?: {
  */
 export async function getInventoryFinancialReportAction() {
   try {
+  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyStaff();
     const [products, inventoryLevels, branchTransfers, orderItems] = await Promise.all([
       prisma.product.findMany({
         where: { deletedAt: null },
@@ -1008,6 +1031,8 @@ export async function getInventoryFinancialReportAction() {
  */
 export async function toggleProductPublishStatusAction(productId: string) {
   try {
+  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyStaff();
     const product = await prisma.product.findUnique({
       where: { id: productId },
       select: { id: true, status: true, slug: true, name: true },

@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { db } from "@/lib/db/client";
 import { AIPrompt } from "./types";
 
 export class PromptEngine {
@@ -6,7 +6,7 @@ export class PromptEngine {
    * Fetches an active prompt by its name from the registry
    */
   static async getPrompt(name: string): Promise<AIPrompt> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("ai_prompts")
       .select("*")
       .eq("name", name)

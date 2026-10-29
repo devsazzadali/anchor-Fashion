@@ -4,12 +4,12 @@
 The Anchor Fashion Enterprise platform has undergone a massive, multi-phase technical audit covering Architecture, Dead Code Elimination, Routing, Database, Security, Performance, and Documentation. The application is highly modular, secure, and utilizes the Next.js App Router paradigm effectively. All identified production blockers (such as missing security headers and duplicate routes) have been resolved. The system is certified ready for production.
 
 ## 2. Architecture Summary
-- **Paradigm**: Next.js 16 (App Router) + Supabase + Tailwind CSS.
-- **Pattern**: Domain-Driven Design (DDD) with clear boundaries (Features -> Components -> Actions -> Services -> Repositories -> Supabase).
+- **Paradigm**: Next.js 16 (App Router) + Neon + Tailwind CSS.
+- **Pattern**: Domain-Driven Design (DDD) with clear boundaries (Features -> Components -> Actions -> Services -> Repositories -> Neon).
 - **Health**: **95/100**. Modular, highly cohesive, and cleanly structured.
 
 ## 3. Repository & Database Summary
-- **Database**: Supabase PostgreSQL. RLS enabled on all critical tables.
+- **Database**: Neon PostgreSQL. RLS enabled on all critical tables.
 - **Data Access**: Extensively abstracted behind the Repository layer. 
 - **Health**: **92/100**.
 
@@ -36,7 +36,7 @@ The Anchor Fashion Enterprise platform has undergone a massive, multi-phase tech
 - **Build Status**: **PASS** (Zero Route/Hydration errors)
 
 ## 9. Technical Debt & Optimization Summary
-- **Technical Debt**: Minor instances of UI-to-Database coupling using `createClient()` inline. Can be refactored in a minor post-launch sprint.
+- **Technical Debt**: Minor instances of UI-to-Database coupling using `createDbClient()` inline. Can be refactored in a minor post-launch sprint.
 - **Optimizations**: Future inclusion of `next/dynamic` for heavy dashboard charts and Vercel Edge caching rules on public catalogs.
 
 ## 10. Production Risks

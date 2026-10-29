@@ -36,9 +36,10 @@ export async function addToWishlistAction(
 
 export async function removeFromWishlistAction(itemId: string) {
   try {
-    // Ideally we should check if the item belongs to the user, but the repo deletes by item ID.
-    await getUserId();
-    await WishlistService.removeItem(itemId);
+    // Ownership-scoped: the delete only applies to items in the caller's
+    // own wishlist.
+    const userId = await getUserId();
+    await WishlistService.removeItem(userId, itemId);
     revalidatePath("/account/wishlist");
     return { success: true };
   } catch (error: any) {

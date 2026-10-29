@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, ReactNode } from "react";
+import { Component, ReactNode, useEffect, useRef } from "react";
 import Barcode from "react-barcode";
 
 export interface ClientBarcodeProps {
@@ -24,6 +24,14 @@ export interface ClientBarcodeProps {
   flat?: boolean;
   renderer?: "svg" | "canvas" | "img";
   className?: string;
+  /**
+   * Fit the barcode to its container width (SVG renderer only). The rendered
+   * SVG gets a viewBox matching its natural size and is then scaled with
+   * width:100% / height:auto, preserving aspect ratio — so a wide barcode in
+   * a narrow box (e.g. a 50mm thermal sticker) shrinks cleanly instead of
+   * being clipped. Default false keeps the natural fixed-size rendering.
+   */
+  fit?: boolean;
 }
 
 interface ErrorBoundaryProps {
@@ -75,18 +83,49 @@ export function ClientBarcode({
   lineColor = "#000000",
   margin = 0,
   className,
+  fit = false,
   ...rest
 }: ClientBarcodeProps) {
   const safeValue = String(value || "000000000000").trim();
-  
+
   // EAN13 format validation: if value contains non-digits or wrong length, safely fall back to CODE128
   const isEan13 = format === "EAN13";
   const isValidEan13 = isEan13 && /^\d{12,13}$/.test(safeValue);
   const effectiveFormat = isEan13 && !isValidEan13 ? "CODE128" : format;
 
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Fit mode: after JsBarcode renders its fixed-size SVG, give it a viewBox of
+  // its natural size and let CSS scale it to the container (aspect preserved).
+  useEffect(() => {
+    if (!fit || renderer !== "svg") return;
+    const svg = wrapRef.current?.querySelector("svg");
+    if (!svg) return;
+    const naturalWidth = parseFloat(svg.getAttribute("width") || "0");
+    const naturalHeight = parseFloat(svg.getAttribute("height") || "0");
+    if (naturalWidth > 0 && naturalHeight > 0 && !svg.getAttribute("viewBox")) {
+      svg.setAttribute("viewBox", `0 0 ${naturalWidth} ${naturalHeight}`);
+      svg.removeAttribute("width");
+      svg.removeAttribute("height");
+    }
+    svg.style.width = "100%";
+    svg.style.height = "auto";
+    svg.style.display = "block";
+    svg.style.maxWidth = "100%";
+  }, [fit, renderer, safeValue, effectiveFormat, width, height, fontSize]);
+
   return (
     <BarcodeErrorBoundary fallbackValue={safeValue}>
-      <div className={className} style={{ display: "inline-block", background: background || "#ffffff" }}>
+      <div
+        ref={wrapRef}
+        className={className}
+        style={{
+          display: fit ? "block" : "inline-block",
+          width: fit ? "100%" : undefined,
+          maxWidth: "100%",
+          background: background || "#ffffff",
+        }}
+      >
         <Barcode
           value={safeValue}
           format={effectiveFormat as any}

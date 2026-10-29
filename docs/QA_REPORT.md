@@ -1,7 +1,7 @@
 # 🔍 Anchor Fashion — Full QA Report
 **Date:** October 12, 2026  
 **Auditor:** Senior QA Agent (Antigravity)  
-**Stack:** Next.js 15 · Prisma ORM · Neon PostgreSQL · Supabase Storage · Vercel  
+**Stack:** Next.js 15 · Prisma ORM · Neon PostgreSQL · Neon Storage · Vercel  
 **Scope:** Frontend · Backend API · Database · Actions · Services · Repositories
 
 ---
@@ -65,7 +65,7 @@
 **✅ Schema Verdict: EXCELLENT** — 31 models, proper relations, indexes on all FK columns.
 
 ### ⚠️ Known Schema Gap
-> `Banner` Prisma model exists but **CMS banner actions** use Supabase `cms_banners` table (not the Prisma `banners` table). This is a **dual-persistence split** — the admin CMS writes to `cms_banners` via Supabase, while `banners` is unused by the banner manager. Not a bug, but creates confusion.
+> `Banner` Prisma model exists but **CMS banner actions** use Neon `cms_banners` table (not the Prisma `banners` table). This is a **dual-persistence split** — the admin CMS writes to `cms_banners` via Neon, while `banners` is unused by the banner manager. Not a bug, but creates confusion.
 
 ---
 
@@ -115,7 +115,7 @@ All `revalidatePath()` and `revalidateTag()` calls are wrapped in `try/catch{}` 
 | `updateSeoSettings` is a no-op mock | `cms.actions.ts:914-918` | LOW |
 | `getGlobalSections` uses raw SQL on non-Prisma table `cms_sections` | `cms.repository.ts:142` | LOW |
 | `getNavigation` uses raw SQL on `cms_menus` / `cms_menu_items` (not in schema) | `cms.repository.ts:159` | LOW |
-| `getMedia` / `deleteMedia` use Supabase `cms_media` table (not Prisma) | `cms.actions.ts:88` | INFO |
+| `getMedia` / `deleteMedia` use Neon `cms_media` table (not Prisma) | `cms.actions.ts:88` | INFO |
 
 ---
 
@@ -149,7 +149,7 @@ app/api/
 
 ### ⚠️ API Notes
 - `/api/orders` has **no root `route.ts`** — only sub-routes for SMS. Order listing via Server Actions instead.
-- `/api/payment` needs webhook signature verification (Supabase events)
+- `/api/payment` needs webhook signature verification (Neon events)
 - `/api/cron` jobs should use `CRON_SECRET` environment variable for protection
 
 ---
@@ -163,7 +163,7 @@ app/api/
 | `cms.repository.ts` | Prisma + Raw SQL (hybrid) | ⚠️ Hybrid |
 | `cart.repository.ts` | Prisma only | ✅ |
 | `order.repository.ts` | Prisma only | ✅ |
-| `customer.repository.ts` | Prisma + Supabase | ⚠️ Hybrid |
+| `customer.repository.ts` | Prisma + Neon | ⚠️ Hybrid |
 | `crm.repository.ts` | Prisma | ✅ |
 | `support.repository.ts` | Prisma | ✅ |
 | `checkout.repository.ts` | Prisma | ✅ |
@@ -174,7 +174,7 @@ app/api/
 | `marketing/promotion.repository.ts` | Prisma | ✅ |
 
 ### ⚠️ Hybrid Pattern Warning
-`cms.repository.ts` uses `prisma.$queryRawUnsafe()` for tables like `cms_sections`, `cms_menus`, `cms_menu_items` that **don't exist in the Prisma schema**. These queries will fail silently (returning `[]`) if those Supabase tables don't exist.
+`cms.repository.ts` uses `prisma.$queryRawUnsafe()` for tables like `cms_sections`, `cms_menus`, `cms_menu_items` that **don't exist in the Prisma schema**. These queries will fail silently (returning `[]`) if those Neon tables don't exist.
 
 ---
 
@@ -229,7 +229,7 @@ Security headers: 7 headers configured  // HSTS, CSP, XSS, etc.
 | HTTP Security Headers | ✅ | X-Frame-Options, HSTS, XSS protection |
 | TypeScript Strict Mode | ⚠️ | Not enforced (ignoreBuildErrors) |
 | Admin Route Protection | ✅ | RBAC middleware applied |
-| Supabase RLS | ✅ | Admin client bypasses, server client uses RLS |
+| Neon RLS | ✅ | Admin client bypasses, server client uses RLS |
 | API Route Auth | ⚠️ | Some cron routes may need secret verification |
 | Input Validation | ✅ | Zod schemas in `validators/`, `schemas/` |
 | SQL Injection | ✅ | Prisma parameterized + `$queryRawUnsafe` with params |

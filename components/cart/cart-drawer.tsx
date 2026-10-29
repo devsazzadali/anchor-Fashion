@@ -16,6 +16,7 @@ import { ShoppingBag, Loader2, ArrowRight, Heart } from "lucide-react";
 import Image from "next/image";
 
 import { usePersonalizationStore } from "@/stores/use-personalization-store";
+import { totalVatAmount } from "@/lib/utils/vat";
 
 export function CartDrawer() {
   const { cart, isSheetOpen, setSheetOpen, isLoading } = useCartStore();
@@ -28,18 +29,31 @@ export function CartDrawer() {
 
   const itemCount =
     cart?.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+  const resolveItemPrice = (item: any) => {
+    const product = item.product as any;
+    return (
+      item.variant?.sale_price ||
+      item.variant?.price ||
+      product?.sale_price ||
+      product?.base_price ||
+      product?.price ||
+      0
+    );
+  };
+
   const subtotal =
     cart?.items?.reduce((sum, item) => {
-      const product = item.product as any;
-      const price =
-        item.variant?.sale_price ||
-        item.variant?.price ||
-        product?.sale_price ||
-        product?.base_price ||
-        product?.price ||
-        0;
-      return sum + price * item.quantity;
+      return sum + resolveItemPrice(item) * item.quantity;
     }, 0) || 0;
+
+  // Per-product VAT, added on top of the selling price (same rule as checkout).
+  const vatAmount = totalVatAmount(
+    (cart?.items || []).map((item) => ({
+      unitPrice: resolveItemPrice(item),
+      quantity: item.quantity,
+      vatPercent: (item.product as any)?.vat_percent ?? 0,
+    }))
+  );
 
   const FREE_SHIPPING_THRESHOLD = 999;
   const progress = Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
@@ -161,8 +175,16 @@ export function CartDrawer() {
               <span>Subtotal</span>
               <span>৳{subtotal.toLocaleString()}</span>
             </div>
+            <div className="flex items-center justify-between text-sm text-foreground">
+              <span>VAT</span>
+              <span>৳{vatAmount.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between font-semibold text-foreground">
+              <span>Total incl. VAT</span>
+              <span>৳{(subtotal + vatAmount).toLocaleString()}</span>
+            </div>
             <p className="text-xs text-gray-500">
-              Shipping & taxes calculated at checkout.
+              Shipping calculated at checkout.
             </p>
             <div className="space-y-2">
               <Button className="w-full bg-[#1A1A1A] h-12 text-xs font-bold uppercase tracking-widest text-white hover:bg-black" onClick={handleCheckout}>

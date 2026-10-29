@@ -11,7 +11,7 @@ Overall architecture adheres well to a modern layered pattern:
 
 ## Architecture Violations (To Monitor)
 1. **Business Logic / DB connections in UI Components**: 
-   Several UI components directly instantiate the Supabase client (e.g., `createClient()` inside `InAppNotificationCenter.tsx`, `logout-button.tsx`, `NotificationPreferences.tsx`). While standard in the Next.js ecosystem for certain client-side workflows, this technically bypasses the Service and Repository layers defined by strict Domain-Driven Design (DDD).
+   Several UI components directly instantiate the data-layer client (e.g., `createDbClient()` inside `InAppNotificationCenter.tsx`, `logout-button.tsx`, `NotificationPreferences.tsx`). While standard in the Next.js ecosystem for certain client-side workflows, this technically bypasses the Service and Repository layers defined by strict Domain-Driven Design (DDD).
 
 2. **Route Group Clutter**:
    The `app/` directory contained several overlapping and deprecated route groups. The dead route groups (`(store)`, `(storefront)`) and duplicate layout wrappers (`cms`, `crm`, `settings`) were pruned during this phase to strictly enforce unified module boundaries.
@@ -26,7 +26,7 @@ No severe circular dependencies detected between the core domains (`catalog`, `a
 **90/100**. Clean code separation and feature-based routing makes modules easy to maintain. Obsolete legacy paths have been successfully removed.
 
 ## Remaining Architecture Issues
-1. Evaluate moving inline Supabase client logic out of deep presentation components and refactoring them to use centralized data-fetching hooks or server actions where appropriate.
+1. Evaluate moving inline data-layer client logic out of deep presentation components and refactoring them to use centralized data-fetching hooks or server actions where appropriate.
 2. Consider consolidating `app/(manager)` and `app/(admin)` routes in future sprints if the user roles share significant overlapping UI components.
 
 ## Recommendation

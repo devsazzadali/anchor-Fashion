@@ -1,7 +1,7 @@
 "use server";
 
-import { createClient } from "../supabase/server";
-import { createAdminClient } from "../supabase/admin-client";
+import { createDbClient } from "@/lib/db/client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifySuperAdmin } from "../security/roles";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 
@@ -117,8 +117,8 @@ const DEFAULTS: {
 const getCachedSetting = unstable_cache(
   async (key: string, defaultValue: any): Promise<any> => {
     try {
-      const supabase = await createClient();
-      const { data } = await supabase
+      const db = await createDbClient();
+      const { data } = await db
         .from("settings")
         .select("value")
         .eq("key", key)
@@ -146,9 +146,9 @@ export async function getSocialLinks(): Promise<SocialLinks> {
 export async function updateStoreInfo(info: StoreInfo) {
   try {
     await verifySuperAdmin(); // Enforce strict role-based access
-    const supabase = createAdminClient(); // Bypass RLS securely for writing settings
+    const db = createAdminDbClient(); // Bypass RLS securely for writing settings
 
-    const { error } = await supabase
+    const { error } = await db
       .from("settings")
       .upsert(
         {
@@ -175,9 +175,9 @@ export async function updateStoreInfo(info: StoreInfo) {
 export async function updateSocialLinks(links: SocialLinks) {
   try {
     await verifySuperAdmin(); // Enforce strict role-based access
-    const supabase = createAdminClient(); // Bypass RLS securely for writing settings
+    const db = createAdminDbClient(); // Bypass RLS securely for writing settings
 
-    const { error } = await supabase
+    const { error } = await db
       .from("settings")
       .upsert(
         {
@@ -208,9 +208,9 @@ export async function getStoreConfig(): Promise<StoreConfig> {
 export async function updateStoreConfig(config: StoreConfig) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error } = await supabase
+    const { error } = await db
       .from("settings")
       .upsert(
         {
@@ -242,9 +242,9 @@ export async function getSeoSettings(): Promise<SeoSettings> {
 export async function updateSeoSettings(settings: SeoSettings) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error } = await supabase
+    const { error } = await db
       .from("settings")
       .upsert(
         {
@@ -270,9 +270,9 @@ export async function updateSeoSettings(settings: SeoSettings) {
 }
 
 export async function getSecuritySettings(): Promise<SecuritySettingsConfig> {
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    const { data } = await supabase
+    const { data } = await db
       .from("settings")
       .select("value")
       .eq("key", "security_settings")
@@ -286,9 +286,9 @@ export async function getSecuritySettings(): Promise<SecuritySettingsConfig> {
 export async function updateSecuritySettings(config: SecuritySettingsConfig) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error } = await supabase
+    const { error } = await db
       .from("settings")
       .upsert(
         {
@@ -310,9 +310,9 @@ export async function updateSecuritySettings(config: SecuritySettingsConfig) {
 }
 
 export async function getEmailSettings(): Promise<EmailSettingsConfig> {
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    const { data } = await supabase
+    const { data } = await db
       .from("settings")
       .select("value")
       .eq("key", "email_settings")
@@ -326,9 +326,9 @@ export async function getEmailSettings(): Promise<EmailSettingsConfig> {
 export async function updateEmailSettings(config: EmailSettingsConfig) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error } = await supabase
+    const { error } = await db
       .from("settings")
       .upsert(
         {
@@ -350,9 +350,9 @@ export async function updateEmailSettings(config: EmailSettingsConfig) {
 }
 
 export async function getAnalyticsSettings(): Promise<AnalyticsSettingsConfig> {
-  const supabase = await createClient();
+  const db = await createDbClient();
   try {
-    const { data } = await supabase
+    const { data } = await db
       .from("settings")
       .select("value")
       .eq("key", "analytics_settings")
@@ -366,9 +366,9 @@ export async function getAnalyticsSettings(): Promise<AnalyticsSettingsConfig> {
 export async function updateAnalyticsSettings(config: AnalyticsSettingsConfig) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { error } = await supabase
+    const { error } = await db
       .from("settings")
       .upsert(
         {

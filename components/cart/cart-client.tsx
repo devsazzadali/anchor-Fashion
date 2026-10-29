@@ -8,6 +8,7 @@ import { ShoppingBag, ArrowRight, ShieldCheck, Truck, RotateCcw } from "lucide-r
 import { useCartStore } from "@/stores/use-cart-store";
 import { Cart } from "@/types/checkout.types";
 import { formatCurrency } from "@/lib/utils";
+import { totalVatAmount } from "@/lib/utils/vat";
 import { jost } from "@/lib/fonts";
 
 interface CartClientProps {
@@ -32,17 +33,30 @@ export function CartClient({ initialCart }: CartClientProps) {
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  const subtotal = items.reduce((sum, item) => {
+  const resolveItemPrice = (item: any) => {
     const product = item.product as any;
-    const price =
+    return (
       item.variant?.sale_price ||
       item.variant?.price ||
       product?.sale_price ||
       product?.base_price ||
       product?.price ||
-      0;
-    return sum + price * item.quantity;
+      0
+    );
+  };
+
+  const subtotal = items.reduce((sum, item) => {
+    return sum + resolveItemPrice(item) * item.quantity;
   }, 0);
+
+  // Per-product VAT, added on top of the selling price (same rule as checkout).
+  const vatAmount = totalVatAmount(
+    items.map((item) => ({
+      unitPrice: resolveItemPrice(item),
+      quantity: item.quantity,
+      vatPercent: (item.product as any)?.vat_percent ?? 0,
+    }))
+  );
 
   const progress = Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
   const amountNeeded = FREE_SHIPPING_THRESHOLD - subtotal;
@@ -144,14 +158,16 @@ export function CartClient({ initialCart }: CartClientProps) {
                 </span>
               </div>
               <div className="flex justify-between text-gray-600">
-                <span>Taxes & Duties</span>
-                <span className="text-gray-400">Included</span>
+                <span>VAT</span>
+                <span className="font-semibold text-gray-900">
+                  {formatCurrency(vatAmount)}
+                </span>
               </div>
             </div>
 
             <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4 text-sm sm:text-base font-bold text-gray-900">
               <span>Estimated Total</span>
-              <span className="text-lg">{formatCurrency(subtotal)}</span>
+              <span className="text-lg">{formatCurrency(subtotal + vatAmount)}</span>
             </div>
 
             <Button

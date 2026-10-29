@@ -9,18 +9,12 @@ import {
   MapPin,
 } from "lucide-react";
 import { getStoreInfo, getSocialLinks } from "@/lib/actions/settings.actions";
+import { CatalogRepository } from "@/repositories/catalog.repository";
+import { StoreFooterNewsletter } from "@/components/layout/StoreFooterNewsletter";
 import { jost } from "@/lib/fonts";
 
 
 const footerLinks = {
-  shop: [
-    { label: "New Arrivals", href: "/products?sort=newest" },
-    { label: "Men's Collection", href: "/categories/men" },
-    { label: "Women's Collection", href: "/categories/women" },
-    { label: "Accessories", href: "/categories/accessories" },
-    { label: "Sale & Clearance", href: "/categories/sale" },
-    { label: "All Products", href: "/products" },
-  ],
   help: [
     { label: "Size Guide", href: "/support/size-guide" },
     { label: "Shipping & Returns", href: "/support/shipping" },
@@ -47,10 +41,25 @@ const paymentMethods = [
 ];
 
 export async function StoreFooter() {
-  const [storeInfo, socialLinks] = await Promise.all([
+  const [storeInfo, socialLinks, allCategories] = await Promise.all([
     getStoreInfo(),
     getSocialLinks(),
+    CatalogRepository.getCategories().catch(() => [] as any[]),
   ]);
+
+  // Phase 9 (no-hardcode rule): the Shop column is built from the
+  // admin-managed category tree in the database — it previously pointed at
+  // hardcoded /categories/men|women|accessories|sale slugs that do not
+  // exist. Static "All Products / New Arrivals" utility links stay.
+  const shopLinks = [
+    ...(allCategories as any[])
+      .filter((c) => !c.parent_id && c.is_active !== false)
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+      .slice(0, 6)
+      .map((c) => ({ label: c.name, href: `/categories/${c.slug}` })),
+    { label: "New Arrivals", href: "/products?sort=newest" },
+    { label: "All Products", href: "/products" },
+  ];
 
   return (
     <footer className={`${jost.className} bg-[#FAFAFA] text-gray-900 border-t border-gray-200`}>
@@ -128,6 +137,19 @@ export async function StoreFooter() {
                 </div>
               )}
             </div>
+            {/* Newsletter signup (Phase 9: the form component + subscribe
+                action existed but were mounted nowhere — the public could
+                never subscribe). */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-xs font-bold uppercase tracking-[0.25em] text-[#C9A86A]">
+                Stay in the loop
+              </h3>
+              <p className="max-w-xs text-sm font-light leading-relaxed text-gray-600">
+                New drops, festive edits and member-only offers — straight to
+                your inbox.
+              </p>
+              <StoreFooterNewsletter />
+            </div>
           </div>
 
           {/* Shop Column */}
@@ -136,7 +158,7 @@ export async function StoreFooter() {
               Shop
             </h3>
             <ul className="space-y-3">
-              {footerLinks.shop.map((link) => (
+              {shopLinks.map((link) => (
                 <li key={link.href}>
                   <Link
                     href={link.href}

@@ -1,7 +1,7 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createDbClient } from "@/lib/db/client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { verifySuperAdmin } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
@@ -29,8 +29,8 @@ export type ShippingRate = {
 };
 
 export async function getDeliveryZonesWithRates() {
-  const supabase = await createClient();
-  const { data: zones, error } = await supabase
+  const db = await createDbClient();
+  const { data: zones, error } = await db
     .from("delivery_zones")
     .select(`
       *,
@@ -47,8 +47,8 @@ export async function getDeliveryZonesWithRates() {
 }
 
 export async function getPublicShippingRates() {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const db = await createDbClient();
+  const { data, error } = await db
     .from("delivery_zones")
     .select(`
       id,
@@ -81,8 +81,8 @@ export async function upsertShippingRate(
 ) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("shipping_rates")
       .upsert(rate, { onConflict: "id" })
       .select()
@@ -100,8 +100,8 @@ export async function upsertShippingRate(
 export async function toggleShippingRate(rateId: string, isActive: boolean) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
-    const { error } = await supabase
+    const db = createAdminDbClient();
+    const { error } = await db
       .from("shipping_rates")
       .update({ is_active: isActive })
       .eq("id", rateId);
@@ -117,8 +117,8 @@ export async function toggleShippingRate(rateId: string, isActive: boolean) {
 export async function upsertDeliveryZone(zone: Partial<DeliveryZone> & { name: string; code: string }) {
   try {
     await verifySuperAdmin();
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("delivery_zones")
       .upsert(zone, { onConflict: "code" })
       .select()

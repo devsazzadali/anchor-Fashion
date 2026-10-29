@@ -90,9 +90,8 @@ export function RegisterForm() {
       return;
     }
 
-    try {
-      localStorage.setItem("anchor_user_password", values.password);
-    } catch {}
+    // SECURITY: never persist the plaintext password to localStorage
+    // (removed — any script/shared device could read it back).
 
     // Merge cart in background — do NOT await, so navigation is instant
     mergeGuestCartAction().catch(() => {});

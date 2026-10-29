@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { SSLCommerzService } from "@/lib/services/payment/sslcommerz.service";
 import { CartService } from "@/lib/services/cart.service";
 import { CouponService } from "@/services/coupon.service";
@@ -44,14 +44,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // 1. Locate Order and Payment Session
     let order: any = null;
     let paymentSession: any = null;
 
     if (payload.value_a) {
-      const { data: orderById } = await supabase
+      const { data: orderById } = await db
         .from("orders")
         .select("*")
         .eq("id", payload.value_a)
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!order && tranId) {
-      const { data: sessionData } = await supabase
+      const { data: sessionData } = await db
         .from("payment_sessions")
         .select("*, orders(*)")
         .filter("metadata->>tran_id", "eq", tranId)
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!order && tranId) {
-      const { data: orderByIntent } = await supabase
+      const { data: orderByIntent } = await db
         .from("orders")
         .select("*")
         .or(`payment_intent_id.eq.${tranId},order_number.eq.${tranId}`)
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
     // Helper for safe rollback
     const safeRollback = async () => {
       try {
-        await supabase.rpc("release_order_inventory", { p_order_id: order.id });
+        await db.rpc("release_order_inventory", { p_order_id: order.id });
       } catch (_) {}
       try {
         await CouponService.releaseCoupon(order.id);
@@ -119,13 +119,13 @@ export async function POST(req: NextRequest) {
 
       await safeRollback();
 
-      await supabase
+      await db
         .from("orders")
         .update({ status: "cancelled", payment_status: "FAILED" })
         .eq("id", order.id);
 
       if (paymentSession?.id) {
-        await supabase
+        await db
           .from("payment_sessions")
           .update({ status: status.toLowerCase() })
           .eq("id", paymentSession.id);
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
 
       await safeRollback();
 
-      await supabase
+      await db
         .from("orders")
         .update({ status: "cancelled", payment_status: "FAILED" })
         .eq("id", order.id);
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
 
       await safeRollback();
 
-      await supabase
+      await db
         .from("orders")
         .update({ status: "cancelled", payment_status: "FAILED" })
         .eq("id", order.id);
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
 
       await safeRollback();
 
-      await supabase
+      await db
         .from("orders")
         .update({ status: "cancelled", payment_status: "FAILED" })
         .eq("id", order.id);
@@ -202,14 +202,14 @@ export async function POST(req: NextRequest) {
     const confirmedTrxId = valRes.bank_tran_id || valId;
     const nowIso = new Date().toISOString();
 
-    const { data: provider } = await supabase
+    const { data: provider } = await db
       .from("payment_providers")
       .select("id")
       .eq("code", "sslcommerz")
       .maybeSingle();
 
     // 5. Update Payment Transactions (Idempotent)
-    await supabase.from("payment_transactions").insert({
+    await db.from("payment_transactions").insert({
       order_id: order.id,
       session_id: paymentSession?.id || null,
       provider_id: provider?.id || null,
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (paymentSession?.id) {
-      await supabase
+      await db
         .from("payment_sessions")
         .update({
           status: "completed",
@@ -243,14 +243,14 @@ export async function POST(req: NextRequest) {
         `[SSLCommerz IPN] Payment verified for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
       );
 
-      await supabase.from("orders").update({
+      await db.from("orders").update({
         payment_method: "SSLCOMMERZ",
         payment_status: "REFUND_PENDING",
         payment_intent_id: confirmedTrxId,
         paid_at: nowIso,
       }).eq("id", order.id);
 
-      await supabase.from("order_status_history").insert({
+      await db.from("order_status_history").insert({
         order_id: order.id,
         status: "cancelled",
         notes: `Late IPN captured TrxID ${confirmedTrxId} for cancelled order. Marked for refund.`,
@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
       payment_intent_id: confirmedTrxId,
     };
 
-    const { error: captureErr } = await supabase
+    const { error: captureErr } = await db
       .from("orders")
       .update({
         ...capturePayload,
@@ -281,11 +281,11 @@ export async function POST(req: NextRequest) {
       .eq("id", order.id);
 
     if (captureErr) {
-      await supabase.from("orders").update(capturePayload).eq("id", order.id);
+      await db.from("orders").update(capturePayload).eq("id", order.id);
     }
 
     // Record order status history
-    await supabase.from("order_status_history").insert({
+    await db.from("order_status_history").insert({
       order_id: order.id,
       status: "confirmed",
       notes: `Paid successfully via SSLCommerz IPN (${valRes.card_type || "Cards/Mobile Banking"}). TrxID: ${confirmedTrxId}, ValID: ${valId}`,
@@ -311,7 +311,7 @@ export async function POST(req: NextRequest) {
     try {
       let cartIdToClear: string | null = null;
       if (order.session_id) {
-        const { data: cart } = await supabase
+        const { data: cart } = await db
           .from("carts")
           .select("id")
           .eq("session_id", order.session_id)
@@ -319,7 +319,7 @@ export async function POST(req: NextRequest) {
         if (cart?.id) cartIdToClear = cart.id;
       }
       if (!cartIdToClear && order.user_id) {
-        const { data: userCart } = await supabase
+        const { data: userCart } = await db
           .from("carts")
           .select("id")
           .eq("user_id", order.user_id)

@@ -43,6 +43,7 @@ interface InventoryMasterIntakeDialogProps {
 }
 
 import { APPAREL_SIZE_SYSTEMS, detectApparelSystemForCategory } from "@/lib/utils/product-code";
+import { priceWithVat } from "@/lib/utils/vat";
 
 const PRESET_COLORS = [
   "Black",
@@ -76,6 +77,7 @@ export function InventoryMasterIntakeDialog({
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [basePrice, setBasePrice] = useState<number>(2500);
   const [costPrice, setCostPrice] = useState<number>(1500);
+  const [vatPercent, setVatPercent] = useState<number>(0);
   const [totalQuantity, setTotalQuantity] = useState<number>(100);
   const [notes, setNotes] = useState("");
 
@@ -292,6 +294,7 @@ export function InventoryMasterIntakeDialog({
         categoryId,
         basePrice,
         costPrice,
+        vatPercent,
         totalQuantity: allocatedTotal,
         colorVariants,
         publishImmediately,
@@ -313,7 +316,8 @@ export function InventoryMasterIntakeDialog({
           barcode: v.barcode,
           color: v.color,
           size: v.size,
-          price: basePrice,
+          // Stickers print "(Inc.VAT)" — the label price is VAT-inclusive.
+          price: priceWithVat(basePrice, vatPercent),
           stock: v.quantity ?? 1,
           styleCode: styleCode.trim() || res.data.product?.sku || undefined,
           categoryName: catName,
@@ -327,12 +331,13 @@ export function InventoryMasterIntakeDialog({
         onOpenChange(false);
 
         if (publishImmediately) {
-          toast.success("🚀 Product published live to storefront!");
-          setPrintModalOpen(true);
-        } else {
-          // Open decision prompt: Publish with images/description, print stickers, or view in inventory
-          setCreatedIntakeSuccess(res.data);
+          toast.success(
+            "Saved to Inventory — add photos & publish it to the storefront, or print stickers."
+          );
         }
+        // Open decision prompt: Publish with images/description, print stickers, or view in inventory.
+        // (Inventory-first: publishing happens in the Add Product flow, not at intake.)
+        setCreatedIntakeSuccess(res.data);
       } else {
         toast.error(res.error || "Failed to create master inventory intake.");
       }
@@ -440,7 +445,7 @@ export function InventoryMasterIntakeDialog({
 
             {/* Step 2: Pricing, Cost & Financials */}
             <div className="space-y-2">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold">Selling Price / MRP (৳)</Label>
                   <Input
@@ -459,6 +464,24 @@ export function InventoryMasterIntakeDialog({
                     value={costPrice}
                     onChange={(e) => setCostPrice(Math.max(0, parseFloat(e.target.value) || 0))}
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">VAT (%)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={vatPercent}
+                    onChange={(e) =>
+                      setVatPercent(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))
+                    }
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Added on top of the selling price. Customer pays ৳
+                    {priceWithVat(basePrice, vatPercent).toLocaleString("en-US")} incl. VAT.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -820,7 +843,7 @@ export function InventoryMasterIntakeDialog({
               ) : (
                 <Sparkles className="h-4 w-4" />
               )}
-              Save & Publish to Store (Live)
+              Save & Continue to Publish
             </Button>
           </DialogFooter>
         </DialogContent>

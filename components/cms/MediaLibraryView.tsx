@@ -279,7 +279,7 @@ export function MediaLibraryView({ initialMedia }: MediaLibraryViewProps) {
             <h1 className="text-3xl font-bold tracking-tight">Media Library</h1>
             <Badge variant="outline" className="gap-1.5 border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Supabase Storage (media)
+              Media Storage (uploads)
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -423,7 +423,7 @@ export function MediaLibraryView({ initialMedia }: MediaLibraryViewProps) {
           <div className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-xl bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">
             <Upload className="h-12 w-12 text-primary animate-bounce mb-2" />
             <p className="text-lg font-semibold text-foreground">Drop files here to upload</p>
-            <p className="text-xs text-muted-foreground">Up to 50MB per file will be uploaded to Supabase Storage</p>
+            <p className="text-xs text-muted-foreground">Up to 50MB per file will be uploaded to media storage</p>
           </div>
         )}
 
@@ -778,7 +778,7 @@ export function MediaLibraryView({ initialMedia }: MediaLibraryViewProps) {
               <DialogDescription>
                 Are you sure you want to permanently delete{" "}
                 <span className="font-semibold text-foreground">"{itemToDelete.file_name}"</span>?
-                This will remove the file from both the database and Supabase storage bucket.
+                This will remove the file from both the database and media storage.
               </DialogDescription>
             </DialogHeader>
 

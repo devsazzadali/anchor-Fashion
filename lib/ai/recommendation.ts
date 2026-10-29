@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { db } from "@/lib/db/client";
 import { RecommendationStrategy } from "./types";
 
 export class AIRecommendationEngine {
@@ -6,7 +6,7 @@ export class AIRecommendationEngine {
    * Fetches active recommendation strategies and their weights.
    */
   static async getActiveStrategies(): Promise<RecommendationStrategy[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("ai_recommendation_models")
       .select("*")
       .eq("is_active", true)
@@ -32,7 +32,7 @@ export class AIRecommendationEngine {
    */
   static async getSimilarProducts(productId: string, limit: number = 5) {
     // We would first fetch the embedding of the current product
-    const { data: sourceProduct, error: fetchError } = await supabase
+    const { data: sourceProduct, error: fetchError } = await db
       .from("ai_product_embeddings")
       .select("semantic_embedding")
       .eq("product_id", productId)
@@ -44,7 +44,7 @@ export class AIRecommendationEngine {
 
     // Call a Postgres function that performs the vector similarity search
     // Since we don't have the RPC defined in the schema yet, this is illustrative.
-    const { data, error } = await supabase.rpc("match_products_by_semantic", {
+    const { data, error } = await db.rpc("match_products_by_semantic", {
       query_embedding: sourceProduct.semantic_embedding,
       match_threshold: 0.7, // Only return high-confidence matches
       match_count: limit,
@@ -63,7 +63,7 @@ export class AIRecommendationEngine {
    * Gets trending products globally.
    */
   static async getTrendingProducts(limit: number = 10) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("ai_product_embeddings")
       .select("product_id, trending_score")
       .order("trending_score", { ascending: false })

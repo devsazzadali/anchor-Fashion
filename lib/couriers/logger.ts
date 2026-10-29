@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { CourierApiLogEntry } from "./types";
 
 /**
@@ -42,11 +42,11 @@ export function sanitizeLogData(data: unknown): unknown {
  */
 export async function logCourierApiCall(entry: CourierApiLogEntry): Promise<void> {
   try {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const sanitizedPayload = sanitizeLogData(entry.payload);
     const sanitizedResponse = sanitizeLogData(entry.responseData);
 
-    const { error } = await supabase.from("courier_api_logs").insert({
+    const { error } = await db.from("courier_api_logs").insert({
       courier_code: entry.courierCode,
       method: entry.method,
       endpoint: entry.endpoint,

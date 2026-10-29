@@ -14,35 +14,11 @@ export const getCategoryBySlug = async (
     return matched as Category;
   }
 
-  // Virtual fallback category mapping so customers never hit a 404
-  const virtualMap: Record<string, string> = {
-    men: "Men's Collection",
-    mens: "Men's Collection",
-    women: "Women's Collection",
-    womens: "Women's Collection",
-    kids: "Kids' Collection",
-    accessories: "Accessories",
-    bags: "Bags & Handbags",
-    jewellery: "Jewellery & Accessories",
-    sale: "Sale & Special Offers",
-    ethnic: "Ethnic & Festive Wear",
-    "new-in": "New Arrivals",
-  };
-
-  const name =
-    virtualMap[cleanSlug] ||
-    cleanSlug
-      .split("-")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-
-  return {
-    id: `virtual-${cleanSlug}`,
-    name,
-    slug: cleanSlug,
-    isActive: true,
-    sortOrder: 99,
-  } as unknown as Category;
+  // Phase 9 (no-hardcode rule): unknown slugs return null — the category
+  // page renders an honest empty state with a humanized slug heading. The
+  // previous "virtual category" map fabricated categories (men/women/kids/
+  // sale…) that do not exist in the database.
+  return null;
 };
 
 export const getCategories = async (): Promise<Category[]> => {

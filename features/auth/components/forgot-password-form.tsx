@@ -7,7 +7,7 @@ import * as z from "zod";
 import { toast } from "sonner";
 import Link from "next/link";
 
-import { createClient } from "@/lib/supabase/client";
+import { createDbClient } from "@/lib/db/client";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -28,7 +28,7 @@ const formSchema = z.object({
 export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const supabase = createClient();
+  const db = createDbClient();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -40,7 +40,7 @@ export function ForgotPasswordForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
+    const { error } = await db.auth.resetPasswordForEmail(values.email, {
       redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
     });
 
