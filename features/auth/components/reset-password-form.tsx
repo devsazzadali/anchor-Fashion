@@ -67,7 +67,7 @@ export function ResetPasswordForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-slate-800 dark:text-slate-200 font-semibold text-sm">New Password</FormLabel>
+                <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">New Password</FormLabel>
                 <FormControl>
                   <PasswordInput
                     placeholder="Enter new password"
@@ -85,7 +85,7 @@ export function ResetPasswordForm() {
             name="confirmPassword"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-slate-800 dark:text-slate-200 font-semibold text-sm">Confirm New Password</FormLabel>
+                <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">Confirm New Password</FormLabel>
                 <FormControl>
                   <PasswordInput
                     placeholder="Confirm new password"
@@ -98,7 +98,7 @@ export function ResetPasswordForm() {
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full h-12 bg-[#C9A86A] hover:bg-[#b09156] text-white font-semibold" disabled={isLoading}>
+          <Button type="submit" className="w-full h-12 bg-[#C9A86A] hover:bg-[#b09156] active:bg-[#9d7e47] text-white font-semibold shadow-md shadow-[#C9A86A]/20 rounded-lg tracking-wide transition-all" disabled={isLoading}>
             {isLoading ? "Resetting password..." : "Reset password"}
           </Button>
         </form>

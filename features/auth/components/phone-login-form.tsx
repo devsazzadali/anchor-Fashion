@@ -13,6 +13,7 @@
  */
 import { useState } from "react";
 import { toast } from "sonner";
+import { KeyRound, Smartphone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingButton } from "@/components/ui/loading-button";
@@ -26,6 +27,13 @@ function toE164(raw: string): string | null {
   return null;
 }
 
+const LABEL_CLASS =
+  "text-slate-700 dark:text-slate-300 font-medium text-sm";
+const INPUT_CLASS =
+  "pl-10 h-12 bg-slate-50/70 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-[#C9A86A]/30 focus-visible:border-[#C9A86A]";
+const BUTTON_CLASS =
+  "w-full h-12 bg-[#C9A86A] hover:bg-[#b09156] active:bg-[#9d7e47] text-white shadow-md shadow-[#C9A86A]/20 transition-all rounded-lg font-semibold tracking-wide";
+
 export function PhoneLoginForm() {
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [phone, setPhone] = useState("");
@@ -37,7 +45,7 @@ export function PhoneLoginForm() {
     e.preventDefault();
     const normalized = toE164(phone);
     if (!normalized) {
-      toast.error("সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)");
+      toast.error("Please enter a valid mobile number (01XXXXXXXXX)");
       return;
     }
     setIsLoading(true);
@@ -50,14 +58,14 @@ export function PhoneLoginForm() {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(
-          body?.message || "OTP পাঠানো যায়নি — কিছুক্ষণ পরে আবার চেষ্টা করুন"
+          body?.message || "Could not send the OTP — please try again in a moment"
         );
       }
       setE164(normalized);
       setStep("code");
-      toast.success("আপনার মোবাইলে একটি কোড পাঠানো হয়েছে");
+      toast.success("A code has been sent to your mobile");
     } catch (err: any) {
-      toast.error(err.message || "OTP পাঠানো যায়নি");
+      toast.error(err.message || "Could not send the OTP");
     } finally {
       setIsLoading(false);
     }
@@ -66,7 +74,7 @@ export function PhoneLoginForm() {
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     if (!/^\d{4,8}$/.test(code.trim())) {
-      toast.error("SMS-এ পাওয়া কোডটি দিন");
+      toast.error("Please enter the code from the SMS");
       return;
     }
     setIsLoading(true);
@@ -78,9 +86,9 @@ export function PhoneLoginForm() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(body?.message || "কোডটি সঠিক নয় বা মেয়াদ শেষ হয়েছে");
+        throw new Error(body?.message || "The code is incorrect or has expired");
       }
-      toast.success("স্বাগতম! লগইন সফল হয়েছে");
+      toast.success("Welcome! You are signed in");
       try {
         const params = new URLSearchParams(window.location.search);
         const next = params.get("callbackUrl") || params.get("next");
@@ -93,7 +101,7 @@ export function PhoneLoginForm() {
         window.location.replace("/account/profile");
       }
     } catch (err: any) {
-      toast.error(err.message || "যাচাই করা যায়নি");
+      toast.error(err.message || "Verification failed");
       setIsLoading(false);
     }
   }
@@ -102,21 +110,36 @@ export function PhoneLoginForm() {
     return (
       <form onSubmit={handleSendOtp} className="w-full space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="phone-login-number">মোবাইল নম্বর</Label>
-          <Input
-            id="phone-login-number"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="01XXXXXXXXX"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
+          <Label htmlFor="phone-login-number" className={LABEL_CLASS}>
+            Mobile Number
+          </Label>
+          <div className="relative">
+            <Smartphone
+              aria-hidden="true"
+              className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#C9A86A]"
+            />
+            <Input
+              id="phone-login-number"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="01XXXXXXXXX (11 digits)"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              disabled={isLoading}
+              className={INPUT_CLASS}
+            />
+          </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            এই নম্বরে SMS-এ একটি একবারের লগইন কোড পাঠানো হবে।
+            Enter your 11-digit mobile number — we will send a one-time login
+            code by SMS to this number.
           </p>
         </div>
-        <LoadingButton type="submit" className="w-full" isLoading={isLoading}>
-          SMS কোড পাঠান
+        <LoadingButton
+          type="submit"
+          className={BUTTON_CLASS}
+          isLoading={isLoading}
+        >
+          Send SMS Code
         </LoadingButton>
       </form>
     );
@@ -125,32 +148,46 @@ export function PhoneLoginForm() {
   return (
     <form onSubmit={handleVerify} className="w-full space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="phone-login-code">SMS কোড</Label>
-        <Input
-          id="phone-login-code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          placeholder="••••••"
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          maxLength={8}
-        />
+        <Label htmlFor="phone-login-code" className={LABEL_CLASS}>
+          SMS Code
+        </Label>
+        <div className="relative">
+          <KeyRound
+            aria-hidden="true"
+            className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#C9A86A]"
+          />
+          <Input
+            id="phone-login-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="••••••"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            maxLength={8}
+            disabled={isLoading}
+            className={`${INPUT_CLASS} text-center font-mono text-lg tracking-[0.35em]`}
+          />
+        </div>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {e164} নম্বরে পাঠানো কোডটি দিন। কোডের মেয়াদ ৫ মিনিট।
+          Enter the code sent to {e164}. The code expires in 5 minutes.
         </p>
       </div>
-      <LoadingButton type="submit" className="w-full" isLoading={isLoading}>
-        কোড যাচাই করে লগইন করুন
+      <LoadingButton
+        type="submit"
+        className={BUTTON_CLASS}
+        isLoading={isLoading}
+      >
+        Verify Code &amp; Sign In
       </LoadingButton>
       <button
         type="button"
-        className="w-full text-center text-sm text-slate-500 underline-offset-4 hover:underline dark:text-slate-400"
+        className="w-full text-center text-sm text-slate-500 underline-offset-4 transition-colors hover:text-[#C9A86A] hover:underline dark:text-slate-400"
         onClick={() => {
           setStep("phone");
           setCode("");
         }}
       >
-        নম্বর পরিবর্তন করুন
+        Change number
       </button>
     </form>
   );

@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { toast } from "sonner";
-import Link from "next/link";
 
 import { createDbClient } from "@/lib/db/client";
 import { Button } from "@/components/ui/button";
@@ -92,41 +91,41 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <div className="grid gap-6">
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-slate-800 dark:text-slate-200 font-semibold text-sm">Email</FormLabel>
-                <FormControl>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">Email address</FormLabel>
+              <FormControl>
+                <div className="relative">
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#C9A86A]"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                  </svg>
                   <Input
-                    placeholder="name@example.com"
-                    className="h-12 bg-slate-50/70 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:border-[#C9A86A] focus-visible:ring-[#C9A86A]/20"
+                    placeholder="you@example.com"
+                    className="pl-10 h-12 bg-slate-50/70 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-[#C9A86A]/30 focus-visible:border-[#C9A86A]"
                     {...field}
                     disabled={isLoading}
                   />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <Button type="submit" className="w-full h-12 bg-[#C9A86A] hover:bg-[#b09156] text-white font-semibold" disabled={isLoading}>
-            {isLoading ? "Sending link..." : "Send reset link"}
-          </Button>
-        </form>
-      </Form>
-      <div className="text-center text-sm text-slate-600 dark:text-slate-400">
-        Remember your password?{" "}
-        <Link
-          href="/auth/login"
-          className="font-medium text-[#C9A86A] hover:underline"
-        >
-          Sign in
-        </Link>
-      </div>
-    </div>
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit" className="w-full h-12 bg-[#C9A86A] hover:bg-[#b09156] active:bg-[#9d7e47] text-white font-semibold shadow-md shadow-[#C9A86A]/20 rounded-lg tracking-wide transition-all" disabled={isLoading}>
+          {isLoading ? "Sending link..." : "Send Reset Link"}
+        </Button>
+      </form>
+    </Form>
   );
 }

@@ -98,7 +98,7 @@ export function ClaimForm({ initialPhone = "" }: { initialPhone?: string }) {
         </div>
         <div className="space-y-1">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            আপনার অ্যাকাউন্ট তৈরি হয়েছে!
+            Your account is ready!
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Sign in with <span className="font-medium text-slate-700 dark:text-slate-200">{claimedEmail}</span> and
@@ -122,13 +122,13 @@ export function ClaimForm({ initialPhone = "" }: { initialPhone?: string }) {
         <form onSubmit={onSendCode} className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="claim-phone" className="text-slate-800 dark:text-slate-200 font-semibold text-sm">
-              Mobile Number (অর্ডারের নম্বর)
+              Mobile Number (used on your order)
             </Label>
             <Input
               id="claim-phone"
               type="tel"
               inputMode="tel"
-              placeholder="01XXXXXXXXX"
+              placeholder="01XXXXXXXXX (11 digits)"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               disabled={isLoading}
@@ -136,8 +136,8 @@ export function ClaimForm({ initialPhone = "" }: { initialPhone?: string }) {
               required
             />
             <p className="text-xs text-slate-400">
-              Enter the mobile number you used when placing your order. We will
-              SMS a 6-digit verification code to it.
+              Enter the 11-digit mobile number you used when placing your
+              order. We will SMS a 6-digit verification code to it.
             </p>
           </div>
           <Button

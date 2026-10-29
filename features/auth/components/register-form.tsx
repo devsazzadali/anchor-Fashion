@@ -117,7 +117,7 @@ export function RegisterForm() {
               name="firstName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-slate-800 dark:text-slate-200 font-semibold text-sm">First Name</FormLabel>
+                  <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">First Name</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#C9A86A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,7 +140,7 @@ export function RegisterForm() {
               name="lastName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-slate-800 dark:text-slate-200 font-semibold text-sm">Last Name</FormLabel>
+                  <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">Last Name</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#C9A86A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -165,7 +165,7 @@ export function RegisterForm() {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-slate-800 dark:text-slate-200 font-semibold text-sm">Email</FormLabel>
+                <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">Email</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#C9A86A]" fill="currentColor" viewBox="0 0 20 20">
@@ -190,7 +190,7 @@ export function RegisterForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-slate-800 dark:text-slate-200 font-semibold text-sm">Password</FormLabel>
+                <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">Password</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#C9A86A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
@@ -215,7 +215,7 @@ export function RegisterForm() {
             name="confirmPassword"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-slate-800 dark:text-slate-200 font-semibold text-sm">Confirm Password</FormLabel>
+                <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">Confirm Password</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#C9A86A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
@@ -237,10 +237,10 @@ export function RegisterForm() {
 
           <Button 
             type="submit" 
-            className="w-full h-12 bg-[#C9A86A] hover:bg-[#b09156] text-white shadow-md transition-all rounded-lg mt-6 font-semibold" 
+            className="w-full h-12 bg-[#C9A86A] hover:bg-[#b09156] active:bg-[#9d7e47] text-white shadow-md shadow-[#C9A86A]/20 transition-all rounded-lg mt-6 font-semibold tracking-wide" 
             disabled={isLoading}
           >
-            {isLoading ? "Please wait..." : "Register"}
+            {isLoading ? "Creating Account…" : "Create Account"}
           </Button>
         </form>
       </Form>

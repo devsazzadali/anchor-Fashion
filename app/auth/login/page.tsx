@@ -1,8 +1,8 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { LoginForm } from "@/features/auth/components/login-form";
-import { PhoneLoginForm } from "@/features/auth/components/phone-login-form";
+import { KeyRound } from "lucide-react";
+import { LoginTabs } from "@/features/auth/components/login-tabs";
 
 export const metadata: Metadata = {
   title: "Sign In | Anchor Fashion",
@@ -38,22 +38,8 @@ export default function LoginPage() {
       {/* Divider */}
       <div className="w-full h-px bg-slate-200 dark:bg-slate-700/60" />
 
-      {/* Form */}
-      <div className="w-full">
-        <LoginForm />
-      </div>
-
-      {/* Phone + OTP login (Workstream F) */}
-      <div className="flex w-full items-center gap-3">
-        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/60" />
-        <span className="text-xs uppercase tracking-wider text-slate-400">
-          অথবা মোবাইল নম্বর দিয়ে
-        </span>
-        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/60" />
-      </div>
-      <div className="w-full">
-        <PhoneLoginForm />
-      </div>
+      {/* Sign-in forms — one method at a time (Email / Mobile Number) */}
+      <LoginTabs />
 
       {/* Register link */}
       <p className="text-center text-sm text-slate-500 dark:text-slate-400">
@@ -67,19 +53,29 @@ export default function LoginPage() {
         </Link>
       </p>
 
-      {/* Claim link (Phase 12): guest orders created an unclaimed profile
+      {/* Claim box (Phase 12): guest orders created an unclaimed profile
           keyed by phone — its owner can set a password and take it over. */}
-      <p className="text-center text-sm text-slate-500 dark:text-slate-400">
-        Guest হিসেবে অর্ডার করেছেন?{" "}
-        <Link
-          href="/auth/claim"
-          prefetch={false}
-          className="font-semibold text-[#C9A86A] hover:text-[#b09156] hover:underline underline-offset-4 transition-colors"
-        >
-          Password সেট করে অ্যাকাউন্টটি নিজের করুন
-        </Link>
-      </p>
+      <div className="flex w-full items-start gap-3 rounded-xl border border-[#C9A86A]/40 bg-[#C9A86A]/5 px-4 py-3.5 dark:bg-[#C9A86A]/10">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#C9A86A]/15 text-[#C9A86A]">
+          <KeyRound className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            Ordered as a guest?
+          </p>
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            Verify your mobile number and set a password — all your orders
+            will then appear in your account.
+          </p>
+          <Link
+            href="/auth/claim"
+            prefetch={false}
+            className="inline-block pt-0.5 text-sm font-semibold text-[#C9A86A] underline-offset-4 transition-colors hover:text-[#b09156] hover:underline"
+          >
+            Set Password →
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
-

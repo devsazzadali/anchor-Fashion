@@ -34,7 +34,7 @@ export default async function ClaimAccountPage({
       {/* Heading */}
       <div className="text-center space-y-1">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-          Password সেট করে অ্যাকাউন্টটি নিজের করুন
+          Claim Your Account
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Ordered as a guest? Verify your mobile number and set a password —
