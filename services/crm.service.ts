@@ -59,8 +59,7 @@ export class CRMService {
       source: rest.source || "Direct",
       status: rest.status || "new",
       score: rest.score ?? 0,
-      assigned_agent_id: assigned_agent_id || null,
-      custom_fields: custom_fields || {},
+      assigned_to: assigned_agent_id || null,
     };
 
     const lead = await crmRepository.createLead(leadFields);
@@ -91,8 +90,7 @@ export class CRMService {
     if (rest.source !== undefined) updateFields.source = rest.source;
     if (rest.status !== undefined) updateFields.status = rest.status;
     if (rest.score !== undefined) updateFields.score = rest.score;
-    if (custom_fields !== undefined) updateFields.custom_fields = custom_fields;
-    if (assigned_agent_id !== undefined) updateFields.assigned_agent_id = assigned_agent_id || null;
+    if (assigned_agent_id !== undefined) updateFields.assigned_to = assigned_agent_id || null;
 
     const lead = await crmRepository.updateLead(id, updateFields);
 

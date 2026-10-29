@@ -4,27 +4,60 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
+function mapSupplierRow(s: any) {
+  return {
+    id: s.id,
+    name: s.name,
+    company_name: s.name,
+    contact_person: s.contact_name || "",
+    email: s.email || "",
+    phone: s.phone || "",
+    performance_score: 5.0,
+    status: s.is_active === false ? "INACTIVE" : "ACTIVE",
+  };
+}
+
+async function generateUniqueSupplierCode(
+  db: ReturnType<typeof createAdminDbClient>,
+  companyName: string
+): Promise<string> {
+  const base =
+    companyName
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40)
+      .replace(/-+$/g, "") || "SUPPLIER";
+
+  let candidate = base;
+  let suffix = 2;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data: existing } = await db
+      .from("suppliers")
+      .select("id")
+      .eq("code", candidate)
+      .maybeSingle();
+    if (!existing) return candidate;
+    const suffixStr = `-${suffix}`;
+    candidate = `${base.slice(0, 40 - suffixStr.length).replace(/-+$/g, "")}${suffixStr}`;
+    suffix += 1;
+  }
+}
+
 export async function getSupplierProfiles() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   const db = createAdminDbClient();
   const { data, error } = await db
-    .from("supplier_profiles")
-    .select("id, company_name, contact_person, email, phone, status")
-    .order("company_name", { ascending: true });
-    
+    .from("suppliers")
+    .select("id, name, contact_name, email, phone, is_active")
+    .order("name", { ascending: true });
+
   if (error) return { success: false, error: error.message };
   return {
     success: true,
-    data: (data || []).map((s: any) => ({
-      id: s.id,
-      name: s.company_name,
-      company_name: s.company_name,
-      contact_person: s.contact_person || "",
-      email: s.email || "",
-      phone: s.phone || "",
-      status: s.status || "ACTIVE",
-    })),
+    data: (data || []).map((s: any) => mapSupplierRow(s)),
   };
 }
 
@@ -47,34 +80,36 @@ export async function createSupplierProfileAction(data: {
     // Check duplicate email beforehand to provide helpful message
     if (cleanEmail) {
       const { data: existingSupplier } = await db
-        .from("supplier_profiles")
-        .select("company_name, email")
+        .from("suppliers")
+        .select("name, email")
         .ilike("email", cleanEmail)
         .maybeSingle();
 
       if (existingSupplier) {
         return {
           success: false,
-          error: `A supplier with email "${cleanEmail}" already exists (${existingSupplier.company_name}). Please use a different email address.`,
+          error: `A supplier with email "${cleanEmail}" already exists (${existingSupplier.name}). Please use a different email address.`,
         };
       }
     }
 
+    const code = await generateUniqueSupplierCode(db, cleanCompany);
+
     const { data: supplier, error } = await db
-      .from("supplier_profiles")
+      .from("suppliers")
       .insert({
-        company_name: cleanCompany,
-        contact_person: data.contact_person?.trim() || null,
+        name: cleanCompany,
+        code,
+        contact_name: data.contact_person?.trim() || null,
         email: cleanEmail,
         phone: data.phone?.trim() || null,
-        performance_score: Number(data.performance_score) || 5.0,
-        status: cleanStatus,
+        is_active: cleanStatus === "ACTIVE",
       })
       .select()
       .single();
 
     if (error) {
-      if (error.code === "23505" || error.message?.includes("supplier_profiles_email_key")) {
+      if (error.code === "23505" || error.message?.includes("unique")) {
         return {
           success: false,
           error: `A supplier with this email already exists. Each supplier must have a unique email address.`,
@@ -83,27 +118,13 @@ export async function createSupplierProfileAction(data: {
       return { success: false, error: error.message };
     }
 
-    // Also sync into `suppliers` table for compatibility
-    try {
-      await db.from("suppliers").upsert({
-        id: supplier.id,
-        name: cleanCompany,
-        contact_email: cleanEmail,
-        contact_phone: data.phone?.trim() || null,
-        lead_time_days: 7,
-        rating: Number(data.performance_score) || 5.0,
-      });
-    } catch {
-      // ignore
-    }
-
     try {
       revalidatePath("/admin/inventory/suppliers");
       revalidatePath("/admin/inventory/stock");
       revalidatePath("/admin/inventory/purchases");
     } catch {}
 
-    return { success: true, data: supplier };
+    return { success: true, data: mapSupplierRow(supplier) };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to create supplier profile" };
   }
@@ -134,8 +155,8 @@ export async function updateSupplierProfileAction(
     // Check duplicate email across other suppliers
     if (cleanEmail) {
       const { data: existingSupplier } = await db
-        .from("supplier_profiles")
-        .select("id, company_name, email")
+        .from("suppliers")
+        .select("id, name, email")
         .ilike("email", cleanEmail)
         .neq("id", id)
         .maybeSingle();
@@ -143,31 +164,37 @@ export async function updateSupplierProfileAction(
       if (existingSupplier) {
         return {
           success: false,
-          error: `Another supplier (${existingSupplier.company_name}) is already using the email "${cleanEmail}". Please use a different email address.`,
+          error: `Another supplier (${existingSupplier.name}) is already using the email "${cleanEmail}". Please use a different email address.`,
         };
       }
     }
 
-    const updatePayload: any = { ...data };
+    const updatePayload: Record<string, any> = {};
+    if (data.company_name !== undefined) {
+      updatePayload.name = data.company_name.trim();
+    }
+    if (data.contact_person !== undefined) {
+      updatePayload.contact_name = data.contact_person?.trim() || null;
+    }
     if (cleanEmail !== undefined) {
       updatePayload.email = cleanEmail;
     }
-    if (data.company_name) {
-      updatePayload.company_name = data.company_name.trim();
+    if (data.phone !== undefined) {
+      updatePayload.phone = data.phone?.trim() || null;
     }
-    if (data.status) {
-      updatePayload.status = data.status.toUpperCase();
+    if (data.status !== undefined) {
+      updatePayload.is_active = data.status.toUpperCase() === "ACTIVE";
     }
 
     const { data: updated, error } = await db
-      .from("supplier_profiles")
+      .from("suppliers")
       .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
 
     if (error) {
-      if (error.code === "23505" || error.message?.includes("supplier_profiles_email_key")) {
+      if (error.code === "23505" || error.message?.includes("unique")) {
         return {
           success: false,
           error: `A supplier with this email already exists. Each supplier must have a unique email address.`,
@@ -176,21 +203,11 @@ export async function updateSupplierProfileAction(
       return { success: false, error: error.message };
     }
 
-    // Sync to suppliers table as well
-    try {
-      await db.from("suppliers").update({
-        name: data.company_name?.trim(),
-        contact_email: cleanEmail,
-        contact_phone: data.phone?.trim(),
-        rating: data.performance_score,
-      }).eq("id", id);
-    } catch {}
-
     try {
       revalidatePath("/admin/inventory/suppliers");
     } catch {}
 
-    return { success: true, data: updated };
+    return { success: true, data: mapSupplierRow(updated) };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to update supplier profile" };
   }
@@ -202,15 +219,11 @@ export async function deleteSupplierProfileAction(id: string) {
   try {
     const db = createAdminDbClient();
     const { error } = await db
-      .from("supplier_profiles")
+      .from("suppliers")
       .delete()
       .eq("id", id);
 
     if (error) return { success: false, error: error.message };
-
-    try {
-      await db.from("suppliers").delete().eq("id", id);
-    } catch {}
 
     try {
       revalidatePath("/admin/inventory/suppliers");

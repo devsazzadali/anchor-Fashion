@@ -124,6 +124,17 @@ const DEFAULT_FAQS: Omit<FAQItem, "id" | "created_at">[] = [
   },
 ];
 
+function mapFaqRow(row: any): FAQItem {
+  return {
+    id: row.id,
+    category: row.category,
+    question: row.question,
+    answer: row.answer,
+    display_order: row.display_order ?? row.sort_order ?? 0,
+    created_at: row.created_at,
+  };
+}
+
 // Seed default FAQs if the table is empty
 async function seedDefaultFaqs(db: any) {
   try {
@@ -134,10 +145,17 @@ async function seedDefaultFaqs(db: any) {
     if (count === 0 || count === null) {
       const { data, error } = await db
         .from("faqs")
-        .insert(DEFAULT_FAQS)
+        .insert(
+          DEFAULT_FAQS.map((faq) => ({
+            category: faq.category,
+            question: faq.question,
+            answer: faq.answer,
+            sort_order: faq.display_order,
+          }))
+        )
         .select();
       if (!error && data) {
-        return data as FAQItem[];
+        return (data as any[]).map(mapFaqRow);
       }
     }
   } catch (err) {
@@ -160,7 +178,7 @@ export async function getFaqsAction(): Promise<{
     const { data, error } = await db
       .from("faqs")
       .select("*")
-      .order("display_order", { ascending: true })
+      .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
 
     if (error) throw error;
@@ -172,7 +190,7 @@ export async function getFaqsAction(): Promise<{
       }
     }
 
-    return { success: true, data: (data as FAQItem[]) || [] };
+    return { success: true, data: ((data as any[]) || []).map(mapFaqRow) };
   } catch (error: any) {
     console.error("[getFaqsAction]", error);
     return { success: false, data: [], error: error.message };
@@ -207,7 +225,7 @@ export async function createFaqAction(payload: {
         category: cleanCategory,
         question: cleanQuestion,
         answer: cleanAnswer,
-        display_order: Number(payload.display_order) || 0,
+        sort_order: Number(payload.display_order) || 0,
       })
       .select()
       .single();
@@ -218,7 +236,7 @@ export async function createFaqAction(payload: {
     revalidatePath("/manager/cms/faqs");
     revalidatePath("/admin/cms/faqs");
 
-    return { success: true, data: data as FAQItem };
+    return { success: true, data: mapFaqRow(data) };
   } catch (error: any) {
     console.error("[createFaqAction]", error);
     return { success: false, error: error.message };
@@ -247,7 +265,7 @@ export async function updateFaqAction(
     if (payload.question !== undefined) updateData.question = payload.question.trim();
     if (payload.answer !== undefined) updateData.answer = payload.answer.trim();
     if (payload.display_order !== undefined)
-      updateData.display_order = Number(payload.display_order) || 0;
+      updateData.sort_order = Number(payload.display_order) || 0;
 
     const { data, error } = await db
       .from("faqs")
@@ -262,7 +280,7 @@ export async function updateFaqAction(
     revalidatePath("/manager/cms/faqs");
     revalidatePath("/admin/cms/faqs");
 
-    return { success: true, data: data as FAQItem };
+    return { success: true, data: mapFaqRow(data) };
   } catch (error: any) {
     console.error("[updateFaqAction]", error);
     return { success: false, error: error.message };

@@ -11,10 +11,22 @@ export const dynamic = "force-dynamic";
 
 export default async function SuppliersPage() {
   const db = createAdminDbClient();
-  const { data: suppliers } = await db
-    .from("supplier_profiles")
-    .select("*")
-    .order("company_name", { ascending: true });
+  const { data: rows } = await db
+    .from("suppliers")
+    .select("id, name, contact_name, email, phone, is_active, created_at")
+    .order("name", { ascending: true });
 
-  return <SuppliersClient suppliers={suppliers || []} />;
+  const suppliers = (rows || []).map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    company_name: s.name,
+    contact_person: s.contact_name || "",
+    email: s.email || "",
+    phone: s.phone || "",
+    performance_score: 5.0,
+    status: s.is_active === false ? "INACTIVE" : "ACTIVE",
+    created_at: s.created_at,
+  }));
+
+  return <SuppliersClient suppliers={suppliers} />;
 }

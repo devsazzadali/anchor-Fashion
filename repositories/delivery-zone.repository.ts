@@ -5,6 +5,51 @@
 import { createAdminDbClient } from "@/lib/db/client";
 import { DeliveryZone, ShippingRate } from "@/types/shipping.types";
 
+/**
+ * The real `delivery_zones` table columns are only:
+ *   id, name, code, rate (Decimal), districts (String[]), is_default,
+ *   is_active, sort_order, created_at, updated_at.
+ *
+ * Callers (ZoneForm / delivery-zone actions) also trade in display-only
+ * legacy keys — description, estimated_days_min, estimated_days_max,
+ * is_cod_available — which are NOT columns. Passing any unknown key into a
+ * `db.from("delivery_zones")` write makes the builder silently drop the
+ * whole write (empty success), so create/update payloads are sanitized to
+ * the real columns below before they reach the builder.
+ */
+const DELIVERY_ZONE_REAL_COLUMNS = [
+  "name",
+  "code",
+  "rate",
+  "districts",
+  "is_active",
+  "is_default",
+  "sort_order",
+] as const;
+
+function sanitizeZonePayload(data: Record<string, any>): Record<string, any> {
+  const sanitized: Record<string, any> = {};
+  for (const column of DELIVERY_ZONE_REAL_COLUMNS) {
+    if (data[column] !== undefined) {
+      sanitized[column] = data[column];
+    }
+  }
+  // `rate` is a Decimal column; persist it as a plain number.
+  if (sanitized.rate !== undefined && sanitized.rate !== null) {
+    sanitized.rate = Number(sanitized.rate);
+  }
+  return sanitized;
+}
+
+/**
+ * Normalize a raw zone row for callers: guarantee `rate` is present as a
+ * plain number (the builder may hand back a Decimal / numeric string).
+ */
+function withRate(zone: any): any {
+  if (!zone) return zone;
+  return { ...zone, rate: Number(zone.rate ?? 0) };
+}
+
 export class DeliveryZoneRepository {
   private getClient() {
     return createAdminDbClient();
@@ -35,12 +80,14 @@ export class DeliveryZoneRepository {
 
     const { data, error } = await db
       .from("delivery_zones")
-      .select("*")
+      // Explicit column list (real columns only) so `rate` is always
+      // included in what callers such as ZoneForm's initialData receive.
+      .select("id, name, code, rate, districts, is_default, is_active, sort_order, created_at, updated_at")
       .eq("id", id)
       .maybeSingle();
 
     if (error) throw new Error(`Get zone by ID failed: ${error.message}`);
-    return data as DeliveryZone | null;
+    return withRate(data as Record<string, any> | null) as DeliveryZone | null;
   }
 
   /**
@@ -103,11 +150,14 @@ export class DeliveryZoneRepository {
 
     const { data, error } = await db
       .from("delivery_zones")
-      .select("*")
+      // Explicit column list (real columns only), including `rate`.
+      .select("id, name, code, rate, districts, is_default, is_active, sort_order, created_at, updated_at")
       .order("name");
 
     if (error) throw new Error(`Get all zones failed: ${error.message}`);
-    return (data ?? []) as DeliveryZone[];
+    return ((data ?? []) as Record<string, any>[]).map((zone) =>
+      withRate(zone)
+    ) as DeliveryZone[];
   }
 
   /**
@@ -120,12 +170,12 @@ export class DeliveryZoneRepository {
 
     const { data: zone, error } = await db
       .from("delivery_zones")
-      .insert(data as any)
+      .insert(sanitizeZonePayload(data as Record<string, any>) as any)
       .select()
       .single();
 
     if (error) throw new Error(`Create zone failed: ${error.message}`);
-    return zone as DeliveryZone;
+    return withRate(zone as Record<string, any>) as DeliveryZone;
   }
 
   /**
@@ -139,13 +189,13 @@ export class DeliveryZoneRepository {
 
     const { data: zone, error } = await db
       .from("delivery_zones")
-      .update(data as any)
+      .update(sanitizeZonePayload(data as Record<string, any>) as any)
       .eq("id", id)
       .select()
       .single();
 
     if (error) throw new Error(`Update zone failed: ${error.message}`);
-    return zone as DeliveryZone;
+    return withRate(zone as Record<string, any>) as DeliveryZone;
   }
 
   // ============================================================================

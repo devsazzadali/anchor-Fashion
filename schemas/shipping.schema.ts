@@ -190,6 +190,8 @@ export const createDeliveryZoneSchema = z
         "Code must contain only uppercase letters, numbers, and underscores"
       ),
     description: z.string().optional(),
+    // Real column: delivery_zones.rate — the flat delivery charge (৳) for the zone.
+    rate: z.number().min(0, "Delivery charge cannot be negative").default(0),
     districts: z.array(z.string()).min(1, "At least one district is required"),
     is_cod_available: z.boolean().default(true),
     is_active: z.boolean().default(true),

@@ -38,6 +38,7 @@ export function ZoneForm({ initialData }: Props) {
     defaultValues: {
       name: initialData?.name || "",
       code: initialData?.code || "",
+      rate: Number(initialData?.rate ?? 0),
       description: initialData?.description || "",
       districts: initialData?.districts || [],
       is_cod_available: initialData?.is_cod_available ?? true,
@@ -112,6 +113,30 @@ export function ZoneForm({ initialData }: Props) {
                       <Input placeholder="e.g. INSIDE_DHAKA" {...field} />
                     </FormControl>
                     <FormDescription>Must be uppercase, numbers, and underscores.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="rate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delivery Charge (৳)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="e.g. 60"
+                        {...field}
+                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Flat delivery fee charged for orders in this zone. Saved to the zone&apos;s delivery rate.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

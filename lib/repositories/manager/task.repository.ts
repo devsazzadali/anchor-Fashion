@@ -92,9 +92,13 @@ export class TaskRepository {
   }
 
   async deleteTask(id: string): Promise<void> {
-    await prisma.task.update({
+    // Hard delete: a codebase-wide grep for `isDeleted` (2026-10-29) found
+    // no reader of soft-deleted tasks — no recycle-bin / trash feature
+    // queries isDeleted=true rows; the only usages were this repository's
+    // own getTasks filter and this method. Soft-deleting therefore left
+    // "deleted" tasks in the DB forever, so delete actually removes the row.
+    await prisma.task.delete({
       where: { id },
-      data: { isDeleted: true },
     });
   }
 }
