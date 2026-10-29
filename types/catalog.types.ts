@@ -116,6 +116,15 @@ export const ProductSchema = z.object({
       (val) => (val === "" || val === null || val === undefined ? null : Number(val)),
       z.number().min(0).optional().nullable()
     ),
+  vatPercent: z
+    .preprocess(
+      (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
+      z
+        .number()
+        .min(0, "VAT % cannot be negative")
+        .max(100, "VAT % cannot exceed 100")
+        .optional()
+    ),
   stockQuantity: z.coerce.number().int().min(0).optional().default(0),
   soldCount: z.coerce.number().int().min(0).optional().default(0),
   totalSold: z.coerce.number().int().min(0).optional().default(0),

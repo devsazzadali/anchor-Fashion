@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { OrderStatusService } from "@/lib/services/oms/order-status.service";
-import { createOrderSchema, orderItemSchema } from "@/lib/validations/oms";
 import { OrderStatus } from "@/types/oms";
 
 describe("Order Management System (OMS)", () => {
@@ -98,78 +97,9 @@ describe("Order Management System (OMS)", () => {
     });
   });
 
-  describe("Order Validation Schemas", () => {
-    it("should validate a correctly formatted order item", () => {
-      const validItem = {
-        product_id: "00000000-0000-0000-0000-000000000001",
-        variant_id: "00000000-0000-0000-0000-000000000002",
-        sku: "PANJABI-001-L",
-        product_name: "Luxury Silk Panjabi",
-        unit_price: 3500,
-        quantity: 2,
-        discount: 0,
-        tax: 525,
-        line_total: 7525,
-      };
-
-      const result = orderItemSchema.safeParse(validItem);
-      expect(result.success).toBe(true);
-    });
-
-    it("should reject order item with zero or negative quantity", () => {
-      const invalidItem = {
-        product_id: "00000000-0000-0000-0000-000000000001",
-        sku: "PANJABI-001-L",
-        product_name: "Luxury Silk Panjabi",
-        unit_price: 3500,
-        quantity: 0,
-        line_total: 0,
-      };
-
-      const result = orderItemSchema.safeParse(invalidItem);
-      expect(result.success).toBe(false);
-    });
-
-    it("should require at least one item when creating an order", () => {
-      const orderWithoutItems = {
-        subtotal: 1000,
-        tax_total: 150,
-        shipping_total: 100,
-        discount_total: 0,
-        grand_total: 1250,
-        currency: "BDT",
-        items: [],
-      };
-
-      const result = createOrderSchema.safeParse(orderWithoutItems);
-      expect(result.success).toBe(false);
-    });
-
-    it("should validate a complete order payload", () => {
-      const completeOrder = {
-        customer_id: "00000000-0000-0000-0000-000000000001",
-        subtotal: 7000,
-        tax_total: 1050,
-        shipping_total: 100,
-        discount_total: 500,
-        grand_total: 7650,
-        currency: "BDT",
-        items: [
-          {
-            product_id: "00000000-0000-0000-0000-000000000001",
-            sku: "SKU-001",
-            product_name: "Festive Panjabi",
-            unit_price: 3500,
-            quantity: 2,
-            discount: 500,
-            tax: 1050,
-            line_total: 7550,
-          },
-        ],
-      };
-
-      const result = createOrderSchema.safeParse(completeOrder);
-      expect(result.success).toBe(true);
-    });
-  });
+  // Phase 11 (owner rule 2026-10-29): the "Order Validation Schemas" suite
+  // covered createOrderSchema/orderItemSchema — the staff-side manual
+  // order-creation schemas. Those were removed with staff order creation
+  // itself (no manual sales; customers order from their own accounts), so
+  // the suite was removed with them.
 });

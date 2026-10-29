@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export interface JobPayload {
   eventType: string;
@@ -12,9 +12,9 @@ export class QueueService {
    */
   static async pushJob(job: JobPayload): Promise<boolean> {
     try {
-      const supabase = createAdminClient();
+      const db = createAdminDbClient();
 
-      const { error } = await supabase.from("system_events").insert({
+      const { error } = await db.from("system_events").insert({
         event_type: job.eventType,
         source: job.source,
         payload: job.payload,
@@ -37,11 +37,11 @@ export class QueueService {
    * Fetches pending jobs to process (usually called by a CRON job or Edge Function)
    */
   static async fetchPendingJobs(limit: number = 100) {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     // Using a locked read or simply claiming them by changing status to 'processing'
     // For a simple implementation, we select pending, and update to processing
-    const { data: jobs, error: fetchError } = await supabase
+    const { data: jobs, error: fetchError } = await db
       .from("system_events")
       .select("*")
       .eq("status", "pending")
@@ -55,7 +55,7 @@ export class QueueService {
     const jobIds = jobs.map((j: any) => j.id);
 
     // Claim jobs
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from("system_events")
       .update({ status: "processing" })
       .in("id", jobIds);
@@ -72,8 +72,8 @@ export class QueueService {
    * Marks a job as completed
    */
   static async markJobCompleted(jobId: string) {
-    const supabase = createAdminClient();
-    await supabase
+    const db = createAdminDbClient();
+    await db
       .from("system_events")
       .update({
         status: "completed",
@@ -86,8 +86,8 @@ export class QueueService {
    * Marks a job as failed
    */
   static async markJobFailed(jobId: string, errorDetails: string) {
-    const supabase = createAdminClient();
-    await supabase
+    const db = createAdminDbClient();
+    await db
       .from("system_events")
       .update({
         status: "failed",

@@ -1,6 +1,6 @@
 import { InventoryRepository } from "@/repositories/inventory.repository";
 import { InventoryLevel } from "@/types/inventory.types";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { prisma } from "@/lib/prisma";
 import { invalidateProductCache } from "@/lib/cache/invalidate-catalog";
 
@@ -220,7 +220,7 @@ export class InventoryService {
     if (!levels || levels.length === 0) return;
 
     const level = levels[0];
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     let alertType = null;
     let severity = null;
@@ -241,7 +241,7 @@ export class InventoryService {
     }
 
     if (alertType) {
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from("system_alerts")
         .select("id")
         .eq("alert_type", alertType)
@@ -254,7 +254,7 @@ export class InventoryService {
         .maybeSingle();
 
       if (!existing) {
-        await supabase.from("system_alerts").insert({
+        await db.from("system_alerts").insert({
           alert_type: alertType,
           severity,
           title,
@@ -336,28 +336,11 @@ export class InventoryService {
           if (totalStock >= item.quantity && allLevels[0]) {
             level = allLevels[0];
             item.warehouse_id = level.warehouseId;
-          } else if (allLevels.length === 0) {
-            // Auto-initialize inventory level if variant exists in Neon
-            const variant = await prisma.variant.findUnique({
-              where: { id: item.variant_id },
-            });
-            if (variant) {
-              const defaultWarehouse = await prisma.warehouse.findFirst({
-                where: { isActive: true },
-              });
-              const whId = defaultWarehouse?.id || item.warehouse_id;
-              level = await prisma.inventoryLevel.create({
-                data: {
-                  variantId: item.variant_id,
-                  warehouseId: whId,
-                  quantityAvailable: Math.max(100, item.quantity),
-                  quantityReserved: 0,
-                  reorderPoint: 10,
-                },
-              });
-              item.warehouse_id = whId;
-            }
           }
+          // NOTE: a variant with NO inventory level has zero stock. We never
+          // fabricate a level with invented quantity here — inventory-first
+          // means stock only exists when staff intakes it. The check below
+          // throws INSUFFICIENT_STOCK for such variants.
         }
       }
 
@@ -416,6 +399,24 @@ export class InventoryService {
       });
     }
 
+    // Mark the order lines as reserved (per variant + warehouse). Release and
+    // confirm only act on lines carrying this flag, which makes them
+    // idempotent: a second release/confirm for the same order is a no-op
+    // instead of inflating available stock.
+    for (const res of prismaReservations) {
+      try {
+        await prisma.orderItem.updateMany({
+          where: { orderId, variantId: res.variantId, inventoryReserved: false },
+          data: {
+            inventoryReserved: true,
+            allocatedWarehouseId: res.warehouseId,
+          },
+        });
+      } catch (markErr) {
+        console.warn("Failed to mark order items reserved:", markErr);
+      }
+    }
+
     // Record stock movements for observability
     for (const res of prismaReservations) {
       try {
@@ -435,10 +436,10 @@ export class InventoryService {
       } catch (_) {}
     }
 
-    // Step C: Best-effort sync to legacy Supabase tables (non-fatal)
+    // Step C: Best-effort sync to legacy tables (non-fatal)
     try {
-      const supabase = createAdminClient();
-      await supabase.rpc("reserve_order_inventory", {
+      const db = createAdminDbClient();
+      await db.rpc("reserve_order_inventory", {
         p_order_id: orderId,
         p_items: items,
       });
@@ -458,6 +459,12 @@ export class InventoryService {
 
       if (order && order.items.length > 0) {
         for (const item of order.items) {
+          // Idempotency: only lines whose stock is actually held are
+          // released. Orders that never reserved (drafts, direct-deduction
+          // API orders) and repeat calls (status re-transitions, duplicate
+          // payment callbacks) release nothing.
+          if (!item.inventoryReserved) continue;
+
           let variantId = item.variantId;
           if (!variantId && item.sku) {
             const v = await prisma.variant.findUnique({ where: { sku: item.sku } });
@@ -469,9 +476,21 @@ export class InventoryService {
           }
           if (!variantId) continue;
 
-          const level = await prisma.inventoryLevel.findFirst({
-            where: { variantId },
+          // Atomically claim this line's release so concurrent callers
+          // cannot both credit the stock back.
+          const claimed = await prisma.orderItem.updateMany({
+            where: { id: item.id, inventoryReserved: true },
+            data: { inventoryReserved: false },
           });
+          if (claimed.count === 0) continue;
+
+          const level = item.allocatedWarehouseId
+            ? await prisma.inventoryLevel.findFirst({
+                where: { variantId, warehouseId: item.allocatedWarehouseId },
+              })
+            : await prisma.inventoryLevel.findFirst({
+                where: { variantId },
+              });
           if (level) {
             const prevAvail = level.quantityAvailable;
             const newAvail = level.quantityAvailable + item.quantity;
@@ -520,6 +539,10 @@ export class InventoryService {
 
       if (order && order.items.length > 0) {
         for (const item of order.items) {
+          // Idempotency: only lines still holding a reservation are
+          // consumed; repeat fulfillment calls are no-ops.
+          if (!item.inventoryReserved) continue;
+
           let variantId = item.variantId;
           if (!variantId && item.sku) {
             const v = await prisma.variant.findUnique({ where: { sku: item.sku } });
@@ -531,9 +554,19 @@ export class InventoryService {
           }
           if (!variantId) continue;
 
-          const level = await prisma.inventoryLevel.findFirst({
-            where: { variantId },
+          const claimed = await prisma.orderItem.updateMany({
+            where: { id: item.id, inventoryReserved: true },
+            data: { inventoryReserved: false },
           });
+          if (claimed.count === 0) continue;
+
+          const level = item.allocatedWarehouseId
+            ? await prisma.inventoryLevel.findFirst({
+                where: { variantId, warehouseId: item.allocatedWarehouseId },
+              })
+            : await prisma.inventoryLevel.findFirst({
+                where: { variantId },
+              });
           if (level) {
             await prisma.inventoryLevel.update({
               where: { id: level.id },

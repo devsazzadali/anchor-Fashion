@@ -18,6 +18,8 @@ export interface CartItem {
     slug: string;
     price: number;
     sale_price?: number | null;
+    /** Per-product VAT % — VAT is charged on top of the selling price. */
+    vat_percent?: number;
     main_image_url?: string | null;
     stock_quantity: number;
     sku?: string | null;
@@ -118,9 +120,15 @@ export interface Order {
   subtotal: number;
   shipping_fee: number;
   discount_amount: number;
+  /** VAT charged on top of the selling prices (per-product rates). */
+  vat_amount?: number;
+  /** Legacy alias some surfaces read for the VAT/tax total. */
+  tax_total?: number;
   total_amount: number;
 
   coupon_id?: string | null;
+  /** Coupon code applied to this order (orders.coupon_code column). */
+  coupon_code?: string | null;
   payment_method: string;
   payment_status?: string | null;
   payment_intent_id?: string | null;

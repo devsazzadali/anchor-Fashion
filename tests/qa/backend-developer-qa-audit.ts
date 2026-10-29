@@ -1,6 +1,6 @@
 import { prisma } from "../../lib/prisma";
 import { InventoryService } from "../../services/inventory.service";
-import { createAdminClient } from "../../lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 interface StepResult {
   step: string;
@@ -22,7 +22,7 @@ async function runBackendDeveloperAudit() {
   console.log("================================================================================\n");
 
   const inventoryService = new InventoryService();
-  const supabase = createAdminClient();
+  const db = createAdminDbClient();
 
   // Pick default warehouse & category
   const warehouse = await prisma.warehouse.findFirst({ where: { isActive: true } });
@@ -82,7 +82,7 @@ async function runBackendDeveloperAudit() {
     record("1.3 Order updated with shippedAt & deliveredAt", !!updatedShipped.shippedAt && !!updatedShipped.deliveredAt, `deliveredAt: ${updatedShipped.deliveredAt?.toISOString()}`);
 
     // Test polyfill update compatibility with legacy field names
-    const { error: polyErr } = await supabase
+    const { error: polyErr } = await db
       .from("orders")
       .update({
         cancelled_at: new Date().toISOString(),
@@ -220,7 +220,7 @@ async function runBackendDeveloperAudit() {
     });
 
     // Query using the same logic as the cron endpoint
-    const { data: expiredList } = await supabase
+    const { data: expiredList } = await db
       .from("orders")
       .select("id, order_number")
       .in("status", ["pending_payment", "PENDING_PAYMENT", "pending", "PENDING"])

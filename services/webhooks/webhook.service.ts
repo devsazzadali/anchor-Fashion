@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { QueueService } from "@/services/jobs/queue.service";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export class WebhookService {
   /**
@@ -56,9 +56,9 @@ export class WebhookService {
     payload: any
   ): Promise<boolean> {
     try {
-      const supabase = createAdminClient();
+      const db = createAdminDbClient();
 
-      const { error } = await supabase.from("webhook_deliveries").insert({
+      const { error } = await db.from("webhook_deliveries").insert({
         webhook_id: webhookId,
         event_type: eventType,
         payload: payload,

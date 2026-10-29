@@ -2,7 +2,7 @@
  * Returns Service - Customer Self-Service & Reverse Logistics
  */
 import { ReturnRepository } from "@/repositories/return.repository";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { prisma } from "@/lib/prisma";
 import { EmailProvider } from "@/lib/notifications/EmailProvider";
 import { WalletService } from "@/services/wallet.service";
@@ -64,8 +64,8 @@ export class ReturnsService {
    */
   async getPolicySettings(): Promise<ReturnPolicySettings> {
     try {
-      const supabase = createAdminClient();
-      const { data, error } = await supabase
+      const db = createAdminDbClient();
+      const { data, error } = await db
         .from("settings")
         .select("value")
         .eq("key", "return_policy_settings")
@@ -91,11 +91,11 @@ export class ReturnsService {
     orderId: string,
     customerId: string
   ): Promise<ReturnEligibilityResult> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const policy = await this.getPolicySettings();
 
     // 1. Authoritative order query
-    const { data: order, error } = await supabase
+    const { data: order, error } = await db
       .from("orders")
       .select(
         `
@@ -377,9 +377,9 @@ export class ReturnsService {
     );
 
     // 6. Write to order status history and events
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     try {
-      await supabase.from("order_status_history").insert({
+      await db.from("order_status_history").insert({
         order_id: input.orderId,
         status: "RETURN_REQUESTED",
         notes: `Customer initiated return request ${returnNumber} (${input.reason}). Refund Amount: ৳${finalRefundAmount}.`,
@@ -390,7 +390,7 @@ export class ReturnsService {
 
     // 7. Dispatch customer confirmation email via EmailProvider
     try {
-      const { data: customerProfile } = await supabase
+      const { data: customerProfile } = await db
         .from("profiles")
         .select("email, full_name")
         .eq("id", customerId)
@@ -489,7 +489,7 @@ export class ReturnsService {
     itemConditions: Record<string, "good" | "damaged" | "defective"> = {},
     adminUserId?: string
   ): Promise<ReturnRequest> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const returnRecord = await this.returnRepo.getReturnById(returnId);
     if (!returnRecord) throw new Error(`Return ${returnId} not found`);
 
@@ -500,7 +500,7 @@ export class ReturnsService {
 
       // Update condition on return item
       if (itemConditions[item.id] && itemConditions[item.id] !== item.condition) {
-        await supabase
+        await db
           .from("return_items")
           .update({ condition } as any)
           .eq("id", item.id);
@@ -509,7 +509,7 @@ export class ReturnsService {
       // Restock only if condition is GOOD
       if (condition === "good") {
         // ATOMIC LOCK: Try to set restocked = true where restocked = false
-        const { data: updatedItem, error: updateErr } = await supabase
+        const { data: updatedItem, error: updateErr } = await db
           .from("return_items")
           .update({ restocked: true } as any)
           .eq("id", item.id)
@@ -616,7 +616,7 @@ export class ReturnsService {
     returnId: string,
     adminUserId?: string
   ): Promise<{ success: boolean; method: string; refundRef?: string; error?: string }> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const returnRecord = await this.returnRepo.getReturnWithItems(returnId);
     if (!returnRecord) throw new Error(`Return ${returnId} not found`);
 
@@ -633,7 +633,7 @@ export class ReturnsService {
       return { success: false, method: "UNKNOWN", error: "Refund is already being processed or was completed." };
     }
 
-    const { data: order } = await supabase
+    const { data: order } = await db
       .from("orders")
       .select("*")
       .eq("id", returnRecord.order_id)
@@ -643,7 +643,7 @@ export class ReturnsService {
       throw new Error(`Order ${returnRecord.order_id} not found.`);
     }
 
-    const { data: paymentTransactions } = await supabase
+    const { data: paymentTransactions } = await db
       .from("payment_transactions")
       .select("*")
       .eq("order_id", returnRecord.order_id);

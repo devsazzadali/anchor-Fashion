@@ -11,7 +11,8 @@ import {
   OrderItem,
   PaymentPayload,
 } from "@/types/checkout.types";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
+import { lineVatAmount, roundMoney } from "@/lib/utils/vat";
 
 // 15-minute window before an unpaid reservation expires.
 // The cron route at /api/cron/release-expired-reservations uses this.
@@ -58,7 +59,7 @@ export class OrderService {
    * Idempotency:
    *   idempotency_key = "order-<sessionId>" stored in the orders table with a
    *   UNIQUE constraint. A double-click or retry will hit the constraint and
-   *   Supabase will return a conflict error, preventing duplicate orders.
+   *   The database will return a conflict error, preventing duplicate orders.
    */
   async placeOrder(sessionId: string, userId?: string): Promise<Order> {
     const session = await this.checkoutService.getSession(sessionId);
@@ -78,6 +79,7 @@ export class OrderService {
 
     // ── 1. Compute totals server-side ─────────────────────────────────────
     let subtotal = 0;
+    let vatAmount = 0;
     const orderItems: Partial<OrderItem>[] = [];
     const reservationItems: ReservationItem[] = [];
     const flashSalesToConsume: { id: string; quantity: number }[] = [];
@@ -85,7 +87,7 @@ export class OrderService {
     const defaultWarehouse = await this.warehouseService.getDefaultWarehouse();
     const fallbackWarehouseId =
       defaultWarehouse?.id || "fc4ab9a5-7623-46ad-ada5-2bbdd95f3655";
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
     for (const item of cart.items) {
       if (!item.product) continue;
@@ -107,6 +109,12 @@ export class OrderService {
       const itemTotal = price * item.quantity;
 
       subtotal += itemTotal;
+      // Per-product VAT on the (possibly flash-sale) selling price.
+      vatAmount += lineVatAmount(
+        price,
+        item.quantity,
+        (item.product as any)?.vat_percent ?? (item.product as any)?.vatPercent ?? 0
+      );
 
       orderItems.push({
         product_id: item.product_id,
@@ -124,7 +132,7 @@ export class OrderService {
       if (variantId) {
         let itemWarehouseId = fallbackWarehouseId;
         try {
-          const { data: level } = await supabase
+          const { data: level } = await db
             .from("inventory_levels")
             .select("warehouse_id, quantity_available")
             .eq("variant_id", variantId)
@@ -136,7 +144,7 @@ export class OrderService {
           if (level?.warehouse_id) {
             itemWarehouseId = level.warehouse_id;
           } else {
-            const { data: anyLevel } = await supabase
+            const { data: anyLevel } = await db
               .from("inventory_levels")
               .select("warehouse_id, quantity_available")
               .eq("variant_id", variantId)
@@ -184,7 +192,10 @@ export class OrderService {
     const roundedSubtotal = Math.round(subtotal * 100) / 100;
     const roundedShipping = Math.round(shippingFee * 100) / 100;
     const roundedDiscount = Math.round(discountAmount * 100) / 100;
-    const roundedTax = Math.round(roundedSubtotal * 0.15 * 100) / 100;
+    // VAT is the sum of per-product VAT (each product's vat_percent added on
+    // top of its selling price) — this replaces a fabricated flat 15% of the
+    // subtotal that this path used to charge.
+    const roundedTax = roundMoney(vatAmount);
     const totalAmount = Math.max(
       0,
       Math.round((roundedSubtotal + roundedShipping + roundedTax - roundedDiscount) * 100) / 100
@@ -206,6 +217,8 @@ export class OrderService {
       subtotal: roundedSubtotal,
       shipping_fee: roundedShipping,
       discount_amount: roundedDiscount,
+      vat_amount: roundedTax,
+      tax_total: roundedTax,
       total_amount: totalAmount,
       coupon_id: couponId,
       payment_method: session.payment_method,
@@ -245,8 +258,8 @@ export class OrderService {
       // Reservation failed. Mark the order cancelled immediately so the DB
       // state is consistent. Stock was never modified (RPC rolled back).
       try {
-        const supabase = createAdminClient();
-        await supabase
+        const db = createAdminDbClient();
+        await db
           .from("orders")
           .update({ status: "CANCELLED" })
           .eq("id", order.id);

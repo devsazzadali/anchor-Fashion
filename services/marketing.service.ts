@@ -4,7 +4,7 @@ import {
   campaignAudienceSchema,
 } from "@/validators/marketing.schema";
 import { Campaign, CampaignAudience } from "@/types/marketing.types";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { EmailProvider } from "@/lib/notifications/EmailProvider";
 import { QueueService } from "@/services/jobs/queue.service";
 
@@ -12,7 +12,7 @@ const marketingRepository = new MarketingRepository();
 
 export class MarketingService {
   private getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   async getCampaigns(): Promise<Campaign[]> {
@@ -54,10 +54,10 @@ export class MarketingService {
   async sendCampaign(
     campaignId: string
   ): Promise<{ success: boolean; sentCount: number; error?: string }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     // 1. Fetch campaign
-    const { data: campaign, error: fetchErr } = await supabase
+    const { data: campaign, error: fetchErr } = await db
       .from("campaigns")
       .select("*")
       .eq("id", campaignId)
@@ -93,9 +93,14 @@ export class MarketingService {
       const recipients = await this.resolveRecipients(campaign.audience_id);
 
       if (recipients.length === 0) {
-        // If no recipients in customer profiles/newsletter, add configured admin/notification email
-        const fallbackEmail =
+        // If no recipients in customer profiles/newsletter, add configured admin/notification email.
+        // Phase 8: EMAIL_FROM is a formatted sender ("Name <addr>") — it was
+        // used verbatim as the recipient address, which no provider accepts.
+        // Extract the bare address.
+        const fromRaw =
           process.env.EMAIL_FROM || "newsletter@anchorfashion.com.bd";
+        const fallbackEmail =
+          fromRaw.match(/<([^>]+)>/)?.[1]?.trim() || fromRaw.trim();
         recipients.push({
           id: "00000000-0000-0000-0000-000000000000",
           email: fallbackEmail,
@@ -128,7 +133,7 @@ export class MarketingService {
           }
 
           // Insert delivery log
-          await supabase.from("campaign_logs").insert({
+          await db.from("campaign_logs").insert({
             campaign_id: campaign.id,
             recipient_id: recipient.id,
             status: res.error ? "failed" : "sent",
@@ -173,14 +178,14 @@ export class MarketingService {
     campaignId: string,
     scheduleTime: Date | string
   ): Promise<Campaign> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const scheduledDate = new Date(scheduleTime);
 
     if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
       throw new Error("Scheduled time must be a valid future date and time.");
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("campaigns")
       .update({
         status: "scheduled",
@@ -214,10 +219,10 @@ export class MarketingService {
     succeeded: number;
     failed: number;
   }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const nowIso = new Date().toISOString();
 
-    const { data: readyCampaigns, error } = await supabase
+    const { data: readyCampaigns, error } = await db
       .from("campaigns")
       .select("id")
       .eq("status", "scheduled")
@@ -254,12 +259,12 @@ export class MarketingService {
   private async resolveRecipients(
     audienceId?: string | null
   ): Promise<{ id: string; email: string; name?: string }[]> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const recipientsMap = new Map<string, { id: string; email: string; name?: string }>();
 
     try {
       // 1. Fetch from customer_profiles
-      const { data: customers } = await supabase
+      const { data: customers } = await db
         .from("customer_profiles")
         .select("id, email, first_name, last_name")
         .not("email", "is", null)
@@ -276,7 +281,7 @@ export class MarketingService {
       });
 
       // 2. Fetch from newsletter_subscribers
-      const { data: subscribers } = await supabase
+      const { data: subscribers } = await db
         .from("newsletter_subscribers")
         .select("id, email")
         .eq("is_active", true)
@@ -309,7 +314,7 @@ export class MarketingService {
     fallbackStatus: string,
     metadataPayload?: Record<string, any>
   ): Promise<string> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     const updateData: Record<string, any> = {
       status: targetStatus,
@@ -322,7 +327,7 @@ export class MarketingService {
       updateData.metadata = metadataPayload;
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from("campaigns")
       .update(updateData)
       .eq("id", campaignId);
@@ -333,7 +338,7 @@ export class MarketingService {
       delete updateData.sent_at; // In case column is missing
       delete updateData.metadata; // In case column is missing
 
-      await supabase.from("campaigns").update(updateData).eq("id", campaignId);
+      await db.from("campaigns").update(updateData).eq("id", campaignId);
       return fallbackStatus;
     }
 

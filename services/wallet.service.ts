@@ -1,12 +1,12 @@
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { CustomerWallet, WalletTransaction } from "@/types/customer.types";
 
 export class WalletService {
   private static async getClient() {
     try {
-      return await createAdminClient();
+      return await createAdminDbClient();
     } catch {
-      return await createClient();
+      return await createDbClient();
     }
   }
 
@@ -14,15 +14,15 @@ export class WalletService {
    * Fetch customer wallet, creating one if it doesn't exist yet
    */
   static async getWallet(userId: string): Promise<CustomerWallet> {
-    const supabase = await this.getClient();
-    let { data: wallet } = await supabase
+    const db = await this.getClient();
+    let { data: wallet } = await db
       .from("customer_wallets")
       .select("*")
       .eq("customer_id", userId)
       .maybeSingle();
 
     if (!wallet) {
-      const { data: created, error: createError } = await supabase
+      const { data: created, error: createError } = await db
         .from("customer_wallets")
         .insert({
           customer_id: userId,
@@ -43,8 +43,8 @@ export class WalletService {
   }
 
   static async getTransactions(walletId: string): Promise<WalletTransaction[]> {
-    const supabase = await this.getClient();
-    const { data, error } = await supabase
+    const db = await this.getClient();
+    const { data, error } = await db
       .from("wallet_transactions")
       .select("*")
       .eq("wallet_id", walletId)
@@ -71,7 +71,7 @@ export class WalletService {
       throw new Error("Top up amount must be greater than zero");
     }
 
-    const supabase = await this.getClient();
+    const db = await this.getClient();
 
     // 1. Prevent duplicate credit by checking paymentRef
     const isUuid = Boolean(
@@ -81,7 +81,7 @@ export class WalletService {
     const refId = isUuid ? params.paymentRef : null;
 
     if (params.paymentRef) {
-      let query = supabase.from("wallet_transactions").select("id");
+      let query = db.from("wallet_transactions").select("id");
       if (isUuid) {
         query = query.or(`reference_id.eq.${params.paymentRef},description.ilike.%${params.paymentRef}%`);
       } else {
@@ -99,7 +99,7 @@ export class WalletService {
     const newBalance = Number((Number(wallet.balance) + Number(params.amount)).toFixed(2));
 
     // 3. Atomically update wallet balance
-    const { data: updatedWallet, error: updateError } = await supabase
+    const { data: updatedWallet, error: updateError } = await db
       .from("customer_wallets")
       .update({
         balance: newBalance,
@@ -118,7 +118,7 @@ export class WalletService {
       params.description ||
       `Wallet top-up via ${params.paymentMethod} (Ref: ${params.paymentRef})`;
 
-    const { data: transaction, error: txError } = await supabase
+    const { data: transaction, error: txError } = await db
       .from("wallet_transactions")
       .insert({
         wallet_id: wallet.id,
@@ -153,7 +153,7 @@ export class WalletService {
       throw new Error("Withdrawal amount must be greater than zero");
     }
 
-    const supabase = await this.getClient();
+    const db = await this.getClient();
     const wallet = await this.getWallet(params.userId);
 
     if (Number(wallet.balance) < params.amount) {
@@ -163,7 +163,7 @@ export class WalletService {
     const newBalance = Number((Number(wallet.balance) - Number(params.amount)).toFixed(2));
 
     // Update balance
-    const { data: updatedWallet, error: updateError } = await supabase
+    const { data: updatedWallet, error: updateError } = await db
       .from("customer_wallets")
       .update({
         balance: newBalance,
@@ -182,7 +182,7 @@ export class WalletService {
       params.description ||
       `Withdrawal to ${params.destinationMethod} (${params.destinationAccount})`;
 
-    const { data: transaction, error: txError } = await supabase
+    const { data: transaction, error: txError } = await db
       .from("wallet_transactions")
       .insert({
         wallet_id: wallet.id,
@@ -216,7 +216,7 @@ export class WalletService {
       throw new Error("Transfer amount must be greater than zero");
     }
 
-    const supabase = await this.getClient();
+    const db = await this.getClient();
 
     // 1. Find recipient profile
     let recipientProfileId: string | null = null;
@@ -225,7 +225,7 @@ export class WalletService {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.toIdentifier);
 
     // Try customer_profiles first
-    let cpQuery = supabase.from("customer_profiles").select("id, first_name, last_name, phone, email");
+    let cpQuery = db.from("customer_profiles").select("id, first_name, last_name, phone, email");
     if (isUuid) {
       cpQuery = cpQuery.eq("id", params.toIdentifier);
     } else if (params.toIdentifier.includes("@")) {
@@ -240,7 +240,7 @@ export class WalletService {
       recipientName = [cProfile.first_name, cProfile.last_name].filter(Boolean).join(" ") || "Member";
     } else {
       // Fallback to profiles
-      let pQuery = supabase.from("profiles").select("id, first_name, last_name, phone");
+      let pQuery = db.from("profiles").select("id, first_name, last_name, phone");
       if (isUuid) {
         pQuery = pQuery.eq("id", params.toIdentifier);
       } else {
@@ -271,7 +271,7 @@ export class WalletService {
 
     // 3. Atomically debit sender
     const senderNewBalance = Number((Number(senderWallet.balance) - Number(params.amount)).toFixed(2));
-    const { data: updatedSender, error: sErr } = await supabase
+    const { data: updatedSender, error: sErr } = await db
       .from("customer_wallets")
       .update({ balance: senderNewBalance, updated_at: new Date().toISOString() })
       .eq("id", senderWallet.id)
@@ -282,7 +282,7 @@ export class WalletService {
 
     // 4. Atomically credit recipient
     const recipientNewBalance = Number((Number(recipientWallet.balance) + Number(params.amount)).toFixed(2));
-    const { data: updatedRecipient, error: rErr } = await supabase
+    const { data: updatedRecipient, error: rErr } = await db
       .from("customer_wallets")
       .update({ balance: recipientNewBalance, updated_at: new Date().toISOString() })
       .eq("id", recipientWallet.id)
@@ -294,7 +294,7 @@ export class WalletService {
     const transferRef = `TX-${Date.now()}`;
 
     // 5. Log debit on sender
-    await supabase.from("wallet_transactions").insert({
+    await db.from("wallet_transactions").insert({
       wallet_id: senderWallet.id,
       type: "DEBIT",
       amount: params.amount,
@@ -305,7 +305,7 @@ export class WalletService {
     });
 
     // 6. Log credit on recipient
-    await supabase.from("wallet_transactions").insert({
+    await db.from("wallet_transactions").insert({
       wallet_id: recipientWallet.id,
       type: "CREDIT",
       amount: params.amount,

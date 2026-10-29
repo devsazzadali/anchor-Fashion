@@ -45,6 +45,7 @@ export type ShippingEventType =
   | "shipment_created"
   | "courier_assigned"
   | "courier_reassigned"
+  | "submission_failed"
   | "pickup_requested"
   | "pickup_confirmed"
   | "picked_up"

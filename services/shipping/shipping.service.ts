@@ -286,9 +286,35 @@ export class ShippingService {
       });
     }
 
-    // Log provider failure but don't throw — shipment remains in 'created'
+    // Phase 8: a failed provider submission is a FAILURE, not a silent
+    // no-op. The old code logged and returned the draft shipment, so the
+    // caller advanced the order and the UI announced a courier booking
+    // that never happened. Record the failure on the shipment timeline,
+    // keep the shipment as a 'created' draft, and surface the provider's
+    // message to the operator.
     console.error(`[ShippingService] Provider submit failed:`, result.error);
-    return shipment;
+    try {
+      await this.shipmentRepo.addEvent(
+        shipment.id,
+        "submission_failed",
+        {
+          provider: shipment.courier_provider_code,
+          error: (result.error as any)?.message || String(result.error || "Unknown provider error"),
+          code: (result.error as any)?.code || null,
+        },
+        submittedBy,
+        "admin"
+      );
+    } catch (eventErr) {
+      console.warn(
+        "[ShippingService] Could not record submission_failed event:",
+        eventErr
+      );
+    }
+    throw new Error(
+      (result.error as any)?.message ||
+        "The courier rejected the shipment submission."
+    );
   }
 
   /**
