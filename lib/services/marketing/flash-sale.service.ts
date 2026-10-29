@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export interface FlashSaleRecord {
   id: string;
@@ -14,7 +14,7 @@ export interface FlashSaleRecord {
 
 export class FlashSaleService {
   private static getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
@@ -23,10 +23,10 @@ export class FlashSaleService {
    */
   static async getActiveFlashSales(): Promise<FlashSaleRecord[]> {
     try {
-      const supabase = this.getAdminClient();
+      const db = this.getAdminClient();
       const now = new Date().toISOString();
 
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("flash_sales")
         .select("*")
         .eq("is_active", true)
@@ -66,9 +66,9 @@ export class FlashSaleService {
     flashSaleId: string,
     quantity: number
   ): Promise<{ success: boolean; error?: string }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     
-    const { error } = await supabase.rpc("consume_flash_sale_stock", {
+    const { error } = await db.rpc("consume_flash_sale_stock", {
       p_flash_sale_id: flashSaleId,
       p_quantity: quantity,
     });
@@ -89,9 +89,9 @@ export class FlashSaleService {
     flashSaleId: string,
     quantity: number
   ): Promise<{ success: boolean; error?: string }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     
-    const { error } = await supabase.rpc("release_flash_sale_stock", {
+    const { error } = await db.rpc("release_flash_sale_stock", {
       p_flash_sale_id: flashSaleId,
       p_quantity: quantity,
     });
@@ -108,8 +108,8 @@ export class FlashSaleService {
    * Retrieves all flash sales (for admin).
    */
   static async getAllFlashSales(): Promise<FlashSaleRecord[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("flash_sales")
       .select("*")
       .order("start_time", { ascending: false });

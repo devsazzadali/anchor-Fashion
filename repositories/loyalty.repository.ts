@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { LoyaltyAccount, LoyaltyTransaction } from "@/types/customer.types";
 
 export class LoyaltyRepository {
   static async getAccount(userId: string): Promise<LoyaltyAccount | null> {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createDbClient();
+    const { data, error } = await db
       .from("loyalty_accounts")
       .select("*")
       .eq("customer_id", userId)
@@ -20,8 +20,8 @@ export class LoyaltyRepository {
   static async getTransactions(
     accountId: string
   ): Promise<LoyaltyTransaction[]> {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createDbClient();
+    const { data, error } = await db
       .from("loyalty_transactions")
       .select("*")
       .eq("loyalty_account_id", accountId)

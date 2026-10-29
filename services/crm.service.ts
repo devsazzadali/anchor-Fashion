@@ -1,5 +1,5 @@
 import { crmRepository } from "@/repositories/crm.repository";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   createCRMLeadSchema,
   updateCRMLeadSchema,
@@ -120,11 +120,11 @@ export class CRMService {
 
     // If no target profile was specified, convert lead into an official customer profile
     if (!targetProfileId && lead.email) {
-      const supabase = createAdminClient();
+      const db = createAdminDbClient();
       const cleanEmail = lead.email.trim().toLowerCase();
 
       // Check if customer profile already exists
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile } = await db
         .from("customer_profiles")
         .select("id")
         .ilike("email", cleanEmail)
@@ -142,7 +142,7 @@ export class CRMService {
         // 1. Try to create or find Auth user
         let authUserId = newUserId;
         try {
-          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+          const { data: authData, error: authError } = await db.auth.admin.createUser({
             email: cleanEmail,
             email_confirm: true,
             user_metadata: {
@@ -156,7 +156,7 @@ export class CRMService {
           if (authData?.user?.id) {
             authUserId = authData.user.id;
           } else if (authError) {
-            const { data: listData } = await supabase.auth.admin.listUsers();
+            const { data: listData } = await db.auth.admin.listUsers();
             const existingAuth = listData?.users?.find(
               (u) => u.email?.toLowerCase() === cleanEmail
             );
@@ -167,7 +167,7 @@ export class CRMService {
         }
 
         // 2. Upsert customer_profiles
-        await supabase.from("customer_profiles").upsert(
+        await db.from("customer_profiles").upsert(
           {
             id: authUserId,
             first_name: firstName,
@@ -181,7 +181,7 @@ export class CRMService {
 
         // 3. Upsert profiles
         try {
-          await supabase.from("profiles").upsert(
+          await db.from("profiles").upsert(
             {
               id: authUserId,
               first_name: firstName,
@@ -196,7 +196,7 @@ export class CRMService {
         } catch {}
 
         // 4. Upsert crm_customers
-        await supabase.from("crm_customers").upsert(
+        await db.from("crm_customers").upsert(
           {
             profile_id: authUserId,
             customer_lifecycle_stage: "FIRST_TIME_BUYER",

@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { BlogPost, BlogCategory, BlogTag } from "@/types/blog.types";
 
 const UUID_REGEX =
@@ -17,7 +17,7 @@ async function resolveFeaturedImageForWrite(
   }
 
   try {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
     const { data: existing } = await admin
       .from("cms_media")
       .select("id")
@@ -72,7 +72,7 @@ async function populateMediaUrls(posts: any[]): Promise<void> {
   if (uuidsToFetch.length > 0) {
     const uniqueUuids = Array.from(new Set(uuidsToFetch));
     try {
-      const admin = createAdminClient();
+      const admin = createAdminDbClient();
       const { data: mediaItems } = await admin
         .from("cms_media")
         .select("id, file_url")
@@ -97,7 +97,7 @@ async function populateMediaUrls(posts: any[]): Promise<void> {
 
 export class BlogRepository {
   async getPosts(status?: string): Promise<BlogPost[]> {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
     let query = admin
       .from("blog_posts")
       .select("*, blog_categories(*)")
@@ -119,7 +119,7 @@ export class BlogRepository {
   }
 
   async getPostBySlug(slug: string): Promise<BlogPost | null> {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
     const { data, error } = await admin
       .from("blog_posts")
       .select("*, blog_categories(*), blog_post_tags(blog_tags(*))")
@@ -138,7 +138,7 @@ export class BlogRepository {
   }
 
   async getPostById(id: string): Promise<BlogPost | null> {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
     const { data, error } = await admin
       .from("blog_posts")
       .select("*, blog_categories(*), blog_post_tags(blog_tags(*))")
@@ -157,7 +157,7 @@ export class BlogRepository {
   }
 
   async createPost(post: Partial<BlogPost>): Promise<BlogPost> {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
 
     const cleanedPost: any = { ...post };
     if (cleanedPost.category_id !== undefined) {
@@ -190,7 +190,7 @@ export class BlogRepository {
   }
 
   async updatePost(id: string, updates: Partial<BlogPost>): Promise<BlogPost> {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
 
     const cleanedUpdates: any = { ...updates };
     if (cleanedUpdates.category_id !== undefined) {
@@ -226,7 +226,7 @@ export class BlogRepository {
   }
 
   async deletePost(id: string): Promise<void> {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
     try {
       await admin.from("blog_post_tags").delete().eq("post_id", id);
     } catch {}
@@ -235,7 +235,7 @@ export class BlogRepository {
   }
 
   async getCategories(): Promise<BlogCategory[]> {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
     const { data, error } = await admin
       .from("blog_categories")
       .select("*")
@@ -248,7 +248,7 @@ export class BlogRepository {
   }
 
   async getTags(): Promise<BlogTag[]> {
-    const admin = createAdminClient();
+    const admin = createAdminDbClient();
     const { data, error } = await admin
       .from("blog_tags")
       .select("*")

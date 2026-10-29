@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   Shipment,
   ShipmentItem,
@@ -12,7 +12,7 @@ import {
 
 export class ShipmentRepository {
   private getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
@@ -25,7 +25,7 @@ export class ShipmentRepository {
     >,
     items: Omit<Partial<ShipmentItem>, "id" | "shipment_id" | "created_at">[]
   ): Promise<Shipment> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     const payload: any = { ...data };
     if (payload.courier_provider_code && !payload.courier) {
@@ -39,7 +39,7 @@ export class ShipmentRepository {
       payload.shipping_charge = payload.shipping_cost;
     }
 
-    const { data: shipment, error } = await supabase
+    const { data: shipment, error } = await db
       .from("shipments")
       .insert(payload)
       .select()
@@ -48,7 +48,7 @@ export class ShipmentRepository {
     if (error) throw new Error(`Create shipment failed: ${error.message}`);
 
     if (items.length > 0) {
-      const { error: itemError } = await supabase
+      const { error: itemError } = await db
         .from("shipment_items")
         .insert(
           items.map((item) => ({ ...item, shipment_id: shipment.id })) as any
@@ -68,7 +68,7 @@ export class ShipmentRepository {
     id: string,
     data: Partial<Shipment> & { [key: string]: any }
   ): Promise<Shipment> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     const payload: any = { ...data };
     if (payload.courier_provider_code && !payload.courier) {
@@ -82,7 +82,7 @@ export class ShipmentRepository {
       payload.shipping_charge = payload.shipping_cost;
     }
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await db
       .from("shipments")
       .update(payload)
       .eq("id", id)
@@ -97,9 +97,9 @@ export class ShipmentRepository {
    * Get shipment by ID.
    */
   async getShipmentById(id: string): Promise<Shipment | null> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("shipments")
       .select("*")
       .eq("id", id)
@@ -115,9 +115,9 @@ export class ShipmentRepository {
   async getShipmentByTrackingNumber(
     trackingNumber: string
   ): Promise<Shipment | null> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("shipments")
       .select("*")
       .eq("tracking_number", trackingNumber)
@@ -132,9 +132,9 @@ export class ShipmentRepository {
    * Get all shipments for an order.
    */
   async getShipmentsByOrderId(orderId: string): Promise<Shipment[]> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("shipments")
       .select("*")
       .eq("order_id", orderId)
@@ -151,9 +151,9 @@ export class ShipmentRepository {
   async getShipmentWithDetails(
     id: string
   ): Promise<ShipmentWithDetails | null> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("shipments")
       .select(
         `
@@ -185,13 +185,13 @@ export class ShipmentRepository {
   async listShipments(
     filters: ShipmentFilters
   ): Promise<PaginatedResult<Shipment>> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    let query = supabase
+    let query = db
       .from("v_shipments_summary")
       .select("*", { count: "exact" });
 
@@ -229,8 +229,8 @@ export class ShipmentRepository {
     shipmentId: string,
     event: Omit<ShipmentTrackingEvent, "id" | "shipment_id" | "created_at">
   ): Promise<void> {
-    const supabase = this.getAdminClient();
-    await supabase
+    const db = this.getAdminClient();
+    await db
       .from("shipment_tracking_events")
       .insert({ ...event, shipment_id: shipmentId } as any);
   }
@@ -239,9 +239,9 @@ export class ShipmentRepository {
     shipmentId: string,
     event: Omit<ShipmentTrackingEvent, "id" | "shipment_id" | "created_at">
   ): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     // Upsert by (shipment_id, event_time, status) to prevent duplicates
-    const { error } = await supabase
+    const { error } = await db
       .from("shipment_tracking_events")
       .upsert({ ...event, shipment_id: shipmentId } as any, {
         onConflict: "shipment_id,event_time,status",
@@ -253,8 +253,8 @@ export class ShipmentRepository {
   async getTrackingEvents(
     shipmentId: string
   ): Promise<ShipmentTrackingEvent[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("shipment_tracking_events")
       .select("*")
       .eq("shipment_id", shipmentId)
@@ -280,8 +280,8 @@ export class ShipmentRepository {
       | "created_at"
     >
   ): Promise<ShipmentLabel> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("shipment_labels")
       .insert({ ...label, shipment_id: shipmentId } as any)
       .select()
@@ -292,8 +292,8 @@ export class ShipmentRepository {
   }
 
   async getLabels(shipmentId: string): Promise<ShipmentLabel[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("shipment_labels")
       .select("*")
       .eq("shipment_id", shipmentId)
@@ -304,14 +304,14 @@ export class ShipmentRepository {
   }
 
   async incrementLabelPrintCount(labelId: string): Promise<void> {
-    const supabase = this.getAdminClient();
-    await supabase
+    const db = this.getAdminClient();
+    await db
       .from("shipment_labels")
       .update({ printed_at: new Date().toISOString() } as any)
       .eq("id", labelId);
 
     // Increment via raw SQL for atomicity
-    await supabase
+    await db
       .rpc("increment_label_print_count", { label_id: labelId })
       .maybeSingle();
   }
@@ -327,8 +327,8 @@ export class ShipmentRepository {
     triggeredBy?: string,
     source: "system" | "admin" | "webhook" | "customer" = "system"
   ): Promise<void> {
-    const supabase = this.getAdminClient();
-    await supabase.from("shipment_events").insert({
+    const db = this.getAdminClient();
+    await db.from("shipment_events").insert({
       shipment_id: shipmentId,
       event_type: eventType,
       payload,

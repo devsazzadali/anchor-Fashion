@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   CRMCustomer,
   CRMLead,
@@ -8,13 +8,13 @@ import {
 
 export class CRMRepository {
   private getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   async getCustomers(): Promise<CRMCustomer[]> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     try {
-      const { data: customerProfiles } = await supabase
+      const { data: customerProfiles } = await db
         .from("customer_profiles")
         .select("*")
         .order("created_at", { ascending: false });
@@ -31,7 +31,7 @@ export class CRMRepository {
       }
     } catch {}
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("crm_customers")
       .select("*, customer_profiles(*)")
       .order("created_at", { ascending: false });
@@ -47,8 +47,8 @@ export class CRMRepository {
   }
 
   async getCustomerById(id: string): Promise<CRMCustomer | null> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("crm_customers")
       .select("*, customer_profiles(*)")
       .eq("id", id)
@@ -62,8 +62,8 @@ export class CRMRepository {
   }
 
   async getLeads(): Promise<CRMLead[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("crm_leads")
       .select("*")
       .order("created_at", { ascending: false });
@@ -73,8 +73,8 @@ export class CRMRepository {
   }
 
   async createLead(leadData: Partial<CRMLead>): Promise<CRMLead> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("crm_leads")
       .insert(leadData)
       .select()
@@ -85,8 +85,8 @@ export class CRMRepository {
   }
 
   async updateLead(id: string, updateData: Partial<CRMLead>): Promise<CRMLead> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("crm_leads")
       .update(updateData)
       .eq("id", id)
@@ -98,8 +98,8 @@ export class CRMRepository {
   }
 
   async getLeadById(id: string): Promise<CRMLead | null> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("crm_leads")
       .select("*")
       .eq("id", id)
@@ -113,8 +113,8 @@ export class CRMRepository {
   }
 
   async getLeadByEmail(email: string): Promise<CRMLead | null> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("crm_leads")
       .select("*")
       .ilike("email", email.trim())
@@ -125,20 +125,20 @@ export class CRMRepository {
   }
 
   async deleteLead(id: string): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     try {
-      await supabase.from("communication_logs").delete().eq("lead_id", id);
+      await db.from("communication_logs").delete().eq("lead_id", id);
     } catch {}
     try {
-      await supabase.from("crm_notes").delete().eq("lead_id", id);
+      await db.from("crm_notes").delete().eq("lead_id", id);
     } catch {}
-    const { error } = await supabase.from("crm_leads").delete().eq("id", id);
+    const { error } = await db.from("crm_leads").delete().eq("id", id);
     if (error) throw new Error(error.message);
   }
 
   async getNotes(profileId?: string, leadId?: string): Promise<CRMNote[]> {
-    const supabase = this.getAdminClient();
-    let query = supabase
+    const db = this.getAdminClient();
+    let query = db
       .from("crm_notes")
       .select("*")
       .order("created_at", { ascending: false });
@@ -155,8 +155,8 @@ export class CRMRepository {
   }
 
   async createNote(noteData: Partial<CRMNote>): Promise<CRMNote> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("crm_notes")
       .insert(noteData)
       .select()
@@ -170,8 +170,8 @@ export class CRMRepository {
     profileId?: string,
     leadId?: string
   ): Promise<CommunicationLog[]> {
-    const supabase = this.getAdminClient();
-    let query = supabase
+    const db = this.getAdminClient();
+    let query = db
       .from("communication_logs")
       .select("*")
       .order("created_at", { ascending: false });
@@ -190,8 +190,8 @@ export class CRMRepository {
   async createCommunicationLog(
     logData: Partial<CommunicationLog>
   ): Promise<CommunicationLog> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("communication_logs")
       .insert(logData)
       .select()
@@ -205,8 +205,8 @@ export class CRMRepository {
     id: string,
     logData: Partial<CommunicationLog>
   ): Promise<CommunicationLog> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("communication_logs")
       .update(logData)
       .eq("id", id)
@@ -218,8 +218,8 @@ export class CRMRepository {
   }
 
   async deleteCommunicationLog(id: string): Promise<void> {
-    const supabase = this.getAdminClient();
-    const { error } = await supabase
+    const db = this.getAdminClient();
+    const { error } = await db
       .from("communication_logs")
       .delete()
       .eq("id", id);

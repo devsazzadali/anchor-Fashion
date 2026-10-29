@@ -2,21 +2,21 @@
 // Delivery Zone Repository
 // ============================================================================
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { DeliveryZone, ShippingRate } from "@/types/shipping.types";
 
 export class DeliveryZoneRepository {
   private getClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
    * Get zone by code.
    */
   async getZoneByCode(code: string): Promise<DeliveryZone | null> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("delivery_zones")
       .select("*")
       .eq("code", code)
@@ -31,9 +31,9 @@ export class DeliveryZoneRepository {
    * Get zone by ID.
    */
   async getZoneById(id: string): Promise<DeliveryZone | null> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("delivery_zones")
       .select("*")
       .eq("id", id)
@@ -50,10 +50,10 @@ export class DeliveryZoneRepository {
     district: string,
     city?: string
   ): Promise<DeliveryZone | null> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
     // Try to match district in the districts array
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("delivery_zones")
       .select("*")
       .eq("is_active", true)
@@ -65,7 +65,7 @@ export class DeliveryZoneRepository {
 
     // Fallback: try city match in any array element
     if (city) {
-      const { data: cityMatch } = await supabase
+      const { data: cityMatch } = await db
         .from("delivery_zones")
         .select("*")
         .eq("is_active", true)
@@ -83,9 +83,9 @@ export class DeliveryZoneRepository {
    * Get all active zones.
    */
   async getAllActiveZones(): Promise<DeliveryZone[]> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("delivery_zones")
       .select("*")
       .eq("is_active", true)
@@ -99,9 +99,9 @@ export class DeliveryZoneRepository {
    * Get all zones (including inactive).
    */
   async getAllZones(): Promise<DeliveryZone[]> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("delivery_zones")
       .select("*")
       .order("name");
@@ -116,9 +116,9 @@ export class DeliveryZoneRepository {
   async createZone(
     data: Omit<DeliveryZone, "id" | "created_at" | "updated_at">
   ): Promise<DeliveryZone> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data: zone, error } = await supabase
+    const { data: zone, error } = await db
       .from("delivery_zones")
       .insert(data as any)
       .select()
@@ -135,9 +135,9 @@ export class DeliveryZoneRepository {
     id: string,
     data: Partial<DeliveryZone>
   ): Promise<DeliveryZone> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data: zone, error } = await supabase
+    const { data: zone, error } = await db
       .from("delivery_zones")
       .update(data as any)
       .eq("id", id)
@@ -156,9 +156,9 @@ export class DeliveryZoneRepository {
    * Get shipping rates for a zone.
    */
   async getShippingRates(zoneId: string): Promise<ShippingRate[]> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("shipping_rates")
       .select("*")
       .eq("zone_id", zoneId)
@@ -174,9 +174,9 @@ export class DeliveryZoneRepository {
   async upsertRate(
     data: Omit<ShippingRate, "id" | "created_at" | "updated_at">
   ): Promise<ShippingRate> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data: rate, error } = await supabase
+    const { data: rate, error } = await db
       .from("shipping_rates")
       .upsert(data as any, { onConflict: "zone_id,name,is_cod_rate" })
       .select()
@@ -195,9 +195,9 @@ export class DeliveryZoneRepository {
     orderValue: number,
     isCOD: boolean
   ): Promise<number> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase.rpc("calculate_shipping_charge", {
+    const { data, error } = await db.rpc("calculate_shipping_charge", {
       p_zone_id: zoneId,
       p_weight_kg: weightKg,
       p_order_value: orderValue,

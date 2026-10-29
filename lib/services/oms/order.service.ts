@@ -2,52 +2,17 @@ import { OrderRepository } from "@/lib/repositories/oms/order.repository";
 import { OrderItemsRepository } from "@/lib/repositories/oms/order-items.repository";
 import { OrderStatusService } from "./order-status.service";
 import { Order, OrderStatus } from "@/types/oms";
-import { CreateOrderInput } from "@/lib/validations/oms";
+
+// NOTE (Phase 11, owner rule 2026-10-29): this service deliberately has NO
+// createOrder method. Anchor Fashion has no manual/staff sales — orders are
+// created only by customers through the storefront checkout
+// (lib/services/order.service.ts → OrderService.placeOrder). This service
+// covers staff-side order OPERATIONS only: status transitions and details.
 
 export class OrderService {
   private orderRepo = new OrderRepository();
   private orderItemsRepo = new OrderItemsRepository();
   private statusService = new OrderStatusService();
-
-  async createOrder(data: CreateOrderInput): Promise<Order> {
-    const orderNumber = `ORD-${Date.now()}`;
-
-    const orderData: Partial<Order> = {
-      order_number: orderNumber,
-      customer_id: data.customer_id || null,
-      status: "draft", // Initial state
-      subtotal: data.subtotal,
-      tax_total: data.tax_total,
-      shipping_total: data.shipping_total,
-      discount_total: data.discount_total,
-      grand_total: data.grand_total,
-      currency: data.currency,
-      shipping_address_id: data.shipping_address_id || null,
-      billing_address_id: data.billing_address_id || null,
-      payment_intent_id: data.payment_intent_id || null,
-    };
-
-    const newOrder = await this.orderRepo.createOrder(orderData as any);
-
-    const itemsToInsert = data.items.map((item) => ({
-      order_id: newOrder.id,
-      product_id: item.product_id,
-      variant_id: item.variant_id || null,
-      sku: item.sku,
-      product_name: item.product_name,
-      variant_name: item.variant_name || null,
-      unit_price: item.unit_price,
-      quantity: item.quantity,
-      discount: item.discount,
-      tax: item.tax,
-      line_total: item.line_total,
-      inventory_reserved: false,
-      allocated_warehouse_id: null,
-    }));
-
-    await this.orderItemsRepo.createOrderItems(itemsToInsert);
-    return newOrder;
-  }
 
   async updateOrderStatus(
     id: string,
@@ -130,37 +95,64 @@ export class OrderService {
       }
     }
 
+    // Phase 8: email automations — invoice email to the customer when the
+    // order completes, plus a staff notification email for every status
+    // change. Fire-and-forget; the helpers never throw and a mail failure
+    // must never fail the status update itself.
+    void (async () => {
+      try {
+        const { sendOrderCompletionInvoiceEmail, notifyStaffOrderEvent } =
+          await import("@/lib/notifications/order-notifications");
+        if (lowerStatus === "delivered" || lowerStatus === "completed") {
+          await sendOrderCompletionInvoiceEmail(id);
+        }
+        await notifyStaffOrderEvent({
+          kind: "status_change",
+          orderId: id,
+          status: newStatus.toUpperCase(),
+          previousStatus: order.status
+            ? String(order.status).toUpperCase()
+            : null,
+        });
+      } catch (err) {
+        console.error(
+          `[OrderService] Order email notifications failed for order ${id}:`,
+          err
+        );
+      }
+    })();
+
     return updated;
   }
 
-  async getOrderDetails(id: string, supabaseClient?: any) {
-    const order = await this.orderRepo.getOrderById(id, supabaseClient);
+  async getOrderDetails(id: string, dbClient?: any) {
+    const order = await this.orderRepo.getOrderById(id, dbClient);
     if (!order) return null;
 
-    const items = await this.orderItemsRepo.getOrderItems(order.id, supabaseClient);
+    const items = await this.orderItemsRepo.getOrderItems(order.id, dbClient);
 
     // Fetch customer profile details if customer_id exists
     let customer = null;
     if (order.customer_id) {
       try {
-        const supabase = supabaseClient || (await import("@/lib/supabase/server").then(m => m.createClient()));
+        const db = dbClient || (await import("@/lib/db/client").then(m => m.createDbClient()));
         
         // 1. Fetch from customer_profiles (contains id, first_name, last_name, email, phone)
-        const { data: cProfile } = await supabase
+        const { data: cProfile } = await db
           .from("customer_profiles")
           .select("id, first_name, last_name, email, phone")
           .eq("id", order.customer_id)
           .maybeSingle();
 
         // 2. Fetch from profiles (fallback)
-        const { data: profile } = await supabase
+        const { data: profile } = await db
           .from("profiles")
           .select("id, first_name, last_name, phone, avatar_url")
           .eq("id", order.customer_id)
           .maybeSingle();
 
         // 3. Fetch tier from crm_customer_profiles
-        const { data: crmProfile } = await supabase
+        const { data: crmProfile } = await db
           .from("crm_customer_profiles")
           .select("customer_tier")
           .eq("profile_id", order.customer_id)
@@ -170,9 +162,9 @@ export class OrderService {
         let customerEmail = cProfile?.email || null;
         if (!customerEmail) {
           try {
-            const { createAdminClient } = await import("@/lib/supabase/server");
-            const adminSupabase = await createAdminClient();
-            const { data: authUser } = await adminSupabase.auth.admin.getUserById(order.customer_id);
+            const { createAdminDbClient } = await import("@/lib/db/client");
+            const adminDb = await createAdminDbClient();
+            const { data: authUser } = await adminDb.auth.admin.getUserById(order.customer_id);
             if (authUser?.user?.email) {
               customerEmail = authUser.user.email;
             }
@@ -206,10 +198,10 @@ export class OrderService {
     let shippingAddress = null;
     let billingAddress = null;
     try {
-      const supabase = supabaseClient || (await import("@/lib/supabase/server").then(m => m.createClient()));
+      const db = dbClient || (await import("@/lib/db/client").then(m => m.createDbClient()));
       
       // 1. Try order_addresses
-      const { data: orderAddrs } = await supabase
+      const { data: orderAddrs } = await db
         .from("order_addresses")
         .select("*")
         .eq("order_id", id);
@@ -221,7 +213,7 @@ export class OrderService {
 
       // 2. Fallback to addresses table
       if (!shippingAddress && order.shipping_address_id) {
-        const { data: addr } = await supabase
+        const { data: addr } = await db
           .from("addresses")
           .select("*")
           .eq("id", order.shipping_address_id)
@@ -230,7 +222,7 @@ export class OrderService {
       }
 
       if (!billingAddress && order.billing_address_id) {
-        const { data: addr } = await supabase
+        const { data: addr } = await db
           .from("addresses")
           .select("*")
           .eq("id", order.billing_address_id)
@@ -244,8 +236,8 @@ export class OrderService {
     // Fetch manual payment transaction if available
     let manualPayment = null;
     try {
-      const supabase = supabaseClient || (await import("@/lib/supabase/server").then(m => m.createClient()));
-      const { data: tx } = await supabase
+      const db = dbClient || (await import("@/lib/db/client").then(m => m.createDbClient()));
+      const { data: tx } = await db
         .from("payment_transactions")
         .select("*")
         .eq("order_id", id)

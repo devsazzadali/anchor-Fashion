@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export type DateRange = {
   from: Date;
@@ -10,7 +10,7 @@ export class AnalyticsRepository {
    * Executive Dashboard Data
    */
   static async getExecutiveSummary(dateRange?: DateRange) {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
 
     let periodDays = 30;
     let currentFrom = new Date();
@@ -27,12 +27,12 @@ export class AnalyticsRepository {
     previousFrom.setDate(previousFrom.getDate() - periodDays);
     
     // Revenue and Orders: Calculated directly from orders table
-    const { data: orders } = await supabase
+    const { data: orders } = await db
       .from("orders")
-      .select("grand_total, status, created_at");
+      .select("id, grand_total, status, created_at");
 
     // Customers from customers table
-    const { data: allCustomers } = await supabase
+    const { data: allCustomers } = await db
       .from("customers")
       .select("id, created_at, status")
       .gte("created_at", previousFrom.toISOString())
@@ -42,14 +42,53 @@ export class AnalyticsRepository {
     const previousCustomers = allCustomers?.filter((c: any) => new Date(c.created_at) >= previousFrom && new Date(c.created_at) < currentFrom) || [];
 
     // Products
-    const { count: productsCount } = await supabase
+    const { count: productsCount } = await db
       .from("products")
       .select("*", { count: "exact", head: true });
 
-    // Inventory Value
-    const { data: inventory } = await supabase
+    // Inventory Value (valued at cost below, via variant → product cost)
+    const { data: inventory } = await db
       .from("inventory_levels")
-      .select("quantity_available");
+      .select("quantity_available, variant_id");
+    const { data: variantProducts } = await db
+      .from("variants")
+      .select("id, product_id");
+    const productByVariant = new Map<string, string>(
+      (variantProducts || []).map((v: any) => [String(v.id), String(v.product_id)] as [string, string])
+    );
+
+    // ── Real profit basis ────────────────────────────────────────────────
+    // Gross profit is Σ (unit_price − product cost_price) × quantity over
+    // the period's orders. This replaces three fabrications: profit =
+    // revenue × 0.35, net profit = gross × 0.8, inventory = units × $50.
+    const { data: orderItems } = await db
+      .from("order_items")
+      .select("order_id, product_id, quantity, unit_price");
+    const { data: productCosts } = await db
+      .from("products")
+      .select("id, cost_price");
+    const costByProduct = new Map<string, number>(
+      (productCosts || []).map((p: any) => [String(p.id), Number(p.cost_price) || 0] as [string, number])
+    );
+    const profitByOrder = new Map<string, number>();
+    for (const it of (orderItems || []) as any[]) {
+      if (!it.product_id) continue;
+      const margin =
+        (Number(it.unit_price) || 0) - (costByProduct.get(it.product_id) || 0);
+      profitByOrder.set(
+        it.order_id,
+        (profitByOrder.get(it.order_id) || 0) + margin * (Number(it.quantity) || 0)
+      );
+    }
+    const { data: periodExpenses } = await db
+      .from("expenses")
+      .select("amount, date")
+      .gte("date", currentFrom.toISOString().split("T")[0])
+      .lte("date", currentTo.toISOString().split("T")[0]);
+    const expensesTotal = (periodExpenses || []).reduce(
+      (s: number, e: any) => s + (Number(e.amount) || 0),
+      0
+    );
 
     let totalRevenue = 0;
     let totalOrders = 0;
@@ -88,7 +127,7 @@ export class AnalyticsRepository {
           if (isCurrent) {
             totalRevenue += amount;
             totalOrders++;
-            totalProfit += amount * 0.35; // Estimated profit margin
+            totalProfit += profitByOrder.get(o.id) || 0;
 
             if (createdAtStr === todayStr) todaysRevenue += amount;
             if (createdAt >= weekAgo) weeklyRevenue += amount;
@@ -112,21 +151,25 @@ export class AnalyticsRepository {
     const prevOrdersPerCustomer = prevTotalCustomers > 0 ? prevTotalOrders / prevTotalCustomers : 0;
     
     // Instead of using 'status', we calculate active customers as those who made an order in the current period
-    const { data: recentOrders } = await supabase
+    const { data: recentOrders } = await db
       .from("orders")
       .select("customer_id")
       .gte("created_at", currentFrom.toISOString());
       
     const activeCustomers = new Set(recentOrders?.map((o: any) => o.customer_id).filter(Boolean)).size || 0;
 
-    const totalInventoryValue =
-      (inventory?.reduce(
-        (sum: number, item: any) => sum + (item.quantity_available || 0),
-        0
-      ) || 0) * 50; // Approximating $50 per item if we don't map to product
+    // Inventory valued at cost: Σ quantity_available × product cost_price.
+    const totalInventoryValue = (inventory || []).reduce(
+      (sum: number, item: any) =>
+        sum +
+        (Number(item.quantity_available) || 0) *
+          (costByProduct.get(productByVariant.get(String(item.variant_id)) || "") || 0),
+      0
+    );
 
-    const grossProfit = totalProfit; // Simplification
-    const netProfit = totalProfit * 0.8; // Simplification (after taxes/expenses)
+    const grossProfit = totalProfit;
+    // Net profit = gross profit − operating expenses recorded in the period.
+    const netProfit = grossProfit - expensesTotal;
 
     const calcTrend = (curr: number, prev: number) => {
       if (prev === 0) return curr > 0 ? 100 : 0;
@@ -175,7 +218,7 @@ export class AnalyticsRepository {
    * Sales Analytics
    */
   static async getSalesAnalytics(dateRange?: DateRange) {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
 
     let fromDate: Date | null = null;
     let toDate: Date | null = null;
@@ -188,7 +231,7 @@ export class AnalyticsRepository {
     }
 
     // Query real orders
-    let ordersQuery = supabase
+    let ordersQuery = db
       .from("orders")
       .select(
         "id, order_number, grand_total, subtotal, shipping_total, discount_total, tax_total, payment_method, payment_status, status, created_at, customer_id"
@@ -265,13 +308,13 @@ export class AnalyticsRepository {
 
     // Also fetch items, products & addresses to get Category breakdown, Top selling products & customer names
     const [itemsRes, productsRes, addressesRes] = await Promise.all([
-      supabase
+      db
         .from("order_items")
         .select("id, order_id, product_id, product_name, quantity, line_total"),
-      supabase
+      db
         .from("products")
         .select("id, name, category_id, categories(name)"),
-      supabase
+      db
         .from("order_addresses")
         .select("order_id, first_name, last_name, city, address_type"),
     ]);
@@ -379,8 +422,8 @@ export class AnalyticsRepository {
    * Order Analytics
    */
   static async getOrderAnalytics(dateRange?: DateRange) {
-    const supabase = await createAdminClient();
-    let ordersQuery = supabase
+    const db = await createAdminDbClient();
+    let ordersQuery = db
       .from("orders")
       .select("id, status, created_at, grand_total");
 
@@ -440,9 +483,9 @@ export class AnalyticsRepository {
    * Customer Analytics
    */
   static async getCustomerAnalytics(dateRange?: DateRange) {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
 
-    let customersQuery = supabase
+    let customersQuery = db
       .from("customer_profiles")
       .select("id, created_at");
     if (dateRange) {
@@ -452,7 +495,7 @@ export class AnalyticsRepository {
     }
 
     const { data: customers } = await customersQuery;
-    const { data: orders } = await supabase
+    const { data: orders } = await db
       .from("orders")
       .select("customer_id, grand_total");
 
@@ -512,20 +555,20 @@ export class AnalyticsRepository {
    * Product & Inventory Analytics
    */
   static async getProductAnalytics() {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
 
     // Query inventory, products, orders, and order items concurrently
     const [invRes, productsRes, itemsRes, ordersRes] = await Promise.all([
-      supabase
+      db
         .from("inventory_levels")
         .select("variant_id, quantity_available, reorder_point"),
-      supabase
+      db
         .from("products")
         .select("id, name, created_at"),
-      supabase
+      db
         .from("order_items")
         .select("id, order_id, product_id, product_name, quantity, unit_price, line_total"),
-      supabase
+      db
         .from("orders")
         .select("id, status"),
     ]);
@@ -627,9 +670,9 @@ export class AnalyticsRepository {
    * Marketing Analytics
    */
   static async getMarketingAnalytics(dateRange?: DateRange) {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
 
-    let couponsQuery = supabase
+    let couponsQuery = db
       .from("coupon_usages")
       .select("discount_applied, created_at, code");
     if (dateRange) {
@@ -639,7 +682,7 @@ export class AnalyticsRepository {
     }
     const { data: coupons } = await couponsQuery;
 
-    const { data: customers } = await supabase
+    const { data: customers } = await db
       .from("customer_profiles")
       .select("accepts_marketing");
 

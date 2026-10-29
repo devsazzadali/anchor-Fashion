@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { prisma } from "@/lib/prisma";
 import {
   CustomReportConfig,
@@ -11,17 +11,17 @@ import {
 
 export class ReportRepository {
   private getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
    * Fetch all saved custom report configurations.
    */
   async getSavedReports(userId?: string): Promise<CustomReportConfig[]> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     try {
-      let query = supabase
+      let query = db
         .from("custom_reports_config")
         .select("*")
         .order("updated_at", { ascending: false });
@@ -48,9 +48,9 @@ export class ReportRepository {
    * Fetch a single saved report configuration by ID.
    */
   async getReportById(id: string): Promise<CustomReportConfig | null> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("custom_reports_config")
       .select("*")
       .eq("id", id)
@@ -71,12 +71,12 @@ export class ReportRepository {
     config: CustomReportConfigInput,
     userId?: string
   ): Promise<CustomReportConfig> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     // Fallback user ID if anonymous or system execution
     let ownerId = userId;
     if (!ownerId) {
-      const { data: firstProfile } = await supabase
+      const { data: firstProfile } = await db
         .from("profiles")
         .select("id")
         .limit(1)
@@ -97,7 +97,7 @@ export class ReportRepository {
 
     if (config.id) {
       // Update existing
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("custom_reports_config")
         .update(payload)
         .eq("id", config.id)
@@ -109,7 +109,7 @@ export class ReportRepository {
     } else {
       // Insert new
       payload.owner_id = ownerId;
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("custom_reports_config")
         .insert(payload)
         .select()
@@ -124,8 +124,8 @@ export class ReportRepository {
    * Delete a saved report by ID.
    */
   async deleteReport(id: string): Promise<void> {
-    const supabase = this.getAdminClient();
-    const { error } = await supabase
+    const db = this.getAdminClient();
+    const { error } = await db
       .from("custom_reports_config")
       .delete()
       .eq("id", id);
@@ -141,7 +141,7 @@ export class ReportRepository {
   async executeReportQuery(
     params: ReportQueryRequestInput
   ): Promise<ReportQueryResult> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     const { dimensions, metrics, dateRange, startDate, endDate, limit = 100 } = params;
 
@@ -171,7 +171,14 @@ export class ReportRepository {
         fromDate.setDate(now.getDate() - 7);
     }
 
-    // 2. Fetch authoritative analytics data from Neon PostgreSQL orders
+    // 2. Fetch authoritative analytics data from Neon PostgreSQL orders.
+    // Every row is built from a real order line: sales = line total,
+    // profit = (unit_price - product cost_price) x quantity (the Phase-4
+    // cost-based rule). Orders do not record a device, so the device
+    // dimension is reported as "-" rather than invented. When there are no
+    // orders in range the report is honestly empty - this method previously
+    // generated pseudo-random "realistic" sales rows and a flat 35% margin;
+    // both fabrications were removed in Phase 6.
     let rawData: any[] = [];
     try {
       const realOrders = await prisma.order.findMany({
@@ -182,116 +189,86 @@ export class ReportRepository {
           },
         },
         include: {
-          items: true,
+          items: {
+            include: {
+              product: {
+                select: {
+                  costPrice: true,
+                  category: { select: { name: true } },
+                  brand: { select: { name: true } },
+                },
+              },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
         take: limit,
       });
 
-      if (realOrders && realOrders.length > 0) {
-        rawData = realOrders.map((o) => {
-          const totalUnits = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
-          const sales = Number(o.totalAmount || 0);
-          const profit = Math.round(sales * 0.35 * 100) / 100;
-          return {
-            date: o.createdAt.toISOString().split("T")[0],
-            category: "Apparel",
-            brand: "Anchor Fashion",
-            region: (o.shippingAddress as any)?.city || "Dhaka Region",
-            device: "Mobile",
-            sales,
+      const NON_REVENUE = ["CANCELLED", "FAILED", "REFUNDED", "RETURNED"];
+      for (const o of realOrders) {
+        const date = o.createdAt.toISOString().split("T")[0];
+        const region = (o.shippingAddress as any)?.city || "-";
+        const orderTotal = Number(o.totalAmount || 0);
+        const status = String(o.status || "").toUpperCase();
+
+        if (NON_REVENUE.includes(status)) {
+          // Cancelled/failed/refunded orders contribute a refund only -
+          // never sales, units or profit.
+          rawData.push({
+            date,
+            category: "-",
+            brand: "-",
+            region,
+            device: "-",
+            sales: 0,
+            orders: 0,
+            units: 0,
+            refunds: orderTotal,
+            profit: 0,
+          });
+          continue;
+        }
+
+        const items = o.items || [];
+        if (items.length === 0) {
+          rawData.push({
+            date,
+            category: "-",
+            brand: "-",
+            region,
+            device: "-",
+            sales: orderTotal,
             orders: 1,
-            units: totalUnits,
-            refunds: o.status === "CANCELLED" ? sales : 0,
-            profit: o.status === "CANCELLED" ? 0 : profit,
-          };
+            units: 0,
+            refunds: 0,
+            profit: 0,
+          });
+          continue;
+        }
+
+        items.forEach((it: any, idx: number) => {
+          const qty = it.quantity || 1;
+          const unitPrice = Number(it.unitPrice || 0);
+          const cost = Number(it.product?.costPrice || 0);
+          rawData.push({
+            date,
+            category: it.product?.category?.name || "-",
+            brand: it.product?.brand?.name || "-",
+            region,
+            device: "-",
+            sales: Number(it.totalPrice || unitPrice * qty),
+            // Count the order once, on its first line, so the orders
+            // metric stays a true order count under any grouping.
+            orders: idx === 0 ? 1 : 0,
+            units: qty,
+            refunds: 0,
+            profit: Math.round((unitPrice - cost) * qty * 100) / 100,
+          });
         });
       }
     } catch (orderErr) {
       console.warn("[ReportRepository] Error querying real orders:", orderErr);
-    }
-
-    if (rawData.length === 0) {
-      // If bi_sales_mart has no records, fetch live catalog categories and brands
-      // to generate consistent enterprise data points for previewing
-      let categories: string[] = [];
-      let brands: string[] = [];
-
-      try {
-        const [dbCats, dbBrands] = await Promise.all([
-          prisma.category.findMany({
-            where: { isActive: true },
-            select: { name: true },
-            take: 10,
-            orderBy: { displayOrder: "asc" },
-          }),
-          prisma.brand.findMany({
-            select: { name: true },
-            take: 10,
-          }),
-        ]);
-
-        if (dbCats.length > 0) categories = dbCats.map((c) => c.name);
-        if (dbBrands.length > 0) brands = dbBrands.map((b) => b.name);
-      } catch (dbErr) {
-        console.warn("[ReportRepository] Prisma fetch warning:", dbErr);
-      }
-
-      if (categories.length === 0) {
-        const { data: catData } = await supabase.from("categories").select("name").limit(10);
-        categories = catData && catData.length > 0
-          ? catData.map((c: any) => c.name)
-          : ["Panjabi", "Shirts", "Polos", "Trousers & Chinos", "Jackets & Blazers"];
-      }
-
-      if (brands.length === 0) {
-        const { data: brandData } = await supabase.from("brands").select("name").limit(10);
-        brands = brandData && brandData.length > 0
-          ? brandData.map((b: any) => b.name)
-          : ["Anchor Signature", "Anchor Formal", "Anchor Casual", "Anchor Heritage"];
-      }
-
-      const regions = ["Dhaka Metro", "Chittagong", "Sylhet", "Rajshahi", "Khulna"];
-      const devices = ["Mobile", "Desktop", "Tablet", "iOS App", "Android App"];
-
-      // Generate realistic data points across the selected date range
-      const dayDiff = Math.max(
-        1,
-        Math.min(30, Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)))
-      );
-
-      for (let i = 0; i <= dayDiff; i++) {
-        const d = new Date(fromDate);
-        d.setDate(fromDate.getDate() + i);
-        const dateKey = d.toISOString().split("T")[0];
-
-        // 2-3 sample entries per day across combinations
-        for (let j = 0; j < Math.min(categories.length, 3); j++) {
-          const cat = categories[j % categories.length];
-          const brand = brands[(i + j) % brands.length];
-          const reg = regions[(i + j) % regions.length];
-          const dev = devices[(i + j) % devices.length];
-
-          const baseSales = Math.round((500 + ((i * 137 + j * 93) % 2500)) * 100) / 100;
-          const orders = Math.max(1, Math.round(baseSales / 180));
-          const units = Math.round(orders * 1.8);
-          const refunds = (i + j) % 7 === 0 ? Math.round(baseSales * 0.08 * 100) / 100 : 0;
-          const profit = Math.round((baseSales * 0.38 - refunds * 0.5) * 100) / 100;
-
-          rawData.push({
-            date: dateKey,
-            category: cat,
-            brand: brand,
-            region: reg,
-            device: dev,
-            sales: baseSales,
-            orders: orders,
-            units: units,
-            refunds: refunds,
-            profit: profit,
-          });
-        }
-      }
     }
 
     // 3. Dynamic Aggregation by selected Dimensions

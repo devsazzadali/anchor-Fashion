@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   Warehouse,
   WarehouseZone,
@@ -98,7 +98,7 @@ export interface WarehouseQueryFilters {
 
 export class WarehouseRepository {
   private getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
@@ -110,9 +110,9 @@ export class WarehouseRepository {
     page: number;
     totalPages: number;
   }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    let query = supabase.from("warehouses").select("*", { count: "exact" });
+    let query = db.from("warehouses").select("*", { count: "exact" });
 
     // Status filter
     if (filters?.status === "active") {
@@ -213,8 +213,8 @@ export class WarehouseRepository {
    * Get single warehouse by ID with complete parsed metadata and computed stats
    */
   async getWarehouseById(id: string): Promise<Warehouse | null> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("warehouses")
       .select("*")
       .eq("id", id)
@@ -241,7 +241,7 @@ export class WarehouseRepository {
   async createWarehouse(
     warehouseData: Partial<Warehouse> & { code?: string; warehouse_code?: string }
   ): Promise<Warehouse> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const code = (
       warehouseData.warehouse_code ||
       warehouseData.code ||
@@ -252,7 +252,7 @@ export class WarehouseRepository {
       .toUpperCase();
 
     // Check if warehouse_code already exists
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from("warehouses")
       .select("id")
       .ilike("warehouse_code", code)
@@ -275,7 +275,7 @@ export class WarehouseRepository {
       status: isActive ? "active" : "inactive",
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("warehouses")
       .insert(payload)
       .select()
@@ -298,7 +298,7 @@ export class WarehouseRepository {
     id: string,
     warehouseData: Partial<Warehouse> & { code?: string; warehouse_code?: string }
   ): Promise<Warehouse> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const payload: any = {};
 
     if (warehouseData.name !== undefined) {
@@ -307,7 +307,7 @@ export class WarehouseRepository {
     if (warehouseData.code !== undefined || warehouseData.warehouse_code !== undefined) {
       const code = (warehouseData.warehouse_code || warehouseData.code || "").trim().toUpperCase();
       // Check code uniqueness
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from("warehouses")
         .select("id")
         .ilike("warehouse_code", code)
@@ -330,7 +330,7 @@ export class WarehouseRepository {
     }
 
     // Merge existing address/metadata with new values
-    const { data: current } = await supabase
+    const { data: current } = await db
       .from("warehouses")
       .select("address")
       .eq("id", id)
@@ -343,7 +343,7 @@ export class WarehouseRepository {
     payload.address = serializeWarehouseAddress(updatedMeta);
     payload.updated_at = new Date().toISOString();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("warehouses")
       .update(payload)
       .eq("id", id)
@@ -364,10 +364,10 @@ export class WarehouseRepository {
    * Delete or archive warehouse
    */
   async deleteWarehouse(id: string): Promise<{ action: "deleted" | "archived"; message: string }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     // Check if warehouse has stock
-    const { data: stockLevels } = await supabase
+    const { data: stockLevels } = await db
       .from("inventory_levels")
       .select("quantity_available, quantity_reserved, quantity_damaged")
       .eq("warehouse_id", id);
@@ -379,7 +379,7 @@ export class WarehouseRepository {
 
     if (totalStock > 0) {
       // Soft-delete / Archive
-      await supabase
+      await db
         .from("warehouses")
         .update({ is_active: false, status: "inactive", updated_at: new Date().toISOString() })
         .eq("id", id);
@@ -390,7 +390,7 @@ export class WarehouseRepository {
     }
 
     // Safe to delete if no inventory remains
-    const { error } = await supabase.from("warehouses").delete().eq("id", id);
+    const { error } = await db.from("warehouses").delete().eq("id", id);
     if (error) throw new Error(`Failed to delete warehouse: ${error.message}`);
     return {
       action: "deleted",
@@ -420,10 +420,10 @@ export class WarehouseRepository {
     zones_count: number;
     bins_count: number;
   }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     // Fetch inventory levels with product cost
-    const { data: levels } = await supabase
+    const { data: levels } = await db
       .from("inventory_levels")
       .select("variant_id, quantity_available, quantity_reserved, quantity_damaged, reorder_point, safety_stock, variant:variants(product:products(base_price, cost_price))")
       .eq("warehouse_id", warehouseId);
@@ -460,13 +460,13 @@ export class WarehouseRepository {
     });
 
     // Count zones
-    const { count: zonesCount } = await supabase
+    const { count: zonesCount } = await db
       .from("warehouse_zones")
       .select("id", { count: "exact", head: true })
       .eq("warehouse_id", warehouseId);
 
     // Count bins across zones
-    const { data: zones } = await supabase
+    const { data: zones } = await db
       .from("warehouse_zones")
       .select("id")
       .eq("warehouse_id", warehouseId);
@@ -474,7 +474,7 @@ export class WarehouseRepository {
     let binsCount = 0;
     if (zones && zones.length > 0) {
       const zoneIds = zones.map((z: any) => z.id);
-      const { count: bCount } = await supabase
+      const { count: bCount } = await db
         .from("warehouse_bins")
         .select("id", { count: "exact", head: true })
         .in("zone_id", zoneIds);
@@ -506,13 +506,13 @@ export class WarehouseRepository {
     total_valuation: number;
     low_stock_alerts: number;
   }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { data: whList } = await supabase.from("warehouses").select("id, is_active");
+    const { data: whList } = await db.from("warehouses").select("id, is_active");
     const totalWarehouses = (whList || []).length;
     const activeWarehouses = (whList || []).filter((w: any) => w.is_active).length;
 
-    const { data: levels } = await supabase
+    const { data: levels } = await db
       .from("inventory_levels")
       .select("variant_id, quantity_available, quantity_reserved, quantity_damaged, reorder_point, variant:variants(product:products(base_price, cost_price))");
 
@@ -548,8 +548,8 @@ export class WarehouseRepository {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async getZonesByWarehouse(warehouseId: string): Promise<WarehouseZone[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("warehouse_zones")
       .select("*")
       .eq("warehouse_id", warehouseId)
@@ -560,7 +560,7 @@ export class WarehouseRepository {
     // Enrich with bins and racks count
     const enrichedZones = await Promise.all(
       zones.map(async (z: any) => {
-        const { data: bins } = await supabase
+        const { data: bins } = await db
           .from("warehouse_bins")
           .select("id, code")
           .eq("zone_id", z.id);
@@ -590,8 +590,8 @@ export class WarehouseRepository {
   }
 
   async getZoneById(id: string): Promise<WarehouseZone | null> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("warehouse_zones")
       .select("*")
       .eq("id", id)
@@ -602,7 +602,7 @@ export class WarehouseRepository {
   }
 
   async createZone(zoneData: Partial<WarehouseZone>): Promise<WarehouseZone> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     // Map UI type to database allowed type (STORAGE, PICKING, RETURNS, COLD_STORAGE, QUARANTINE)
     const upperType = String(zoneData.type || "STORAGE").toUpperCase().trim();
@@ -627,7 +627,7 @@ export class WarehouseRepository {
       description: zoneData.description?.trim() || null,
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("warehouse_zones")
       .insert(payload)
       .select()
@@ -638,7 +638,7 @@ export class WarehouseRepository {
   }
 
   async updateZone(id: string, zoneData: Partial<WarehouseZone>): Promise<WarehouseZone> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const payload: any = { updated_at: new Date().toISOString() };
 
     if (zoneData.name !== undefined) payload.name = zoneData.name.trim();
@@ -653,7 +653,7 @@ export class WarehouseRepository {
       }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("warehouse_zones")
       .update(payload)
       .eq("id", id)
@@ -665,13 +665,13 @@ export class WarehouseRepository {
   }
 
   async deleteZone(id: string): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     // Check if any bins exist
-    const { data: bins } = await supabase.from("warehouse_bins").select("id").eq("zone_id", id).limit(1);
+    const { data: bins } = await db.from("warehouse_bins").select("id").eq("zone_id", id).limit(1);
     if (bins && bins.length > 0) {
       throw new Error("Cannot delete zone containing shelves/bins. Please remove or reassign bins first.");
     }
-    const { error } = await supabase.from("warehouse_zones").delete().eq("id", id);
+    const { error } = await db.from("warehouse_zones").delete().eq("id", id);
     if (error) throw new Error(`Failed to delete zone: ${error.message}`);
   }
 
@@ -680,8 +680,8 @@ export class WarehouseRepository {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async getRacksByZone(zoneId: string): Promise<WarehouseRack[]> {
-    const supabase = this.getAdminClient();
-    const { data: bins } = await supabase
+    const db = this.getAdminClient();
+    const { data: bins } = await db
       .from("warehouse_bins")
       .select("*")
       .eq("zone_id", zoneId)
@@ -721,7 +721,7 @@ export class WarehouseRepository {
     zoneId: string,
     rackData: { name: string; code: string; shelves_count?: number; capacity?: number; status?: string; description?: string }
   ): Promise<WarehouseRack> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const cleanRackCode = (rackData.code || rackData.name.replace(/[^A-Za-z0-9]/g, ""))
       .toUpperCase()
       .trim();
@@ -743,7 +743,7 @@ export class WarehouseRepository {
       });
     }
 
-    const { error } = await supabase.from("warehouse_bins").insert(binsToCreate);
+    const { error } = await db.from("warehouse_bins").insert(binsToCreate);
     if (error) throw new Error(`Failed to create rack shelves: ${error.message}`);
 
     return {
@@ -759,9 +759,9 @@ export class WarehouseRepository {
   }
 
   async deleteRack(zoneId: string, rackCode: string): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     // Check if any bins in this rack have stock
-    const { data: bins } = await supabase
+    const { data: bins } = await db
       .from("warehouse_bins")
       .select("id")
       .eq("zone_id", zoneId)
@@ -769,7 +769,7 @@ export class WarehouseRepository {
 
     if (bins && bins.length > 0) {
       const binIds = bins.map((b: any) => b.id);
-      const { data: stock } = await supabase
+      const { data: stock } = await db
         .from("inventory_levels")
         .select("id, quantity_available")
         .in("bin_id", binIds);
@@ -779,7 +779,7 @@ export class WarehouseRepository {
         throw new Error("Cannot delete rack: products are currently stored in these shelves.");
       }
 
-      await supabase.from("warehouse_bins").delete().in("id", binIds);
+      await db.from("warehouse_bins").delete().in("id", binIds);
     }
   }
 
@@ -788,8 +788,8 @@ export class WarehouseRepository {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async getBinsByZone(zoneId: string): Promise<WarehouseBin[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("warehouse_bins")
       .select("*")
       .eq("zone_id", zoneId)
@@ -800,11 +800,11 @@ export class WarehouseRepository {
   }
 
   async createBin(binData: Partial<WarehouseBin>): Promise<WarehouseBin> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const code = (binData.code || binData.name || "BIN").trim().toUpperCase();
 
     // Check code uniqueness within zone
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from("warehouse_bins")
       .select("id")
       .eq("zone_id", binData.zone_id)
@@ -823,7 +823,7 @@ export class WarehouseRepository {
       status: binData.status || "ACTIVE",
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("warehouse_bins")
       .insert(payload)
       .select()
@@ -834,7 +834,7 @@ export class WarehouseRepository {
   }
 
   async updateBin(id: string, binData: Partial<WarehouseBin>): Promise<WarehouseBin> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const payload: any = { updated_at: new Date().toISOString() };
 
     if (binData.code !== undefined) payload.code = binData.code.trim().toUpperCase();
@@ -844,7 +844,7 @@ export class WarehouseRepository {
     }
     if (binData.status !== undefined) payload.status = binData.status;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("warehouse_bins")
       .update(payload)
       .eq("id", id)
@@ -856,9 +856,9 @@ export class WarehouseRepository {
   }
 
   async deleteBin(id: string): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     // Check if stock exists in bin
-    const { data: stock } = await supabase
+    const { data: stock } = await db
       .from("inventory_levels")
       .select("quantity_available")
       .eq("bin_id", id)
@@ -868,7 +868,7 @@ export class WarehouseRepository {
       throw new Error("Cannot delete bin: stock is currently assigned to this bin.");
     }
 
-    const { error } = await supabase.from("warehouse_bins").delete().eq("id", id);
+    const { error } = await db.from("warehouse_bins").delete().eq("id", id);
     if (error) throw new Error(`Failed to delete bin: ${error.message}`);
   }
 
@@ -885,9 +885,9 @@ export class WarehouseRepository {
     page: number;
     totalPages: number;
   }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    let query = supabase
+    let query = db
       .from("inventory_levels")
       .select(
         `*,
@@ -995,8 +995,8 @@ export class WarehouseRepository {
   }
 
   async getDefaultWarehouse(): Promise<Warehouse | null> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("warehouses")
       .select("*")
       .eq("is_active", true)

@@ -115,9 +115,22 @@ export class ReviewRepository {
     increment: boolean = true
   ): Promise<{ success: boolean; helpful_votes: number; error?: string }> {
     try {
-      // Prism model Review does not have helpful_votes mapped yet,
-      // simulating success for now.
-      return { success: true, helpful_votes: 1 };
+      const current = await prisma.review.findUnique({
+        where: { id },
+        select: { helpfulVotes: true },
+      });
+      if (!current) {
+        return { success: false, helpful_votes: 0, error: "Review not found" };
+      }
+      const next = increment
+        ? current.helpfulVotes + 1
+        : Math.max(0, current.helpfulVotes - 1);
+      const updated = await prisma.review.update({
+        where: { id },
+        data: { helpfulVotes: next },
+        select: { helpfulVotes: true },
+      });
+      return { success: true, helpful_votes: updated.helpfulVotes };
     } catch (err: any) {
       console.error("Unexpected error in voteHelpful:", err);
       return { success: false, helpful_votes: 0, error: err.message };
@@ -131,6 +144,10 @@ function mapPrismaReview(r: any) {
     product_id: r.productId,
     customer_id: r.userId,
     customer_name: r.user ? `${r.user.firstName || ''} ${r.user.lastName || ''}`.trim() || r.user.email : r.customerName,
+    // The PDP renders `review_text` and `helpful_votes`; without these
+    // aliases every review body rendered as "No review details provided."
+    review_text: r.comment ?? null,
+    helpful_votes: r.helpfulVotes ?? 0,
     is_approved: r.isApproved,
     created_at: r.createdAt.toISOString(),
     customer: r.user ? {

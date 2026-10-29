@@ -13,6 +13,8 @@ function mapPrismaOrderToCheckoutOrder(record: any): Order {
     subtotal: Number(record.subtotal || 0),
     shipping_fee: Number(record.shippingFee || 0),
     discount_amount: Number(record.discount || 0),
+    vat_amount: Number(record.vatAmount || 0),
+    tax_total: Number(record.vatAmount || 0),
     total_amount: Number(record.totalAmount || 0),
     grand_total: Number(record.totalAmount || 0),
     shipping_total: Number(record.shippingFee || 0),
@@ -127,6 +129,39 @@ export class OrderRepository {
       }
     }
 
+    // 0.05 Phase 12 (hybrid checkout): a GUEST order belongs to a customer
+    // profile keyed by the verified checkout phone number — find-or-create
+    // it silently (no registration wall, no auth credentials) and link the
+    // order. When the order was linked by email instead, enrich that profile
+    // with the checkout phone so the phone identity stays complete. A
+    // profile problem must never block the order itself.
+    if (!customerId) {
+      try {
+        const ship: any = shippingAddress || {};
+        const identity = {
+          phone: ship.phone || ship.phone_number || null,
+          email: candidateEmail,
+          firstName: ship.first_name || ship.firstName || null,
+          lastName: ship.last_name || ship.lastName || null,
+          phoneVerified:
+            (orderData as any).verification_status === "VERIFIED",
+        };
+        const { findOrCreateGuestProfile, enrichProfileFromCheckout } =
+          await import("@/lib/services/customer/guest-profile.service");
+        if (validProfileId) {
+          await enrichProfileFromCheckout(validProfileId, identity);
+        } else {
+          const autoProfile = await findOrCreateGuestProfile(identity);
+          if (autoProfile) validProfileId = autoProfile.id;
+        }
+      } catch (profileErr) {
+        console.warn(
+          "[OrderRepository] Guest auto-profile resolution failed (order continues unlinked):",
+          profileErr
+        );
+      }
+    }
+
     // 0.1 Validate foreign key IDs for Products and Variants in Neon
     const productIds = items.map((i) => i.product_id).filter(Boolean) as string[];
     const variantIds = items.map((i) => i.variant_id).filter(Boolean) as string[];
@@ -160,12 +195,32 @@ export class OrderRepository {
           : "UNPAID",
         paymentMethod: orderData.payment_method || "COD",
         subtotal: orderData.subtotal ?? 0,
-        discount: orderData.discount_amount ?? 0,
-        shippingFee: orderData.shipping_fee ?? 0,
-        totalAmount: orderData.total_amount ?? 0,
+        discount: orderData.discount_amount ?? (orderData as any).discount_total ?? 0,
+        // VAT: checkout passes vat_amount; POS passes tax_total (same meaning).
+        vatAmount:
+          orderData.vat_amount ?? (orderData as any).tax_total ?? 0,
+        shippingFee: orderData.shipping_fee ?? (orderData as any).shipping_total ?? 0,
+        // POS passes grand_total instead of total_amount — accept both so POS
+        // orders no longer persist a 0 total.
+        totalAmount:
+          orderData.total_amount ?? (orderData as any).grand_total ?? 0,
         reservationExpiresAt: orderData.reservation_expires_at
           ? new Date(orderData.reservation_expires_at)
           : null,
+        couponCode: (orderData as any).coupon_code || undefined,
+        // Phase 8: persist the COD fraud-risk evaluation. placeOrder has
+        // always computed these fields, but createOrder silently dropped
+        // them (the orders table had no columns until Phase 8's DDL).
+        riskLevel: (orderData as any).risk_level || undefined,
+        riskScore:
+          typeof (orderData as any).risk_score === "number"
+            ? (orderData as any).risk_score
+            : undefined,
+        riskReasons: (orderData as any).risk_reasons || undefined,
+        verificationStatus: (orderData as any).verification_status || undefined,
+        verificationVerifiedAt: (orderData as any).verification_verified_at
+          ? new Date((orderData as any).verification_verified_at)
+          : undefined,
         notes: customerNote || null,
         shippingAddress: shippingAddress as any,
         billingAddress: billingAddress ? (billingAddress as any) : undefined,

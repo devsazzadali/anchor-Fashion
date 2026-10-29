@@ -30,10 +30,11 @@ export class WishlistService {
   }
 
   /**
-   * Remove item from wishlist by Item ID
+   * Remove item from wishlist by Item ID, scoped to the owner's wishlist
+   * (a signed-in customer must not delete items from another's wishlist).
    */
-  static async removeItem(itemId: string): Promise<void> {
-    await WishlistRepository.removeItem(itemId);
+  static async removeItem(userId: string, itemId: string): Promise<void> {
+    await WishlistRepository.removeItemForUser(userId, itemId);
   }
 
   /**
@@ -71,7 +72,7 @@ export class WishlistService {
     // Add to cart
     await CartService.addItem(userId, null, productId, effectiveVariantId || null, 1);
 
-    // Remove from wishlist
-    await WishlistRepository.removeItem(itemId);
+    // Remove from the owner's wishlist
+    await WishlistRepository.removeItemForUser(userId, itemId);
   }
 }

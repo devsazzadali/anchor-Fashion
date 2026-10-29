@@ -32,7 +32,9 @@ export class CustomerRepository {
         first_name: customer.profile?.firstName || customer.name.split(" ")[0] || "Customer",
         last_name: customer.profile?.lastName || customer.name.split(" ")[1] || "",
         email: customer.email,
-        phone: customer.phone,
+        // Phone-first identity lives on the profile (guest auto-profiles
+        // and most registered customers have no customers-table phone).
+        phone: customer.phone || customer.profile?.phone || null,
         avatar_url: customer.profile?.avatarUrl,
         is_active: customer.status === "active",
         created_at: customer.createdAt.toISOString(),
@@ -88,7 +90,7 @@ export class CustomerRepository {
         first_name: customer.profile?.firstName || customer.name.split(" ")[0] || "Customer",
         last_name: customer.profile?.lastName || customer.name.split(" ")[1] || "",
         email: customer.email,
-        phone: customer.phone,
+        phone: customer.phone || customer.profile?.phone || null,
         avatar_url: customer.profile?.avatarUrl,
         is_active: customer.status === "active",
         created_at: customer.createdAt.toISOString(),
@@ -230,10 +232,23 @@ export class CustomerRepository {
       data.isDefault = Boolean(updates.is_default_shipping || updates.is_default_billing || updates.isDefault);
     }
 
-    const updated = await prisma.customerAddress.update({
-      where: { id },
+    // SECURITY: scope the update to addresses owned by this user (IDOR guard).
+    const { count } = await prisma.customerAddress.updateMany({
+      where: {
+        id,
+        OR: [{ customerId: userId }, { profileId: userId }],
+      },
       data,
     });
+    if (count === 0) {
+      throw new Error("Address not found");
+    }
+    const updated = await prisma.customerAddress.findUnique({
+      where: { id },
+    });
+    if (!updated) {
+      throw new Error("Address not found");
+    }
 
     const parts = (updated.name || "").trim().split(" ");
     return {
@@ -279,8 +294,9 @@ export class CustomerRepository {
   }
 
   async markNotificationAsRead(id: string, userId: string): Promise<void> {
-    await prisma.notification.update({
-      where: { id },
+    // SECURITY: only the notification's owner may mark it read (IDOR guard).
+    await prisma.notification.updateMany({
+      where: { id, userId },
       data: { readAt: new Date() },
     });
   }
@@ -299,17 +315,33 @@ export class CustomerRepository {
   }
 
   async getTickets(userId: string) {
-    return await prisma.supportTicket.findMany({
+    const tickets = await prisma.supportTicket.findMany({
       where: { customerId: userId },
       orderBy: { createdAt: "desc" },
     });
+    // Map to the legacy shape the UI consumes (same pattern as getReviews
+    // above): without `created_at` the ticket list rendered "Invalid Date".
+    return tickets.map((t) => ({
+      ...t,
+      ticket_number: t.ticketNumber,
+      customer_id: t.customerId,
+      assigned_agent_id: t.assignedAgentId,
+      created_at: t.createdAt.toISOString(),
+      updated_at: t.updatedAt.toISOString(),
+    }));
   }
 
   async createTicket(ticket: any) {
+    // Map the service payload explicitly: spreading it verbatim leaks the
+    // internal `user_id` key into the Prisma create, which Prisma rejects
+    // ("Unknown argument") — ticket creation from the portal always failed.
     return await prisma.supportTicket.create({
       data: {
-        ...ticket,
-        customerId: ticket.customer_id,
+        subject: ticket.subject,
+        description: ticket.description,
+        status: ticket.status || "OPEN",
+        priority: ticket.priority || "NORMAL",
+        customerId: ticket.user_id ?? ticket.customer_id ?? null,
       },
     });
   }
@@ -369,11 +401,26 @@ export class CustomerRepository {
   async getTicketDetails(ticketId: string, userId: string) {
     return await prisma.supportTicket.findFirst({
       where: { id: ticketId, customerId: userId },
-      include: { messages: { orderBy: { createdAt: "asc" } } },
+      include: {
+        messages: {
+          // SECURITY: staff internal notes must never reach the customer.
+          where: { isInternal: false },
+          orderBy: { createdAt: "asc" },
+        },
+      },
     });
   }
 
   async replyTicket(ticketId: string, userId: string, message: string) {
+    // SECURITY: verify the ticket belongs to this customer before allowing a
+    // reply — previously any signed-in customer could post into any ticket.
+    const ticket = await prisma.supportTicket.findFirst({
+      where: { id: ticketId, customerId: userId },
+      select: { id: true },
+    });
+    if (!ticket) {
+      throw new Error("Ticket not found");
+    }
     return await prisma.ticketMessage.create({
       data: {
         ticketId,

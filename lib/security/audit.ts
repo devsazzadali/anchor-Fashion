@@ -1,4 +1,4 @@
-import { createAdminClient } from "../supabase/admin";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export type SecurityEventType =
   | "LOGIN_SUCCESS"
@@ -24,8 +24,8 @@ export interface AuditLogEntry {
  */
 export async function logSecurityEvent(entry: AuditLogEntry) {
   try {
-    const supabase = createAdminClient();
-    const { error } = await supabase.from("audit_logs").insert([
+    const db = createAdminDbClient();
+    const { error } = await db.from("audit_logs").insert([
       {
         event_type: entry.event_type,
         user_id: entry.user_id,

@@ -10,7 +10,7 @@ export interface CouponRecord {
   usage_limit?: number | null;
   used_count: number;
   valid_from: string;
-  valid_until: string;
+  valid_until: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -44,7 +44,7 @@ export class CouponRepository {
         usage_limit: row.usageLimit,
         used_count: row.usedCount,
         valid_from: row.startDate?.toISOString() || row.createdAt.toISOString(),
-        valid_until: row.endDate?.toISOString() || row.createdAt.toISOString(),
+        valid_until: row.endDate?.toISOString() || null,
         is_active: row.isActive,
         created_at: row.createdAt.toISOString(),
       }));
@@ -80,7 +80,7 @@ export class CouponRepository {
       usage_limit: data.usageLimit,
       used_count: data.usedCount,
       valid_from: data.startDate?.toISOString() || data.createdAt.toISOString(),
-      valid_until: data.endDate?.toISOString() || data.createdAt.toISOString(),
+      valid_until: data.endDate?.toISOString() || null,
       is_active: data.isActive,
       created_at: data.createdAt.toISOString(),
     };
@@ -105,7 +105,7 @@ export class CouponRepository {
       usage_limit: data.usageLimit,
       used_count: data.usedCount,
       valid_from: data.startDate?.toISOString() || data.createdAt.toISOString(),
-      valid_until: data.endDate?.toISOString() || data.createdAt.toISOString(),
+      valid_until: data.endDate?.toISOString() || null,
       is_active: data.isActive,
       created_at: data.createdAt.toISOString(),
     };

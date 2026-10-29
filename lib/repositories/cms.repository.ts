@@ -527,7 +527,7 @@ export class CMSRepository {
   }
 
   // --------------------------------------------------------------------------
-  // Banners — 100% Prisma (no Supabase cms_banners)
+  // Banners — 100% Prisma
   // --------------------------------------------------------------------------
 
   async getBanners(placement?: string): Promise<any[]> {

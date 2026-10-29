@@ -158,6 +158,16 @@ export class WishlistRepository {
   }
 
   /**
+   * Remove an item only if it belongs to the given user's wishlist
+   * (ownership-scoped variant used by customer-facing actions).
+   */
+  static async removeItemForUser(userId: string, itemId: string): Promise<void> {
+    await prisma.wishlistItem.deleteMany({
+      where: { id: itemId, wishlist: { userId } },
+    }).catch(() => {});
+  }
+
+  /**
    * Remove item by product ID (for a specific wishlist)
    */
   static async removeItemByProductId(

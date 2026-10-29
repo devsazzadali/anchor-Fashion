@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   SmsLog,
   SmsSendResult,
@@ -258,10 +258,10 @@ export class AlphaSmsService {
     options?: { force?: boolean }
   ): Promise<SmsSendResult> {
     try {
-      const supabase = await createAdminClient();
+      const db = await createAdminDbClient();
 
       // 1. Fetch order details
-      const { data: order, error: orderErr } = await supabase
+      const { data: order, error: orderErr } = await db
         .from("orders")
         .select("*")
         .eq("id", orderId)
@@ -282,7 +282,7 @@ export class AlphaSmsService {
       // Fetch order addresses separately (resilient to missing foreign key relation in schema cache)
       let addresses: any[] = [];
       try {
-        const { data: addrList, error: addrErr } = await supabase
+        const { data: addrList, error: addrErr } = await db
           .from("order_addresses")
           .select("*")
           .eq("order_id", orderId);
@@ -348,16 +348,24 @@ export class AlphaSmsService {
         addresses.find((a: any) => (a.address_type || "").toUpperCase() === "SHIPPING") ||
         addresses[0];
 
+      // Phase 8: storefront orders carry the address (incl. phone) in the
+      // order's shipping_address JSON — there are no order_addresses rows
+      // for them. The extraction previously never looked at the JSON, so
+      // EVERY online order's confirmation SMS aborted with "No phone
+      // number found". Fall back to the JSON address.
+      const shippingJson = ((order as any).shipping_address || {}) as any;
       let phone =
         shippingAddr?.phone ||
         (order as any).phone ||
         (order as any).customer_phone ||
+        shippingJson.phone ||
+        shippingJson.phone_number ||
         "";
 
       // Fallback: Check customers/profiles table if phone is missing in address
       if (!phone && order.customer_id) {
         try {
-          const { data: profile } = await supabase
+          const { data: profile } = await db
             .from("profiles")
             .select("phone, first_name, last_name")
             .eq("id", order.customer_id)
@@ -390,12 +398,14 @@ export class AlphaSmsService {
         };
       }
 
-      const firstName = shippingAddr?.first_name?.trim() || "";
-      const lastName = shippingAddr?.last_name?.trim() || "";
+      const firstName =
+        shippingAddr?.first_name?.trim() || shippingJson.first_name?.trim() || "";
+      const lastName =
+        shippingAddr?.last_name?.trim() || shippingJson.last_name?.trim() || "";
       let customerName = [firstName, lastName].filter(Boolean).join(" ");
       if (!customerName && order.customer_id) {
         try {
-          const { data: profile } = await supabase
+          const { data: profile } = await db
             .from("profiles")
             .select("first_name, last_name")
             .eq("id", order.customer_id)
@@ -413,7 +423,7 @@ export class AlphaSmsService {
       // Fetch order items to include in SMS
       let orderItems: Array<{ product_name?: string; quantity?: number }> = [];
       try {
-        const { data: itemsList } = await supabase
+        const { data: itemsList } = await db
           .from("order_items")
           .select("product_name, quantity")
           .eq("order_id", order.id);
@@ -426,7 +436,12 @@ export class AlphaSmsService {
 
       // 5. Construct Order Confirmation SMS Content with full professional details
       const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://anchorfashion.com").replace(/\/+$/, "");
-      const invoiceUrl = `${appUrl}/account/orders/${order.id}/invoice`;
+      // Phase 12: the SMS carries the PUBLIC invoice link (unguessable
+      // per-order token, view-only page, no login wall). The old
+      // /account/orders/... link bounced guests to the login page.
+      const invoiceUrl = (order as any).invoice_token
+        ? `${appUrl}/invoice/${(order as any).invoice_token}`
+        : `${appUrl}/account/orders/${order.id}/invoice`;
 
       const message = this.formatOrderConfirmationMessage({
         customerName,
@@ -453,7 +468,7 @@ export class AlphaSmsService {
 
         // Add note to order_notes for transparent audit visibility
         try {
-          await supabase.from("order_notes").insert({
+          await db.from("order_notes").insert({
             order_id: order.id,
             note: `[SMS Notification] Confirmation SMS sent to ${result.phone} via Alpha SMS (Request ID: ${result.requestId || "N/A"})`,
             is_customer_visible: false,
@@ -593,7 +608,22 @@ export class AlphaSmsService {
   }): Promise<SmsSendResult> {
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://anchorfashion.com").replace(/\/+$/, "");
     const targetId = payload.orderId || payload.orderNumber;
-    const invoiceUrl = targetId ? `${appUrl}/account/orders/${targetId}/invoice` : undefined;
+    // Phase 12: prefer the public token invoice link when the order has one.
+    let invoiceUrl = targetId ? `${appUrl}/account/orders/${targetId}/invoice` : undefined;
+    if (payload.orderId) {
+      try {
+        const { prisma } = await import("@/lib/prisma");
+        const row = await prisma.order.findUnique({
+          where: { id: payload.orderId },
+          select: { invoiceToken: true },
+        });
+        if (row?.invoiceToken) {
+          invoiceUrl = `${appUrl}/invoice/${row.invoiceToken}`;
+        }
+      } catch {
+        // Keep the account-link fallback.
+      }
+    }
 
     const message = this.formatOrderConfirmationMessage({
       customerName: payload.customerName,
@@ -672,12 +702,12 @@ export class AlphaSmsService {
     response?: any;
     error_message?: string | null;
   }): Promise<{ id: string } | null> {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
     const nowIso = new Date().toISOString();
 
     // 1. Try public.sms_logs
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("sms_logs")
         .insert({
           order_id: entry.order_id || null,
@@ -706,7 +736,7 @@ export class AlphaSmsService {
 
     // 2. Fallback: Save to existing communication_logs table
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("communication_logs")
         .insert({
           type: "SMS",
@@ -741,9 +771,9 @@ export class AlphaSmsService {
    * Update orders table marking confirmation_sms_sent = true
    */
   private static async markOrderSmsSent(orderId: string) {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("orders")
         .update({
           confirmation_sms_sent: true,
@@ -764,11 +794,11 @@ export class AlphaSmsService {
    * Check if a prior SENT log exists for this order
    */
   private static async checkPriorSentLog(orderId: string): Promise<any | null> {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
 
     // Check sms_logs
     try {
-      const { data } = await supabase
+      const { data } = await db
         .from("sms_logs")
         .select("*")
         .eq("order_id", orderId)
@@ -785,7 +815,7 @@ export class AlphaSmsService {
 
     // Check communication_logs
     try {
-      const { data } = await supabase
+      const { data } = await db
         .from("communication_logs")
         .select("*")
         .filter("metadata->>order_id", "eq", orderId)
@@ -816,12 +846,12 @@ export class AlphaSmsService {
    * Get all SMS logs for a given order (used by Admin Dashboard and API)
    */
   static async getOrderSmsLogs(orderId: string): Promise<SmsLog[]> {
-    const supabase = await createAdminClient();
+    const db = await createAdminDbClient();
     const logs: SmsLog[] = [];
 
     // 1. Fetch from sms_logs
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("sms_logs")
         .select("*")
         .eq("order_id", orderId)
@@ -836,7 +866,7 @@ export class AlphaSmsService {
 
     // 2. Fetch from communication_logs fallback
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("communication_logs")
         .select("*")
         .filter("metadata->>order_id", "eq", orderId)

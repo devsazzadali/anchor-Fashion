@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db/client";
 import { automationRules, WorkflowTrigger } from "./rules";
 
 export interface WorkflowEvent {
@@ -23,7 +23,7 @@ export async function executeWorkflows(event: WorkflowEvent) {
 
   try {
     // 1. Fetch active workflows matching the trigger
-    const { data: workflows, error } = await supabase
+    const { data: workflows, error } = await db
       .from("ai_workflows")
       .select("*")
       .eq("trigger_event", event.triggerEvent)

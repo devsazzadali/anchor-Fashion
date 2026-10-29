@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminDbClient } from "@/lib/db/client";
 import { decrypt } from "@/utils/encryption.util";
 
 export interface ProviderConfig {
@@ -20,9 +20,9 @@ export class ConfigService {
     providerType: string,
     providerCode: string
   ): Promise<ProviderConfig | null> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("connectors")
       .select("*")
       .eq("provider_type", providerType)
@@ -53,9 +53,9 @@ export class ConfigService {
   static async getActiveProvidersByType(
     providerType: string
   ): Promise<ProviderConfig[]> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("connectors")
       .select("*")
       .eq("provider_type", providerType)

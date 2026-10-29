@@ -35,7 +35,13 @@ export class CourierGatewayService {
   }
 
   /**
-   * Create consignment. Falls back to fallback provider if primary fails.
+   * Create consignment with the provider the operator explicitly chose.
+   *
+   * Phase 8: the previous implementation silently retried with the
+   * registry "fallback" provider on failure — which resolved to the
+   * sandbox mock and FABRICATED a successful consignment (fake tracking
+   * number) when the real courier rejected or was unconfigured. A failed
+   * booking is now returned as a failure, verbatim.
    */
   static async createConsignment(
     code: CourierProviderCode,
@@ -43,20 +49,7 @@ export class CourierGatewayService {
   ): Promise<ProviderResponse<ConsignmentResponse>> {
     try {
       const provider = await this.getProvider(code);
-      const result = await provider.createConsignment(request);
-
-      if (!result.success) {
-        // Attempt fallback
-        const fallback = await this.registry.getFallback();
-        if (fallback && fallback.id !== code) {
-          console.warn(
-            `[CourierGateway] Primary provider '${code}' failed. Attempting fallback '${fallback.id}'`
-          );
-          return fallback.createConsignment(request);
-        }
-      }
-
-      return result;
+      return await provider.createConsignment(request);
     } catch (err: any) {
       return this.buildError(code, err.message);
     }

@@ -14,6 +14,8 @@ model Profile {
   firstName       String?            @map("first_name")
   lastName        String?            @map("last_name")
   phone           String?
+  phoneVerifiedAt DateTime?          @map("phone_verified_at") @db.Timestamptz(6)
+  claimedAt       DateTime?          @map("claimed_at") @db.Timestamptz(6)
   avatarUrl       String?            @map("avatar_url")
   roleId          String?            @map("role_id") @db.Uuid
   isActive        Boolean            @default(true) @map("is_active")
@@ -178,6 +180,7 @@ model Product {
   basePrice         Decimal           @default(0) @map("base_price") @db.Decimal(12, 2)
   costPrice         Decimal?          @map("cost_price") @db.Decimal(12, 2)
   salePrice         Decimal?          @map("sale_price") @db.Decimal(12, 2)
+  vatPercent        Decimal           @default(0) @map("vat_percent") @db.Decimal(5, 2)
   sku               String?           @unique
   barcode           String?           @unique
   status            String            @default("DRAFT")
@@ -452,6 +455,7 @@ model CustomerAddress {
 model Order {
   id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderNumber     String               @unique @map("order_number")
+  invoiceToken    String?              @unique @map("invoice_token")
   customerId      String?              @map("customer_id") @db.Uuid
   profileId       String?              @map("profile_id") @db.Uuid
   status          String               @default("PENDING")
@@ -460,6 +464,7 @@ model Order {
   paymentTxnId    String?              @map("payment_txn_id")
   subtotal        Decimal              @default(0) @db.Decimal(12, 2)
   discount        Decimal              @default(0) @db.Decimal(12, 2)
+  vatAmount       Decimal              @default(0) @map("vat_amount") @db.Decimal(12, 2)
   shippingFee     Decimal              @default(0) @map("shipping_fee") @db.Decimal(12, 2)
   totalAmount     Decimal              @default(0) @map("total_amount") @db.Decimal(12, 2)
   couponCode      String?              @map("coupon_code")
@@ -473,6 +478,11 @@ model Order {
   shippedAt             DateTime?            @map("shipped_at") @db.Timestamptz(6)
   deliveredAt           DateTime?            @map("delivered_at") @db.Timestamptz(6)
   reservationExpiresAt  DateTime?            @map("reservation_expires_at") @db.Timestamptz(6)
+  riskLevel             String?              @map("risk_level") @db.VarChar(20)
+  riskScore             Int?                 @map("risk_score")
+  riskReasons           Json?                @map("risk_reasons")
+  verificationStatus    String?              @map("verification_status") @db.VarChar(20)
+  verificationVerifiedAt DateTime?           @map("verification_verified_at") @db.Timestamptz(6)
   createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   items           OrderItem[]
@@ -503,6 +513,11 @@ model OrderItem {
   quantity    Int      @default(1)
   unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
   totalPrice  Decimal  @map("total_price") @db.Decimal(12, 2)
+  /// True while this line's stock is held by InventoryService.reserveOrderInventory.
+  /// Release/confirm only act on reserved lines, which makes them idempotent.
+  inventoryReserved    Boolean  @default(false) @map("inventory_reserved")
+  /// Warehouse the reservation was taken from (release/confirm target).
+  allocatedWarehouseId String?  @map("allocated_warehouse_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product? @relation(fields: [productId], references: [id])
@@ -628,6 +643,7 @@ model Review {
   title        String?
   comment      String?
   images       String[] @default([])
+  helpfulVotes Int      @default(0) @map("helpful_votes")
   isApproved   Boolean  @default(true) @map("is_approved")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1168,29 +1184,61 @@ model BranchTransfer {
 }
 
 model campaign_audiences {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  campaign_id String?   @db.Uuid
-  customer_id String?   @db.Uuid
-  status      String?   @default("PENDING") @db.VarChar(50)
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaign_id      String?   @db.Uuid
+  customer_id      String?   @db.Uuid
+  status           String?   @default("PENDING") @db.VarChar(50)
+  name             String?
+  description      String?
+  segment_criteria Json?
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model campaign_logs {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  campaign_id String?   @db.Uuid
-  action      String?   @db.VarChar(100)
-  details     Json?
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaign_id   String?   @db.Uuid
+  action        String?   @db.VarChar(100)
+  details       Json?
+  recipient_id  String?   @db.Uuid
+  status        String?   @db.VarChar(50)
+  error_message String?
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model campaigns {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String?
+  type          String?   @db.VarChar(20)
+  status        String?   @default("draft") @db.VarChar(20)
+  audience_id   String?   @db.Uuid
+  subject       String?
+  content       String?
+  schedule_time DateTime? @db.Timestamptz(6)
+  created_by    String?   @db.Uuid
+  metadata      Json?
+  sent_at       DateTime? @db.Timestamptz(6)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model cod_verifications {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  order_id    String?   @db.Uuid
-  phone       String?   @db.VarChar(50)
-  otp         String?   @db.VarChar(10)
-  verified_at DateTime? @db.Timestamptz(6)
-  status      String?   @default("PENDING") @db.VarChar(50)
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id     String?   @db.Uuid
+  phone        String?   @db.VarChar(50)
+  otp          String?   @db.VarChar(10)
+  verified_at  DateTime? @db.Timestamptz(6)
+  status       String?   @default("PENDING") @db.VarChar(50)
+  session_id   String?   @unique
+  target_type  String?   @db.VarChar(20)
+  target_value String?
+  otp_hash     String?
+  expires_at   DateTime? @db.Timestamptz(6)
+  attempts     Int       @default(0)
+  max_attempts Int       @default(5)
+  resend_count Int       @default(0)
+  last_sent_at DateTime? @db.Timestamptz(6)
+  verified     Boolean   @default(false)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model coupon_usages {

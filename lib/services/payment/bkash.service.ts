@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export interface BKashConfig {
   app_key: string;
@@ -175,8 +175,8 @@ export class BKashService {
 
     // 2. Check DB payment_providers row
     try {
-      const supabase = createAdminClient();
-      const { data: provider } = await supabase
+      const db = createAdminDbClient();
+      const { data: provider } = await db
         .from("payment_providers")
         .select("config")
         .eq("code", "bkash")
@@ -196,7 +196,7 @@ export class BKashService {
       }
 
       // 3. Check DB settings table
-      const { data: settingRow } = await supabase
+      const { data: settingRow } = await db
         .from("settings")
         .select("value")
         .eq("key", "payment_bkash")

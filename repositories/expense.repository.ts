@@ -1,20 +1,20 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { Expense, ExpenseFilters, ExpenseSummary } from "@/types/finance.types";
 import { ExpenseFormValues } from "@/schemas/finance.schema";
 
 export class ExpenseRepository {
   private getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
    * Fetch expenses with optional filters and joined branch/warehouse metadata.
    */
   async getExpenses(filters?: ExpenseFilters): Promise<Expense[]> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     try {
-      let query = supabase
+      let query = db
         .from("expenses")
         .select(`
           id,
@@ -72,7 +72,7 @@ export class ExpenseRepository {
         // If table doesn't exist yet in schema cache, log guidance and return empty array
         if (error.code === "PGRST205" || error.message.includes("Could not find the table")) {
           console.warn(
-            "[ExpenseRepository] Table 'public.expenses' not found in database. Please run the migration: supabase/migrations/20260910100000_enterprise_finance_expenses.sql"
+            "[ExpenseRepository] Table 'public.expenses' not found in database. Please run the migration: db/migrations/20260910100000_enterprise_finance_expenses.sql"
           );
           return [];
         }
@@ -106,9 +106,9 @@ export class ExpenseRepository {
    * Fetch single expense by ID.
    */
   async getExpenseById(id: string): Promise<Expense | null> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("expenses")
       .select(`
         *,
@@ -130,7 +130,7 @@ export class ExpenseRepository {
    * Create a new expense record in database.
    */
   async createExpense(values: ExpenseFormValues, userId?: string): Promise<Expense> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     const insertPayload: Record<string, any> = {
       date: values.date,
@@ -147,7 +147,7 @@ export class ExpenseRepository {
       created_by: userId || null,
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("expenses")
       .insert(insertPayload)
       .select(`
@@ -160,7 +160,7 @@ export class ExpenseRepository {
     if (error) {
       if (error.message?.includes("expenses_created_by_fkey")) {
         insertPayload.created_by = null;
-        const retry = await supabase
+        const retry = await db
           .from("expenses")
           .insert(insertPayload)
           .select(`
@@ -175,7 +175,7 @@ export class ExpenseRepository {
       }
       if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
         throw new Error(
-          "Table 'expenses' not found in database. Please run the migration: supabase/migrations/20260910100000_enterprise_finance_expenses.sql"
+          "Table 'expenses' not found in database. Please run the migration: db/migrations/20260910100000_enterprise_finance_expenses.sql"
         );
       }
       throw new Error(`Failed to create expense: ${error.message}`);
@@ -188,7 +188,7 @@ export class ExpenseRepository {
    * Update an existing expense record.
    */
   async updateExpense(id: string, values: Partial<ExpenseFormValues>): Promise<Expense> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     const updatePayload: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -206,7 +206,7 @@ export class ExpenseRepository {
     if (values.warehouseId !== undefined) updatePayload.warehouse_id = values.warehouseId || null;
     if (values.branchId !== undefined) updatePayload.branch_id = values.branchId || null;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("expenses")
       .update(updatePayload)
       .eq("id", id)
@@ -228,9 +228,9 @@ export class ExpenseRepository {
    * Delete an expense record by ID.
    */
   async deleteExpense(id: string): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    const { error } = await db.from("expenses").delete().eq("id", id);
 
     if (error) {
       throw new Error(`Failed to delete expense: ${error.message}`);

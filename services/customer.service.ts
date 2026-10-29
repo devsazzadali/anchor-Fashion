@@ -1,15 +1,15 @@
 import { CustomerRepository } from "@/repositories/customer.repository";
 import { CustomerProfile, CustomerAddress } from "@/types/customer.types";
 import { updateProfileSchema, addressSchema } from "@/schemas/customer.schema";
-import { createAdminClient } from "@/lib/supabase/admin-client";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
+import { createDbClient } from "@/lib/db/client";
 
 export class CustomerService {
   private static async getClient() {
     try {
-      return createAdminClient();
+      return createAdminDbClient();
     } catch {
-      return await createClient();
+      return await createDbClient();
     }
   }
 
@@ -45,7 +45,7 @@ export class CustomerService {
     userId: string,
     reason?: string
   ): Promise<{ success: boolean; message: string }> {
-    const supabase = await this.getClient();
+    const db = await this.getClient();
 
     // Check for active / pending orders across customer_orders and orders tables
     const activeStatuses = [
@@ -60,7 +60,7 @@ export class CustomerService {
       "shipped",
     ];
 
-    const { data: activeOrders, error: orderErr } = await supabase
+    const { data: activeOrders, error: orderErr } = await db
       .from("customer_orders")
       .select("id, status")
       .eq("user_id", userId)
@@ -89,10 +89,10 @@ export class CustomerService {
   static async deleteProfile(
     userId: string
   ): Promise<{ success: boolean; message: string }> {
-    const supabase = await this.getClient();
+    const db = await this.getClient();
 
     // 1. Check for any historical orders
-    const { data: anyOrders } = await supabase
+    const { data: anyOrders } = await db
       .from("customer_orders")
       .select("id")
       .eq("user_id", userId)
@@ -105,7 +105,7 @@ export class CustomerService {
     }
 
     // 2. Check for any wallet transactions
-    const { data: anyWallet } = await supabase
+    const { data: anyWallet } = await db
       .from("customer_wallets")
       .select("id, balance")
       .eq("customer_id", userId)

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { OrderService } from "./order.service";
 import { InventoryService } from "@/services/inventory.service";
 import { FulfillShipmentInput } from "@/lib/validations/oms";
@@ -31,8 +31,8 @@ export class FulfillmentService {
   }
 
   async assignShipmentTracking(data: FulfillShipmentInput): Promise<boolean> {
-    const supabase = await createClient();
-    const { error } = await supabase.from("shipments").insert({
+    const db = await createDbClient();
+    const { error } = await db.from("shipments").insert({
       order_id: data.order_id,
       tracking_number: data.tracking_number,
       courier: data.courier,

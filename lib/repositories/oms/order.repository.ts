@@ -191,6 +191,10 @@ export class OrderRepository {
         subtotal: orderData.subtotal || 0,
         shippingFee: orderData.shipping_fee || orderData.shipping_total || 0,
         discount: orderData.discount_amount || orderData.discount_total || 0,
+        // VAT: OMS callers pass tax_total, checkout passes vat_amount. This
+        // mapping was missing, so POS/OMS orders persisted vat_amount = 0
+        // even though their totals included VAT.
+        vatAmount: orderData.vat_amount ?? orderData.tax_total ?? 0,
         totalAmount: orderData.total_amount || orderData.grand_total || 0,
         paymentMethod: orderData.payment_method || "COD",
         paymentStatus: orderData.payment_status || "UNPAID",
@@ -266,7 +270,8 @@ function mapPrismaOrderToOms(record: any): Order {
     order_number: record.orderNumber,
     status: (record.status || "confirmed").toLowerCase() as OrderStatus,
     subtotal: Number(record.subtotal || 0),
-    tax_total: 0,
+    tax_total: Number(record.vatAmount || 0),
+    vat_amount: Number(record.vatAmount || 0),
     shipping_total: Number(record.shippingFee || 0),
     discount_total: Number(record.discount || 0),
     grand_total: Number(record.totalAmount || 0),
@@ -280,7 +285,15 @@ function mapPrismaOrderToOms(record: any): Order {
     payment_method: record.paymentMethod || "COD",
     payment_status: record.paymentStatus || "UNPAID",
     notes: record.notes,
-    risk_level: "LOW",
+    // Phase 8: real persisted fraud-risk evaluation (was hard-coded "LOW"
+    // for every order). Falls back to LOW only when no evaluation exists
+    // (e.g. legacy orders created before risk persistence).
+    risk_level: (record.riskLevel || "LOW") as any,
+    risk_score: record.riskScore ?? null,
+    risk_reasons: (record.riskReasons as any) ?? null,
+    verification_status: record.verificationStatus ?? null,
+    verification_verified_at:
+      record.verificationVerifiedAt?.toISOString?.() ?? null,
     created_at: record.createdAt?.toISOString(),
     updated_at: record.updatedAt?.toISOString(),
     placed_at: record.createdAt?.toISOString() || null,

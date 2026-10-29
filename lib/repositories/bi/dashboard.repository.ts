@@ -47,10 +47,18 @@ export class DashboardRepository {
   }
 
   async getDashboardKPIs() {
-    const [allOrders, totalCustomers] = await Promise.all([
-      prisma.order.findMany({ select: { totalAmount: true, status: true } }),
-      prisma.profile.count(),
+    const [allOrders, profiles] = await Promise.all([
+      prisma.order.findMany({
+        select: { totalAmount: true, status: true, createdAt: true, profileId: true },
+      }),
+      // "Customers" must count CUSTOMER-role profiles only — counting every
+      // profile also counts admin/manager/staff accounts as customers.
+      prisma.profile.findMany({
+        where: { role: { name: { equals: "CUSTOMER", mode: "insensitive" } } },
+        select: { createdAt: true },
+      }),
     ]);
+    const totalCustomers = profiles.length;
 
     const validOrders = allOrders.filter(
       (o) => !["CANCELLED", "FAILED", "REFUNDED", "RETURNED"].includes(o.status.toUpperCase())
@@ -63,26 +71,65 @@ export class DashboardRepository {
     const avgOrderVal =
       validOrders.length > 0 ? Math.round(totalRev / validOrders.length) : 0;
 
+    // Real period-over-period trends (last 30 days vs the 30 before).
+    // These were previously hardcoded (+12.5%, +8.2%, ...) and
+    // returningCustomers was fabricated as totalCustomers - 3.
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    const inWindow = (d: Date, from: number, to: number) => {
+      const t = new Date(d).getTime();
+      return t >= from && t < to;
+    };
+    const trendOf = (curr: number, prev: number) => {
+      if (prev === 0) return { value: curr > 0 ? 100 : 0, isPositive: curr >= 0 };
+      const v = Number((((curr - prev) / prev) * 100).toFixed(1));
+      return { value: Math.abs(v), isPositive: v >= 0 };
+    };
+
+    const curFrom = now - 30 * DAY;
+    const prevFrom = now - 60 * DAY;
+    const revCur = validOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1)).reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
+    const revPrev = validOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom)).reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
+    const ordCur = allOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1)).length;
+    const ordPrev = allOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom)).length;
+    const validCur = validOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1));
+    const aovCur = validCur.length > 0 ? revCur / validCur.length : 0;
+    const validPrev = validOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom));
+    const aovPrev = validPrev.length > 0 ? revPrev / validPrev.length : 0;
+    const custCur = profiles.filter((p) => inWindow(p.createdAt, curFrom, now + 1)).length;
+    const custPrev = profiles.filter((p) => inWindow(p.createdAt, prevFrom, curFrom)).length;
+
+    // Returning customers: distinct buyers with at least two valid orders.
+    const ordersPerBuyer = new Map<string, number>();
+    for (const o of validOrders) {
+      if (o.profileId) ordersPerBuyer.set(o.profileId, (ordersPerBuyer.get(o.profileId) || 0) + 1);
+    }
+    const returningCount = [...ordersPerBuyer.values()].filter((n) => n >= 2).length;
+    const buyersCur = new Set(validOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1)).map((o) => o.profileId).filter(Boolean));
+    const repeatBuyersCur = [...buyersCur].filter((id) => (ordersPerBuyer.get(id as string) || 0) >= 2).length;
+    const buyersPrev = new Set(validPrev.map((o) => o.profileId).filter(Boolean));
+    const repeatBuyersPrev = [...buyersPrev].filter((id) => (ordersPerBuyer.get(id as string) || 0) >= 2).length;
+
     return {
       revenue: {
         value: totalRev,
-        trend: { value: 12.5, isPositive: true },
+        trend: trendOf(revCur, revPrev),
       },
       orders: {
         value: totalOrdersCount,
-        trend: { value: 8.2, isPositive: true },
+        trend: trendOf(ordCur, ordPrev),
       },
       aov: {
         value: avgOrderVal,
-        trend: { value: 4.1, isPositive: true },
+        trend: trendOf(aovCur, aovPrev),
       },
       newCustomers: {
         value: totalCustomers,
-        trend: { value: 15.0, isPositive: true },
+        trend: trendOf(custCur, custPrev),
       },
       returningCustomers: {
-        value: Math.max(0, totalCustomers - 3),
-        trend: { value: 5.0, isPositive: true },
+        value: returningCount,
+        trend: trendOf(repeatBuyersCur, repeatBuyersPrev),
       },
     };
   }
@@ -251,18 +298,26 @@ export class DashboardRepository {
   }
 
   async getUserLocations() {
-    const count = await prisma.profile.count();
-    const total = count > 0 ? count : 12;
+    // Real distribution from order shipping addresses. This used to split
+    // the profile count 55/25/20 across Dhaka/Chittagong/Sylhet by fiat.
+    const orders = await prisma.order.findMany({
+      select: { shippingAddress: true },
+      orderBy: { createdAt: "desc" },
+      take: 1000,
+    });
 
-    const dhakaCount = Math.round(total * 0.55);
-    const chittagongCount = Math.round(total * 0.25);
-    const sylhetCount = Math.max(1, total - dhakaCount - chittagongCount);
+    const counts = new Map<string, number>();
+    for (const o of orders) {
+      const addr = (o.shippingAddress || {}) as Record<string, any>;
+      const city = String(addr.city || addr.district || "").trim();
+      if (!city) continue;
+      counts.set(city, (counts.get(city) || 0) + 1);
+    }
 
-    return [
-      { country: "Dhaka", user_count: dhakaCount },
-      { country: "Chittagong", user_count: chittagongCount },
-      { country: "Sylhet", user_count: sylhetCount },
-    ];
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([city, count]) => ({ country: city, user_count: count }));
   }
 
   async getDealOfTheDay() {

@@ -21,7 +21,7 @@ const SENSITIVE_KEYS = [
   "ssn",
   "resend_api_key",
   "stripe_secret_key",
-  "supabase_service_role_key",
+  "neon_auth_cookie_secret",
 ];
 
 /**
@@ -218,7 +218,7 @@ export function formatUserErrorMessage(error: unknown): string {
       !msg.includes("insert") &&
       !msg.includes("update") &&
       !msg.includes("delete") &&
-      !msg.includes("supabase") &&
+      !msg.includes("db") &&
       !msg.includes("postgres") &&
       !msg.includes("prisma") &&
       !msg.includes("stack")

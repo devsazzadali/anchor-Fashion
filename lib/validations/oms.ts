@@ -22,34 +22,9 @@ export const orderStatusSchema = z.enum([
   "failed",
 ]);
 
-export const orderItemSchema = z.object({
-  product_id: z.string().uuid(),
-  variant_id: z.string().uuid().optional().nullable(),
-  sku: z.string().min(1),
-  product_name: z.string().min(1),
-  variant_name: z.string().optional().nullable(),
-  unit_price: z.number().min(0),
-  quantity: z.number().int().positive(),
-  discount: z.number().min(0).default(0),
-  tax: z.number().min(0).default(0),
-  line_total: z.number().min(0),
-});
-
-export const createOrderSchema = z.object({
-  customer_id: z.string().uuid().optional().nullable(),
-  subtotal: z.number().min(0),
-  tax_total: z.number().min(0),
-  shipping_total: z.number().min(0),
-  discount_total: z.number().min(0),
-  grand_total: z.number().min(0),
-  currency: z.string().length(3).default("USD"),
-  shipping_address_id: z.string().uuid().optional().nullable(),
-  billing_address_id: z.string().uuid().optional().nullable(),
-  payment_intent_id: z.string().optional().nullable(),
-  items: z
-    .array(orderItemSchema)
-    .min(1, "Order must contain at least one item"),
-});
+// Phase 11: the staff-side createOrderSchema was removed together with
+// staff order creation — Anchor Fashion has no manual sales; orders are
+// created only by customers through the storefront checkout.
 
 export const updateOrderStatusSchema = z.object({
   order_id: z.string().uuid(),
@@ -75,7 +50,6 @@ export const fulfillShipmentSchema = z.object({
   courier: z.string().min(1),
 });
 
-export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
 export type AddOrderNoteInput = z.infer<typeof addOrderNoteSchema>;
 export type AssignOrderStaffInput = z.infer<typeof assignOrderStaffSchema>;

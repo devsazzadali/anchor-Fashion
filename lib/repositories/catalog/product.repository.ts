@@ -76,6 +76,8 @@ function mapToAdminProduct(p: any): Product {
     cost_price: p.costPrice ? Number(p.costPrice) : null,
     salePrice: p.salePrice ? Number(p.salePrice) : null,
     sale_price: p.salePrice ? Number(p.salePrice) : null,
+    vatPercent: Number(p.vatPercent || 0),
+    vat_percent: Number(p.vatPercent || 0),
     sku: p.sku ?? null,
     barcode: p.barcode ?? null,
     status: p.status,
@@ -371,9 +373,14 @@ export class ProductRepository {
           basePrice: productData.basePrice,
           costPrice: productData.costPrice ?? null,
           salePrice: productData.salePrice ?? null,
+          vatPercent: productData.vatPercent ?? 0,
           sku: finalSku || null,
           barcode: productData.barcode && productData.barcode.trim() ? productData.barcode.trim() : null,
-          status: productData.status || "DRAFT",
+          // INVENTORY-FIRST LAW (owner): a product created through the catalog
+          // repository is always born DRAFT, whatever the caller requested.
+          // Activation happens only by updating/publishing an existing
+          // inventory-backed product (Add Product flow / status actions).
+          status: "DRAFT",
           gender: productData.gender || null,
           season: productData.season || null,
           careInstructions: productData.careInstructions || null,
@@ -561,6 +568,7 @@ export class ProductRepository {
           ...(productData.basePrice !== undefined && { basePrice: productData.basePrice }),
           ...(productData.costPrice !== undefined && { costPrice: productData.costPrice }),
           ...(productData.salePrice !== undefined && { salePrice: productData.salePrice }),
+          ...(productData.vatPercent !== undefined && { vatPercent: productData.vatPercent }),
           ...(productData.sku !== undefined && { sku: productData.sku && productData.sku.trim() ? productData.sku.trim() : null }),
           ...(productData.barcode !== undefined && { barcode: productData.barcode && productData.barcode.trim() ? productData.barcode.trim() : null }),
           ...(productData.status !== undefined && { status: productData.status }),

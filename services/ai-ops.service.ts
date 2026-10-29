@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { AIPredictionSchema } from "@/schemas/operations.schemas";
 
 // Make sure to set GEMINI_API_KEY in your .env
@@ -57,9 +57,9 @@ export async function saveAIPrediction(
 ): Promise<{ success?: boolean; error?: string }> {
   try {
     const parsedData = AIPredictionSchema.parse(data);
-    const supabase = await createClient();
+    const db = await createDbClient();
 
-    const { error } = await supabase.from("ai_predictions").insert({
+    const { error } = await db.from("ai_predictions").insert({
       model_name: parsedData.model_name,
       target_entity_type: parsedData.target_entity_type,
       target_entity_id: parsedData.target_entity_id || null,

@@ -106,7 +106,7 @@ function runAudit() {
 
   // 4. Database tables vs Model/Repository coverage
   console.log('\n--- [4] DATABASE SCHEMA & TABLE DISCOVERY ---');
-  const migrationDir = path.resolve('supabase/migrations');
+  const migrationDir = path.resolve('prisma/migrations');
   const tableSet = new Set();
   if (fs.existsSync(migrationDir)) {
     const files = fs.readdirSync(migrationDir).filter(f => f.endsWith('.sql'));

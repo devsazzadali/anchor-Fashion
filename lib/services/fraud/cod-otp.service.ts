@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { EmailProvider } from "@/lib/notifications/EmailProvider";
 import { CodRiskService } from "./cod-risk.service";
 
@@ -45,11 +45,14 @@ export class CodOtpService {
    * Derive a stable HMAC secret for OTP hashing
    */
   private static getHashSecret(): string {
-    return (
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.NEXTAUTH_SECRET ||
-      "anchor-fashion-cod-fraud-shield-secret-key-2026"
-    );
+    const secret =
+      process.env.COD_OTP_HMAC_SECRET || process.env.NEXTAUTH_SECRET;
+    if (!secret) {
+      throw new Error(
+        "COD OTP hashing secret is not configured: set COD_OTP_HMAC_SECRET (or NEXTAUTH_SECRET)."
+      );
+    }
+    return secret;
   }
 
   /**
@@ -350,8 +353,8 @@ export class CodOtpService {
 
     // 2. Check DB
     try {
-      const supabase = createAdminClient();
-      const { data, error } = await supabase
+      const db = createAdminDbClient();
+      const { data, error } = await db
         .from("cod_verifications")
         .select("*")
         .eq("session_id", sessionId)
@@ -390,8 +393,8 @@ export class CodOtpService {
 
     // Attempt writing to DB
     try {
-      const supabase = createAdminClient();
-      await supabase.from("cod_verifications").upsert(
+      const db = createAdminDbClient();
+      await db.from("cod_verifications").upsert(
         {
           session_id: session.sessionId,
           target_type: session.targetType,

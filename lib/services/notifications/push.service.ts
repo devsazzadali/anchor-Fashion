@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
 const privateVapidKey = process.env.VAPID_PRIVATE_KEY || "";
@@ -27,14 +27,14 @@ export class PushService {
    * Save a push subscription to the database.
    */
   static async saveSubscription(userId: string, subscription: any) {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     const { keys, endpoint } = subscription;
     
     if (!keys || !keys.p256dh || !keys.auth || !endpoint) {
       throw new Error("Invalid subscription object");
     }
 
-    const { error } = await supabase.from("push_subscriptions").upsert(
+    const { error } = await db.from("push_subscriptions").upsert(
       {
         user_id: userId,
         endpoint: endpoint,
@@ -59,8 +59,8 @@ export class PushService {
       return;
     }
 
-    const supabase = createAdminClient();
-    const { data: subscriptions, error } = await supabase
+    const db = createAdminDbClient();
+    const { data: subscriptions, error } = await db
       .from("push_subscriptions")
       .select("*")
       .eq("user_id", userId);
@@ -91,7 +91,7 @@ export class PushService {
       } catch (err: any) {
         if (err.statusCode === 410 || err.statusCode === 404) {
           // Subscription expired or unsubscribed, delete it from DB
-          await supabase
+          await db
             .from("push_subscriptions")
             .delete()
             .eq("id", sub.id);

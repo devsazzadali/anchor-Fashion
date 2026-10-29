@@ -2,7 +2,7 @@
 // Return Repository
 // ============================================================================
 
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   ReturnRequest,
   ReturnItem,
@@ -13,7 +13,7 @@ import {
 
 export class ReturnRepository {
   private getClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
@@ -23,9 +23,9 @@ export class ReturnRepository {
     data: Omit<Partial<ReturnRequest>, "id" | "created_at" | "updated_at">,
     items: Omit<Partial<ReturnItem>, "id" | "return_id" | "created_at">[]
   ): Promise<ReturnWithItems> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data: ret, error } = await supabase
+    const { data: ret, error } = await db
       .from("returns")
       .insert(data as any)
       .select()
@@ -34,7 +34,7 @@ export class ReturnRepository {
     if (error) throw new Error(`Create return failed: ${error.message}`);
 
     if (items.length > 0) {
-      const { error: itemError } = await supabase
+      const { error: itemError } = await db
         .from("return_items")
         .insert(items.map((item) => ({ ...item, return_id: ret.id })) as any);
 
@@ -51,10 +51,10 @@ export class ReturnRepository {
     id: string,
     data: Partial<ReturnRequest> & { [key: string]: any }
   ): Promise<ReturnRequest> {
-    const supabase = this.getClient();
+    const db = this.getClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    let query = supabase.from("returns").update(data as any);
+    let query = db.from("returns").update(data as any);
     query = isUuid ? query.eq("id", id) : query.eq("return_number", id);
 
     const { data: updated, error } = await query
@@ -75,7 +75,7 @@ export class ReturnRepository {
     data: Partial<ReturnRequest> & { status: string },
     actorId?: string
   ): Promise<ReturnRequest> {
-    const supabase = this.getClient();
+    const db = this.getClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     
     // Support both lowercase and UPPERCASE to prevent casing mismatches
@@ -86,7 +86,7 @@ export class ReturnRepository {
       ])
     );
     
-    let query = supabase.from("returns").update(data as any);
+    let query = db.from("returns").update(data as any);
     query = isUuid ? query.eq("id", id) : query.eq("return_number", id);
 
     const { data: updated, error } = await query
@@ -101,7 +101,7 @@ export class ReturnRepository {
     if (updated.order_id) {
       try {
         const isActorUuid = actorId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId);
-        await supabase.from("order_notes").insert({
+        await db.from("order_notes").insert({
           order_id: updated.order_id,
           author_id: isActorUuid ? actorId : null,
           note: `[RETURN] Status changed to '${data.status}' for Return #${updated.return_number}`,
@@ -125,7 +125,7 @@ export class ReturnRepository {
     data: Partial<ReturnRequest> & { refund_status: string },
     actorId?: string
   ): Promise<ReturnRequest> {
-    const supabase = this.getClient();
+    const db = this.getClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     
     const conditionParts = [];
@@ -143,7 +143,7 @@ export class ReturnRepository {
       conditionParts.push(`refund_status.is.null`);
     }
     
-    let query = supabase.from("returns").update(data as any);
+    let query = db.from("returns").update(data as any);
     query = isUuid ? query.eq("id", id) : query.eq("return_number", id);
 
     const { data: updated, error } = await query
@@ -158,7 +158,7 @@ export class ReturnRepository {
     if (updated.order_id) {
       try {
         const isActorUuid = actorId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId);
-        await supabase.from("order_notes").insert({
+        await db.from("order_notes").insert({
           order_id: updated.order_id,
           author_id: isActorUuid ? actorId : null,
           note: `[RETURN] Refund status changed to '${data.status || data.refund_status}' for Return #${updated.return_number}`,
@@ -176,10 +176,10 @@ export class ReturnRepository {
    * Get return by ID.
    */
   async getReturnById(id: string): Promise<ReturnRequest | null> {
-    const supabase = this.getClient();
+    const db = this.getClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    const query = supabase.from("returns").select("*");
+    const query = db.from("returns").select("*");
     const { data, error } = await (isUuid
       ? query.eq("id", id)
       : query.eq("return_number", id)
@@ -193,10 +193,10 @@ export class ReturnRepository {
    * Get return with items.
    */
   async getReturnWithItems(id: string): Promise<ReturnWithItems | null> {
-    const supabase = this.getClient();
+    const db = this.getClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    const query = supabase.from("returns").select(
+    const query = db.from("returns").select(
       `
       *,
       items:return_items(*)
@@ -216,9 +216,9 @@ export class ReturnRepository {
    * Get returns by order.
    */
   async getReturnsByOrderId(orderId: string): Promise<ReturnRequest[]> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("returns")
       .select("*")
       .eq("order_id", orderId)
@@ -234,7 +234,7 @@ export class ReturnRepository {
   async listReturns(
     filters: ReturnFilters
   ): Promise<PaginatedResult<ReturnRequest>> {
-    const supabase = this.getClient();
+    const db = this.getClient();
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const from = (page - 1) * limit;
@@ -242,8 +242,8 @@ export class ReturnRepository {
 
     // Only join orders table when filtering by branchId
     let query = filters.branchId
-      ? supabase.from("returns").select("*, orders!inner(branch_id)", { count: "exact" })
-      : supabase.from("returns").select("*", { count: "exact" });
+      ? db.from("returns").select("*, orders!inner(branch_id)", { count: "exact" })
+      : db.from("returns").select("*", { count: "exact" });
 
     if (filters.status) {
       query = query.or(`status.eq.${filters.status.toLowerCase()},status.eq.${filters.status.toUpperCase()}`);
@@ -276,9 +276,9 @@ export class ReturnRepository {
    * Get returns by customer ID.
    */
   async getReturnsByCustomerId(customerId: string): Promise<ReturnWithItems[]> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("returns")
       .select(
         `
@@ -300,9 +300,9 @@ export class ReturnRepository {
   async getActiveReturnItemsForOrder(
     orderId: string
   ): Promise<Array<ReturnItem & { return_status: string }>> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("returns")
       .select(
         `
@@ -339,9 +339,9 @@ export class ReturnRepository {
    * Get return items for a return.
    */
   async getReturnItems(returnId: string): Promise<ReturnItem[]> {
-    const supabase = this.getClient();
+    const db = this.getClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("return_items")
       .select("*")
       .eq("return_id", returnId);
@@ -354,8 +354,8 @@ export class ReturnRepository {
    * Mark a return item as restocked.
    */
   async markItemRestocked(returnItemId: string): Promise<void> {
-    const supabase = this.getClient();
-    await supabase
+    const db = this.getClient();
+    await db
       .from("return_items")
       .update({ restocked: true } as any)
       .eq("id", returnItemId);

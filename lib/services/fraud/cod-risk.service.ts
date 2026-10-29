@@ -1,4 +1,5 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
@@ -58,8 +59,8 @@ export class CodRiskService {
    */
   static async getConfig(): Promise<CodFraudConfig> {
     try {
-      const supabase = createAdminClient();
-      const { data, error } = await supabase
+      const db = createAdminDbClient();
+      const { data, error } = await db
         .from("settings")
         .select("value")
         .eq("key", "cod_fraud_settings")
@@ -115,57 +116,54 @@ export class CodRiskService {
       };
     }
 
-    const supabase = createAdminClient();
     const reasons: string[] = [];
     let score = 0;
     let isFirstTimeCustomer = false;
     let isTrustedCustomer = false;
 
-    const normalizedPhone = this.normalizePhone(input.phone);
-    const normalizedEmail = (input.email || "").toLowerCase().trim();
-
     // -------------------------------------------------------------
-    // Signal 1: Query Past Orders History (by Customer ID, Phone, or Email)
+    // Signal 1: Query Past Orders History (by customer identity)
     // -------------------------------------------------------------
+    // Previously this read the legacy `order_addresses` table — which
+    // nothing in the app ever writes, so it is always empty — and matched
+    // orders by `customer_id` only, while registered checkouts record the
+    // buyer on `profile_id`. The lookup therefore NEVER found a past
+    // order: every COD customer was scored "first-time" forever, OTP was
+    // demanded on every single order, trust credit never accrued, and the
+    // cancellation-history signals could never fire. Query the real
+    // identity columns via Prisma instead, and normalize statuses to the
+    // lowercase vocabulary the scoring below compares against (orders
+    // store UPPERCASE statuses).
     let pastOrders: any[] = [];
 
     try {
-      // 1a. Find order IDs associated with the customer's phone or email
-      const { data: matchedAddresses } = await supabase
-        .from("order_addresses")
-        .select("order_id, phone, email")
-        .or(`email.ilike.${normalizedEmail},phone.ilike.%${normalizedPhone.slice(-8)}%`)
-        .limit(50);
-
-      const matchedOrderIds = new Set<string>();
-      if (matchedAddresses) {
-        for (const addr of matchedAddresses) {
-          if (addr.order_id) matchedOrderIds.add(addr.order_id);
-        }
-      }
-
-      // 1b. Query orders matching IDs or customer_id
-      let query = supabase
-        .from("orders")
-        .select("id, status, grand_total, created_at, cancelled_at, delivered_at")
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (input.customerId && matchedOrderIds.size > 0) {
-        query = query.or(`customer_id.eq.${input.customerId},id.in.(${Array.from(matchedOrderIds).join(",")})`);
-      } else if (input.customerId) {
-        query = query.eq("customer_id", input.customerId);
-      } else if (matchedOrderIds.size > 0) {
-        query = query.in("id", Array.from(matchedOrderIds));
-      } else {
-        query = null as any;
-      }
-
-      if (query) {
-        const { data: orderData } = await query;
-        if (orderData) {
-          pastOrders = orderData;
-        }
+      if (input.customerId) {
+        const rows = await prisma.order.findMany({
+          where: {
+            OR: [
+              { profileId: input.customerId },
+              { customerId: input.customerId },
+            ],
+          },
+          select: {
+            id: true,
+            status: true,
+            totalAmount: true,
+            createdAt: true,
+            cancelledAt: true,
+            deliveredAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        });
+        pastOrders = rows.map((o) => ({
+          id: o.id,
+          status: (o.status || "").toLowerCase(),
+          grand_total: Number(o.totalAmount) || 0,
+          created_at: o.createdAt.toISOString(),
+          cancelled_at: o.cancelledAt ? o.cancelledAt.toISOString() : null,
+          delivered_at: o.deliveredAt ? o.deliveredAt.toISOString() : null,
+        }));
       }
     } catch (dbErr) {
       console.warn("[CodRiskService] Could not retrieve order history, proceeding cautiously:", dbErr);

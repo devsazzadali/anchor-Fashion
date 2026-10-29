@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { CouponRecord } from "@/lib/repositories/marketing/coupon.repository";
 
 export interface CouponValidationResult {
@@ -10,7 +10,7 @@ export interface CouponValidationResult {
 
 export class CouponService {
   private static getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
@@ -27,10 +27,10 @@ export class CouponService {
         return { isValid: false, discount: 0, error: "Please enter a valid coupon code" };
       }
 
-      const supabase = this.getAdminClient();
+      const db = this.getAdminClient();
       
       // 1. Fetch Coupon
-      const { data: couponData, error: couponError } = await supabase
+      const { data: couponData, error: couponError } = await db
         .from("coupons")
         .select("*")
         .ilike("code", code.trim())
@@ -93,7 +93,7 @@ export class CouponService {
       // 5. Validate Per-User Limit
       const perUserLimit = couponData.per_user_limit || 1;
       if (customerId && perUserLimit) {
-        const { count, error: usageError } = await supabase
+        const { count, error: usageError } = await db
           .from("coupon_usages")
           .select("*", { count: "exact", head: true })
           .eq("coupon_id", couponData.id)
@@ -165,9 +165,9 @@ export class CouponService {
     discountApplied: number
   ): Promise<boolean> {
     try {
-      const supabase = this.getAdminClient();
+      const db = this.getAdminClient();
       
-      const { error } = await supabase.rpc("consume_coupon_atomic", {
+      const { error } = await db.rpc("consume_coupon_atomic", {
         p_coupon_code: code.trim(),
         p_customer_id: customerId || null,
         p_order_id: orderId,
@@ -191,9 +191,9 @@ export class CouponService {
    */
   static async releaseCoupon(orderId: string): Promise<boolean> {
     try {
-      const supabase = this.getAdminClient();
+      const db = this.getAdminClient();
       
-      const { error } = await supabase.rpc("release_coupon_atomic", {
+      const { error } = await db.rpc("release_coupon_atomic", {
         p_order_id: orderId
       });
 
@@ -216,8 +216,8 @@ export class CouponService {
     subtotal: number,
     cartItems: any[]
   ) {
-    const supabase = this.getAdminClient();
-    const { data: promo, error } = await supabase
+    const db = this.getAdminClient();
+    const { data: promo, error } = await db
       .from("promo_rules")
       .select("*")
       .ilike("code", code.trim())

@@ -5,7 +5,9 @@ import { CheckoutFormValues } from "@/schemas/checkout.schema";
 import { Order, OrderItem, PaymentPayload, OrderStatus, RiskLevel } from "@/types/checkout.types";
 import { InventoryService, ReservationItem } from "@/services/inventory.service";
 import { WarehouseService } from "@/services/warehouse.service";
+import { CouponService } from "@/services/coupon.service";
 import { prisma } from "@/lib/prisma";
+import { totalVatAmount } from "@/lib/utils/vat";
 
 export class OrderService {
   /**
@@ -20,14 +22,56 @@ export class OrderService {
     home_delivery_outside: 150,  // Outside Dhaka
   };
 
+  /**
+   * Resolve the coupon applied to the checkout session (if any) and its
+   * discount for the given subtotal. The order-summary sidebar lets the
+   * customer apply a coupon to the session, but until Phase 4 the server
+   * never read it back: the sidebar displayed a discounted total while the
+   * order was charged in full. Soft variant returns null on any problem
+   * (used for display summaries); placeOrder re-validates strictly.
+   */
+  private static async resolveSessionCoupon(
+    cartId: string,
+    userId: string | null | undefined,
+    subtotal: number,
+    sessionId?: string | null
+  ): Promise<{ code: string; discount: number } | null> {
+    try {
+      const session = sessionId
+        ? await prisma.checkoutSession.findUnique({
+            where: { id: sessionId },
+            select: { couponCode: true },
+          })
+        : await prisma.checkoutSession.findFirst({
+            where: { cartId },
+            orderBy: { updatedAt: "desc" },
+            select: { couponCode: true },
+          });
+      const code = session?.couponCode?.trim();
+      if (!code) return null;
+
+      const validation = await CouponService.validateAndCalculateDiscount(
+        code,
+        subtotal,
+        userId || undefined
+      );
+      if (!validation.isValid) return null;
+      return { code: validation.coupon?.code || code, discount: validation.discount };
+    } catch {
+      return null;
+    }
+  }
+
   static async calculateSummary(
     cartId: string,
     userId?: string | null,
-    shippingMethod?: string
+    shippingMethod?: string,
+    sessionId?: string | null
   ): Promise<{
     subtotal: number;
     shipping_fee: number;
     discount_amount: number;
+    vat_amount: number;
     total_amount: number;
   }> {
     const cart = await CartService.getOrCreateCart(userId, null, cartId);
@@ -37,30 +81,50 @@ export class OrderService {
         subtotal: 0,
         shipping_fee: 0,
         discount_amount: 0,
+        vat_amount: 0,
         total_amount: 0,
       };
     }
 
+    const resolvePrice = (item: any) =>
+      item.variant?.sale_price ||
+      item.variant?.price ||
+      item.product?.sale_price ||
+      item.product?.price ||
+      0;
+
     const subtotal = cart.items.reduce((sum, item) => {
-      const price =
-        item.variant?.sale_price ||
-        item.variant?.price ||
-        item.product?.sale_price ||
-        item.product?.price ||
-        0;
-      return sum + price * item.quantity;
+      return sum + resolvePrice(item) * item.quantity;
     }, 0);
+
+    // VAT is charged per product (product.vat_percent) ON TOP of the selling
+    // price — see lib/utils/vat.ts. This replaces the old behaviour where the
+    // checkout UI displayed a hardcoded 15% "estimated tax" the server never
+    // actually charged.
+    const vat_amount = totalVatAmount(
+      (cart.items as any[]).map((item) => ({
+        unitPrice: resolvePrice(item),
+        quantity: item.quantity,
+        vatPercent: item.product?.vat_percent ?? 0,
+      }))
+    );
 
     // Derive shipping fee from selected method; default to inside-Dhaka rate.
     const shipping_fee =
       subtotal > 0
         ? (this.SHIPPING_FEES[shippingMethod ?? "home_delivery"] ?? 100)
         : 0;
-    const discount_amount = 0; // Coupon logic goes here
 
-    const total_amount = subtotal + shipping_fee - discount_amount;
+    // Coupon applied to the checkout session (see resolveSessionCoupon).
+    const coupon = await this.resolveSessionCoupon(cartId, userId, subtotal, sessionId);
+    const discount_amount = coupon?.discount ?? 0;
 
-    return { subtotal, shipping_fee, discount_amount, total_amount };
+    const total_amount = Math.max(
+      0,
+      subtotal + shipping_fee - discount_amount + vat_amount
+    );
+
+    return { subtotal, shipping_fee, discount_amount, vat_amount, total_amount };
   }
 
   /**
@@ -88,8 +152,42 @@ export class OrderService {
     const summary = await this.calculateSummary(
       cartId,
       userId,
-      checkoutData.shipping.shipping_method
+      checkoutData.shipping.shipping_method,
+      sessionId
     );
+
+    // Strict coupon validation before anything is persisted: a coupon the
+    // customer applied that has since expired / hit its limit must fail the
+    // order with the coupon error, not silently change the charged total.
+    let appliedCoupon: { code: string; discount: number } | null = null;
+    try {
+      const sessionRow = await prisma.checkoutSession.findUnique({
+        where: { id: sessionId },
+        select: { couponCode: true },
+      });
+      const code = sessionRow?.couponCode?.trim();
+      if (code) {
+        const validation = await CouponService.validateAndCalculateDiscount(
+          code,
+          summary.subtotal,
+          userId || undefined
+        );
+        if (!validation.isValid) {
+          throw new Error(validation.error || "Invalid coupon");
+        }
+        appliedCoupon = {
+          code: validation.coupon?.code || code,
+          discount: validation.discount,
+        };
+      }
+    } catch (err) {
+      if (err instanceof Error && /coupon|Minimum order|expired|usage limit|already used/i.test(err.message)) {
+        throw err;
+      }
+      // Session lookup problems must not block a coupon-free checkout; the
+      // soft summary above already resolved any discount consistently.
+      appliedCoupon = null;
+    }
 
     // Generate Order Number
     const dateStr = new Date().toISOString().split("T")[0].replace(/-/g, "");
@@ -113,6 +211,9 @@ export class OrderService {
       subtotal: summary.subtotal,
       shipping_fee: summary.shipping_fee,
       discount_amount: summary.discount_amount,
+      coupon_code: appliedCoupon?.code || null,
+      vat_amount: summary.vat_amount,
+      tax_total: summary.vat_amount,
       total_amount: summary.total_amount,
       currency: "BDT",
       payment_method: checkoutData.payment.payment_method,
@@ -146,7 +247,16 @@ export class OrderService {
       } as any;
     });
 
-    const shippingAddress = checkoutData.information.shipping_address;
+    // Phase 8: persist the checkout email onto the order's shipping
+    // address. Guests type their email at checkout, but it previously
+    // lived only on the checkout session — once the order was placed the
+    // address was lost, so guests could not be emailed their invoice and
+    // the repository's email→profile linking never matched.
+    const rawShippingAddress = checkoutData.information.shipping_address;
+    const shippingAddress =
+      guestEmail && !(rawShippingAddress as any)?.email
+        ? { ...rawShippingAddress, email: guestEmail }
+        : rawShippingAddress;
     const billingAddress = checkoutData.payment.billing_address_same_as_shipping
       ? shippingAddress
       : checkoutData.payment.billing_address!;
@@ -218,6 +328,33 @@ export class OrderService {
         );
       } catch (_) {}
       throw reserveErr;
+    }
+
+    // Consume the applied coupon (increments used_count + writes the usage
+    // row). On failure, roll the whole order back: release the reservation
+    // (idempotent) and cancel, mirroring the reservation-failure path.
+    if (appliedCoupon) {
+      try {
+        await CouponService.consumeCoupon(
+          appliedCoupon.code,
+          userId || undefined,
+          order.id,
+          appliedCoupon.discount
+        );
+      } catch (couponErr) {
+        try {
+          const inventoryService = new InventoryService();
+          await inventoryService.releaseOrderInventory(order.id);
+        } catch (_) {}
+        try {
+          await OrderRepository.updateOrderStatus(
+            order.id,
+            "cancelled",
+            "Coupon consumption failed"
+          );
+        } catch (_) {}
+        throw couponErr;
+      }
     }
 
     // For COD orders, payment is confirmed at delivery — clear the cart immediately.

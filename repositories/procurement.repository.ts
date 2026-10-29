@@ -1,16 +1,16 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { Supplier, PurchaseOrder, PurchaseOrderItem } from "@/types/inventory.types";
 
 export class ProcurementRepository {
   private getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   // --- Suppliers ---
 
   async getSuppliers(): Promise<Supplier[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("suppliers")
       .select("*")
       .order("name", { ascending: true });
@@ -20,8 +20,8 @@ export class ProcurementRepository {
   }
 
   async getWarehouses(): Promise<any[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("warehouses")
       .select("*")
       .eq("status", "active")
@@ -32,8 +32,8 @@ export class ProcurementRepository {
   }
 
   async getSupplierById(id: string): Promise<Supplier | null> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("suppliers")
       .select("*")
       .eq("id", id)
@@ -47,8 +47,8 @@ export class ProcurementRepository {
   }
 
   async createSupplier(supplier: Omit<Supplier, "id" | "created_at" | "updated_at">): Promise<Supplier> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("suppliers")
       .insert(supplier)
       .select()
@@ -59,8 +59,8 @@ export class ProcurementRepository {
   }
 
   async updateSupplier(id: string, updates: Partial<Supplier>): Promise<Supplier> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("suppliers")
       .update(updates)
       .eq("id", id)
@@ -74,8 +74,8 @@ export class ProcurementRepository {
   // --- Purchase Orders ---
 
   async getPurchaseOrders(): Promise<any[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("purchase_orders")
       .select(`
         *,
@@ -89,8 +89,8 @@ export class ProcurementRepository {
   }
 
   async getPurchaseOrderById(id: string): Promise<any | null> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("purchase_orders")
       .select(`
         *,
@@ -118,10 +118,10 @@ export class ProcurementRepository {
     poData: Omit<PurchaseOrder, "id" | "created_at" | "updated_at">,
     items: Omit<PurchaseOrderItem, "id" | "po_id" | "created_at" | "updated_at">[]
   ): Promise<PurchaseOrder> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     
     // Sequence of inserts since we can't easily write a complex RPC dynamically
-    const { data: po, error: poError } = await supabase
+    const { data: po, error: poError } = await db
       .from("purchase_orders")
       .insert(poData)
       .select()
@@ -135,13 +135,13 @@ export class ProcurementRepository {
         po_id: po.id,
       }));
 
-      const { error: itemsError } = await supabase
+      const { error: itemsError } = await db
         .from("purchase_order_items")
         .insert(itemsToInsert);
 
       if (itemsError) {
         // Rollback PO if items fail
-        await supabase.from("purchase_orders").delete().eq("id", po.id);
+        await db.from("purchase_orders").delete().eq("id", po.id);
         throw new Error(`Failed to create PO items: ${itemsError.message}`);
       }
     }
@@ -150,8 +150,8 @@ export class ProcurementRepository {
   }
 
   async updatePurchaseOrderStatus(id: string, status: string): Promise<void> {
-    const supabase = this.getAdminClient();
-    const { error } = await supabase
+    const db = this.getAdminClient();
+    const { error } = await db
       .from("purchase_orders")
       .update({ status })
       .eq("id", id);

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createDbClient } from "@/lib/db/client";
 import { SEOMetadata } from "@/types/seo.types";
 
 export class SEORepository {
@@ -6,8 +6,8 @@ export class SEORepository {
     entityType: string,
     entityId: string
   ): Promise<SEOMetadata | null> {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createDbClient();
+    const { data, error } = await db
       .from("seo_metadata")
       .select("*")
       .eq("entity_type", entityType)
@@ -22,8 +22,8 @@ export class SEORepository {
   }
 
   async upsertMetadata(metadata: Partial<SEOMetadata>): Promise<SEOMetadata> {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createDbClient();
+    const { data, error } = await db
       .from("seo_metadata")
       .upsert(metadata, { onConflict: "entity_type,entity_id" })
       .select()
@@ -34,8 +34,8 @@ export class SEORepository {
   }
 
   async getAllMetadata(): Promise<SEOMetadata[]> {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createDbClient();
+    const { data, error } = await db
       .from("seo_metadata")
       .select("*")
       .order("created_at", { ascending: false });

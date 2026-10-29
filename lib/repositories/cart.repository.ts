@@ -25,6 +25,7 @@ export class CartRepository {
                 slug: true,
                 basePrice: true,
                 salePrice: true,
+                vatPercent: true,
                 sku: true,
                 imageUrl: true,
                 media: {
@@ -137,6 +138,7 @@ export class CartRepository {
                 price: prodBasePrice,
                 base_price: prodBasePrice,
                 sale_price: prodSalePrice,
+                vat_percent: prod ? Number(prod.vatPercent || 0) : 0,
                 main_image_url: mainImageUrl,
                 imageUrl: mainImageUrl,
                 stock_quantity: stockQuantity,

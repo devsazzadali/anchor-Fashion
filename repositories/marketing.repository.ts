@@ -1,10 +1,10 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { Campaign, CampaignAudience } from "@/types/marketing.types";
 
 export class MarketingRepository {
   async getCampaigns(): Promise<Campaign[]> {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("campaigns")
       .select("*, campaign_audiences(*)")
       .order("created_at", { ascending: false });
@@ -14,8 +14,8 @@ export class MarketingRepository {
   }
 
   async getCampaignById(id: string): Promise<Campaign | null> {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("campaigns")
       .select("*, campaign_audiences(*)")
       .eq("id", id)
@@ -29,10 +29,10 @@ export class MarketingRepository {
   }
 
   async createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     let createdBy = campaign.created_by;
     if (!createdBy || createdBy === "00000000-0000-0000-0000-000000000000") {
-      const { data: prof } = await supabase
+      const { data: prof } = await db
         .from("profiles")
         .select("id")
         .order("created_at", { ascending: true })
@@ -41,7 +41,7 @@ export class MarketingRepository {
       createdBy = prof?.id || "83dded7c-78c7-4f3f-8dd9-e82f8da7f0c0";
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("campaigns")
       .insert({
         ...campaign,
@@ -58,8 +58,8 @@ export class MarketingRepository {
     id: string,
     updates: Partial<Campaign>
   ): Promise<Campaign> {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("campaigns")
       .update(updates)
       .eq("id", id)
@@ -71,8 +71,8 @@ export class MarketingRepository {
   }
 
   async deleteCampaign(id: string): Promise<boolean> {
-    const supabase = createAdminClient();
-    const { error } = await supabase
+    const db = createAdminDbClient();
+    const { error } = await db
       .from("campaigns")
       .delete()
       .eq("id", id);
@@ -82,8 +82,8 @@ export class MarketingRepository {
   }
 
   async getAudiences(): Promise<CampaignAudience[]> {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("campaign_audiences")
       .select("*")
       .order("name");
@@ -94,8 +94,8 @@ export class MarketingRepository {
   async createAudience(
     audience: Partial<CampaignAudience>
   ): Promise<CampaignAudience> {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const db = createAdminDbClient();
+    const { data, error } = await db
       .from("campaign_audiences")
       .insert(audience)
       .select()
@@ -106,13 +106,13 @@ export class MarketingRepository {
   }
 
   async getManagerMarketingStats() {
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     
     // We attempt to get counts. If tables don't exist exactly, we fail gracefully.
     // 1. Coupons (Active)
     let activeCoupons = 0;
     try {
-      const { count } = await supabase.from("coupons").select("*", { count: "exact", head: true }).eq("is_active", true);
+      const { count } = await db.from("coupons").select("*", { count: "exact", head: true }).eq("is_active", true);
       activeCoupons = count || 0;
     } catch (e) {
       // ignore
@@ -121,7 +121,7 @@ export class MarketingRepository {
     // 2. Upcoming scheduled campaigns
     let upcomingSales = 0;
     try {
-      const { count } = await supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "scheduled");
+      const { count } = await db.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "scheduled");
       upcomingSales = count || 0;
     } catch (e) {
       // ignore
@@ -130,7 +130,7 @@ export class MarketingRepository {
     // 3. Email Drafts
     let draftEmails = 0;
     try {
-      const { count } = await supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("type", "email").eq("status", "draft");
+      const { count } = await db.from("campaigns").select("*", { count: "exact", head: true }).eq("type", "email").eq("status", "draft");
       draftEmails = count || 0;
     } catch (e) {
       // ignore
@@ -141,7 +141,7 @@ export class MarketingRepository {
     try {
       const today = new Date();
       today.setHours(0,0,0,0);
-      const { count } = await supabase.from("campaign_logs").select("*", { count: "exact", head: true }).gte("created_at", today.toISOString());
+      const { count } = await db.from("campaign_logs").select("*", { count: "exact", head: true }).gte("created_at", today.toISOString());
       pushSentToday = count || 0;
     } catch (e) {
       // ignore
@@ -159,22 +159,22 @@ export class MarketingRepository {
     // For admin, we return some aggregate metrics. In a real system, these would be calculated 
     // from orders attributed to campaigns and campaign_logs.
     // We will simulate revenue attribution and open rates for the MVP based on real campaigns count.
-    const supabase = createAdminClient();
+    const db = createAdminDbClient();
     let campaignCount = 0;
     try {
-      const { count } = await supabase.from("campaigns").select("*", { count: "exact", head: true });
+      const { count } = await db.from("campaigns").select("*", { count: "exact", head: true });
       campaignCount = count || 0;
     } catch (e) {}
 
     let runningCount = 0;
     try {
-      const { count } = await supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "running");
+      const { count } = await db.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "running");
       runningCount = count || 0;
     } catch (e) {}
     
     let scheduledCount = 0;
     try {
-      const { count } = await supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "scheduled");
+      const { count } = await db.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "scheduled");
       scheduledCount = count || 0;
     } catch (e) {}
 
@@ -191,8 +191,8 @@ export class MarketingRepository {
   }
 
   async getDashboardCampaigns(status?: string, limit = 5) {
-    const supabase = createAdminClient();
-    let query = supabase.from("campaigns").select("*").order("created_at", { ascending: false }).limit(limit);
+    const db = createAdminDbClient();
+    let query = db.from("campaigns").select("*").order("created_at", { ascending: false }).limit(limit);
     if (status) {
       query = query.eq("status", status);
     }

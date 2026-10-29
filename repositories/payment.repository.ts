@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminDbClient } from "@/lib/db/client";
 import {
   PaymentProvider,
   PaymentSession,
@@ -13,8 +13,8 @@ export class PaymentRepository {
    * Providers
    */
   async getActiveProviders(): Promise<PaymentProvider[]> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_providers")
       .select("*")
       .eq("status", "active");
@@ -25,8 +25,8 @@ export class PaymentRepository {
   }
 
   async getProviderByCode(code: string): Promise<PaymentProvider | null> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_providers")
       .select("*")
       .eq("code", code)
@@ -38,8 +38,8 @@ export class PaymentRepository {
   }
 
   async getFallbackProvider(): Promise<PaymentProvider | null> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_providers")
       .select("*")
       .eq("is_fallback", true)
@@ -57,8 +57,8 @@ export class PaymentRepository {
   async createSession(
     session: Partial<PaymentSession>
   ): Promise<PaymentSession> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_sessions")
       .insert(session)
       .select()
@@ -69,8 +69,8 @@ export class PaymentRepository {
   }
 
   async getSessionById(id: string): Promise<PaymentSession | null> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_sessions")
       .select("*")
       .eq("id", id)
@@ -85,8 +85,8 @@ export class PaymentRepository {
     id: string,
     updates: Partial<PaymentSession>
   ): Promise<PaymentSession> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_sessions")
       .update(updates)
       .eq("id", id)
@@ -103,8 +103,8 @@ export class PaymentRepository {
   async createTransaction(
     transaction: Partial<PaymentTransaction>
   ): Promise<PaymentTransaction> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_transactions")
       .insert(transaction)
       .select()
@@ -116,8 +116,8 @@ export class PaymentRepository {
   }
 
   async getTransactionById(id: string): Promise<PaymentTransaction | null> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_transactions")
       .select("*")
       .eq("id", id)
@@ -131,8 +131,8 @@ export class PaymentRepository {
   async getTransactionByReference(
     reference: string
   ): Promise<PaymentTransaction | null> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_transactions")
       .select("*")
       .eq("reference_number", reference)
@@ -146,8 +146,8 @@ export class PaymentRepository {
   async getTransactionBySessionId(
     sessionId: string
   ): Promise<PaymentTransaction | null> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_transactions")
       .select("*")
       .eq("session_id", sessionId)
@@ -162,8 +162,8 @@ export class PaymentRepository {
     id: string,
     updates: Partial<PaymentTransaction>
   ): Promise<PaymentTransaction> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_transactions")
       .update(updates)
       .eq("id", id)
@@ -181,8 +181,8 @@ export class PaymentRepository {
   async createWebhookEvent(
     webhook: Partial<PaymentWebhook>
   ): Promise<PaymentWebhook> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_webhooks")
       .insert(webhook)
       .select()
@@ -196,8 +196,8 @@ export class PaymentRepository {
     id: string,
     updates: Partial<PaymentWebhook>
   ): Promise<PaymentWebhook> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_webhooks")
       .update(updates)
       .eq("id", id)
@@ -212,8 +212,8 @@ export class PaymentRepository {
    * Refunds
    */
   async createRefund(refund: Partial<PaymentRefund>): Promise<PaymentRefund> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_refunds")
       .insert(refund)
       .select()
@@ -227,8 +227,8 @@ export class PaymentRepository {
     id: string,
     updates: Partial<PaymentRefund>
   ): Promise<PaymentRefund> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_refunds")
       .update(updates)
       .eq("id", id)
@@ -242,8 +242,8 @@ export class PaymentRepository {
   async getRefundsByTransactionId(
     transactionId: string
   ): Promise<PaymentRefund[]> {
-    const supabase = await createAdminClient();
-    const { data, error } = await supabase
+    const db = await createAdminDbClient();
+    const { data, error } = await db
       .from("payment_refunds")
       .select("*")
       .eq("transaction_id", transactionId);
@@ -259,8 +259,8 @@ export class PaymentRepository {
    * Audit Logs
    */
   async createAuditLog(log: Partial<PaymentAuditLog>): Promise<void> {
-    const supabase = await createAdminClient();
-    const { error } = await supabase.from("payment_audit_logs").insert(log);
+    const db = await createAdminDbClient();
+    const { error } = await db.from("payment_audit_logs").insert(log);
 
     if (error) throw new Error(`Failed to create audit log: ${error.message}`);
   }

@@ -1,10 +1,10 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { prisma } from "@/lib/prisma";
 import { InventoryLevel, InventoryMovement } from "@/types/inventory.types";
 
 export class InventoryRepository {
   private getAdminClient() {
-    return createAdminClient();
+    return createAdminDbClient();
   }
 
   /**
@@ -14,8 +14,8 @@ export class InventoryRepository {
     variantId: string,
     warehouseId?: string
   ): Promise<InventoryLevel[]> {
-    const supabase = this.getAdminClient();
-    let query = supabase
+    const db = this.getAdminClient();
+    let query = db
       .from("inventory_levels")
       .select("*")
       .eq("variant_id", variantId);
@@ -37,13 +37,13 @@ export class InventoryRepository {
     warehouseId: string,
     quantity: number
   ): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     
     if (quantity <= 0) {
       throw new Error(`Quantity must be greater than zero`);
     }
 
-    const { error } = await supabase.rpc("atomic_reserve_stock", {
+    const { error } = await db.rpc("atomic_reserve_stock", {
       p_variant_id: variantId,
       p_warehouse_id: warehouseId,
       p_quantity: quantity,
@@ -59,13 +59,13 @@ export class InventoryRepository {
     warehouseId: string,
     quantity: number
   ): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     if (quantity <= 0) {
       throw new Error(`Quantity must be greater than zero`);
     }
 
-    const { error } = await supabase.rpc("atomic_release_stock", {
+    const { error } = await db.rpc("atomic_release_stock", {
       p_variant_id: variantId,
       p_warehouse_id: warehouseId,
       p_quantity: quantity,
@@ -82,13 +82,13 @@ export class InventoryRepository {
     quantity: number,
     fromReserved = true
   ): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     if (quantity <= 0) {
       throw new Error(`Quantity must be greater than zero`);
     }
 
-    const { error } = await supabase.rpc("atomic_reduce_stock", {
+    const { error } = await db.rpc("atomic_reduce_stock", {
       p_variant_id: variantId,
       p_warehouse_id: warehouseId,
       p_quantity: quantity,
@@ -106,7 +106,7 @@ export class InventoryRepository {
   async recordMovement(
     movement: any
   ): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const rawReason =
       movement.reason ||
       movement.notes ||
@@ -134,7 +134,7 @@ export class InventoryRepository {
     };
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("stock_movements")
         .insert(payload);
       if (error) {
@@ -152,11 +152,11 @@ export class InventoryRepository {
     page: number = 1,
     limit: number = 20
   ): Promise<{ data: InventoryLevel[]; total: number }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    const { data, error, count } = await supabase
+    const { data, error, count } = await db
       .from("inventory_levels")
       .select("*", { count: "exact" })
       .range(from, to);
@@ -226,9 +226,28 @@ export class InventoryRepository {
         };
       });
 
-      const totalInStock = processed.reduce((acc, curr) => acc + curr.available, 0);
-      const lowStockCount = processed.filter((p) => p.status === "Low Stock").length;
-      const outOfStockCount = processed.filter((p) => p.status === "Out of Stock").length;
+      // Stats must cover ALL matching levels, not just the page being
+      // displayed — previously the headline "Total Items in Stock" summed
+      // only the first `limit` rows (544 shown vs 1,759 actually in stock).
+      const allLevels = await prisma.inventoryLevel.findMany({
+        where: whereClause,
+        select: {
+          quantityAvailable: true,
+          quantityReserved: true,
+          reorderPoint: true,
+        },
+      });
+      const totalInStock = allLevels.reduce(
+        (acc, l) => acc + (l.quantityAvailable ?? 0),
+        0
+      );
+      const lowStockCount = allLevels.filter((l) => {
+        const a = l.quantityAvailable ?? 0;
+        return a > 0 && a <= (l.reorderPoint ?? 0);
+      }).length;
+      const outOfStockCount = allLevels.filter(
+        (l) => (l.quantityAvailable ?? 0) <= 0
+      ).length;
 
       return {
         items: processed,
@@ -260,9 +279,9 @@ export class InventoryRepository {
     newReserved: number,
     reason: string
   ): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
-    const { data: inv, error: fetchError } = await supabase
+    const { data: inv, error: fetchError } = await db
       .from("inventory_levels")
       .select("*")
       .eq("id", inventoryId)
@@ -270,7 +289,7 @@ export class InventoryRepository {
 
     if (fetchError || !inv) throw new Error("Inventory not found");
 
-    const { error } = await supabase
+    const { error } = await db
       .from("inventory_levels")
       .update({
         quantity_available: newAvailable,
@@ -300,11 +319,11 @@ export class InventoryRepository {
     warehouseId?: string,
     variantId?: string
   ): Promise<{ data: InventoryMovement[]; total: number }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    let query = supabase
+    let query = db
       .from("stock_movements")
       .select("*", { count: "exact" });
     if (warehouseId) query = query.eq("warehouse_id", warehouseId);
@@ -422,8 +441,8 @@ export class InventoryRepository {
   // --- Audits ---
 
   async getAudits(): Promise<any[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("inventory_audits")
       .select("*, warehouse:warehouses(name)")
       .order("created_at", { ascending: false });
@@ -433,8 +452,8 @@ export class InventoryRepository {
   }
 
   async getAuditById(id: string): Promise<any> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("inventory_audits")
       .select("*, warehouse:warehouses(name)")
       .eq("id", id)
@@ -448,7 +467,7 @@ export class InventoryRepository {
   }
 
   async createAudit(auditData: any): Promise<any> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const payload: any = {
       warehouse_id: auditData.warehouse_id,
       status: auditData.status === "PLANNED" ? "SCHEDULED" : (auditData.status || "SCHEDULED"),
@@ -464,7 +483,7 @@ export class InventoryRepository {
       payload.created_by = auditData.created_by;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("inventory_audits")
       .insert([payload])
       .select()
@@ -475,14 +494,14 @@ export class InventoryRepository {
   }
 
   async updateAuditStatus(id: string, status: string): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const dbStatus = status === "PLANNED" ? "SCHEDULED" : status;
     const updates: any = {
       status: dbStatus,
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase
+    const { error } = await db
       .from("inventory_audits")
       .update(updates)
       .eq("id", id);
@@ -491,8 +510,8 @@ export class InventoryRepository {
   }
 
   async getAuditItems(auditId: string): Promise<any[]> {
-    const supabase = this.getAdminClient();
-    const { data, error } = await supabase
+    const db = this.getAdminClient();
+    const { data, error } = await db
       .from("inventory_audit_items")
       .select("*, variant:variants(sku, product:products(name))")
       .eq("audit_id", auditId);
@@ -503,8 +522,8 @@ export class InventoryRepository {
 
   async createAuditItems(items: any[]): Promise<void> {
     if (items.length === 0) return;
-    const supabase = this.getAdminClient();
-    const { error } = await supabase
+    const db = this.getAdminClient();
+    const { error } = await db
       .from("inventory_audit_items")
       .insert(items);
 
@@ -512,10 +531,10 @@ export class InventoryRepository {
   }
 
   async updateAuditItemCount(itemId: string, countedQuantity: number): Promise<void> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
 
     // First fetch the item to get expected quantity
-    const { data: item, error: fetchError } = await supabase
+    const { data: item, error: fetchError } = await db
       .from("inventory_audit_items")
       .select("expected_quantity")
       .eq("id", itemId)
@@ -527,7 +546,7 @@ export class InventoryRepository {
     const variance = countedQuantity - expected;
     const status = variance === 0 ? "COUNTED" : "DISCREPANCY";
 
-    const { error } = await supabase
+    const { error } = await db
       .from("inventory_audit_items")
       .update({
         counted_quantity: countedQuantity,
@@ -561,14 +580,14 @@ export class InventoryRepository {
     notes?: string;
     userId?: string;
   }): Promise<InventoryLevel> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const qty = Number(payload.quantity);
     if (!qty || qty <= 0) {
       throw new Error("Received quantity must be greater than zero.");
     }
 
     // Check if warehouse is active
-    const { data: wh, error: whErr } = await supabase
+    const { data: wh, error: whErr } = await db
       .from("warehouses")
       .select("id, is_active, name")
       .eq("id", payload.warehouse_id)
@@ -577,7 +596,7 @@ export class InventoryRepository {
     if (!wh.is_active) throw new Error(`Warehouse "${wh.name}" is inactive and cannot receive stock.`);
 
     // Check existing inventory level
-    let query = supabase
+    let query = db
       .from("inventory_levels")
       .select("*")
       .eq("variant_id", payload.variant_id)
@@ -597,7 +616,7 @@ export class InventoryRepository {
     if (existingLevels && existingLevels.length > 0) {
       const current = existingLevels[0];
       const newAvail = (current.quantity_available || 0) + qty;
-      const { data: updated, error: updateErr } = await supabase
+      const { data: updated, error: updateErr } = await db
         .from("inventory_levels")
         .update({
           quantity_available: newAvail,
@@ -609,7 +628,7 @@ export class InventoryRepository {
       if (updateErr) throw new Error(`Failed to increment inventory: ${updateErr.message}`);
       updatedLevel = updated as InventoryLevel;
     } else {
-      const { data: created, error: insertErr } = await supabase
+      const { data: created, error: insertErr } = await db
         .from("inventory_levels")
         .insert({
           variant_id: payload.variant_id,
@@ -667,14 +686,14 @@ export class InventoryRepository {
     reference_id?: string;
     userId?: string;
   }): Promise<InventoryLevel> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const qty = Number(payload.quantity);
     if (!qty || qty <= 0) {
       throw new Error("Stock Out quantity must be greater than zero.");
     }
 
     // Check warehouse and its negative stock policy
-    const { data: wh, error: whErr } = await supabase
+    const { data: wh, error: whErr } = await db
       .from("warehouses")
       .select("id, is_active, name, address")
       .eq("id", payload.warehouse_id)
@@ -693,7 +712,7 @@ export class InventoryRepository {
     }
 
     // Find inventory level
-    let query = supabase
+    let query = db
       .from("inventory_levels")
       .select("*")
       .eq("variant_id", payload.variant_id)
@@ -721,7 +740,7 @@ export class InventoryRepository {
     const newAvail = currentAvail - qty;
 
     if (current) {
-      const { data: updated, error: updateErr } = await supabase
+      const { data: updated, error: updateErr } = await db
         .from("inventory_levels")
         .update({
           quantity_available: newAvail,
@@ -733,7 +752,7 @@ export class InventoryRepository {
       if (updateErr) throw new Error(`Failed to decrement inventory: ${updateErr.message}`);
       updatedLevel = updated as InventoryLevel;
     } else {
-      const { data: created, error: insertErr } = await supabase
+      const { data: created, error: insertErr } = await db
         .from("inventory_levels")
         .insert({
           variant_id: payload.variant_id,
@@ -779,13 +798,13 @@ export class InventoryRepository {
     notes?: string;
     userId?: string;
   }): Promise<{ updated: InventoryLevel; variance: number }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     if (!payload.reason?.trim()) {
       throw new Error("Reason is required for all manual stock adjustments.");
     }
     const physical = Math.max(0, Number(payload.physical_count));
 
-    let query = supabase
+    let query = db
       .from("inventory_levels")
       .select("*")
       .eq("variant_id", payload.variant_id)
@@ -807,7 +826,7 @@ export class InventoryRepository {
     let updatedLevel: InventoryLevel;
 
     if (current) {
-      const { data: updated, error: updateErr } = await supabase
+      const { data: updated, error: updateErr } = await db
         .from("inventory_levels")
         .update({
           quantity_available: physical,
@@ -819,7 +838,7 @@ export class InventoryRepository {
       if (updateErr) throw new Error(`Failed to update adjusted inventory: ${updateErr.message}`);
       updatedLevel = updated as InventoryLevel;
     } else {
-      const { data: created, error: insertErr } = await supabase
+      const { data: created, error: insertErr } = await db
         .from("inventory_levels")
         .insert({
           variant_id: payload.variant_id,
@@ -868,12 +887,12 @@ export class InventoryRepository {
     page: number;
     totalPages: number;
   }> {
-    const supabase = this.getAdminClient();
+    const db = this.getAdminClient();
     const page = Math.max(1, options?.page || 1);
     const limit = Math.max(1, options?.limit || 50);
     const start = (page - 1) * limit;
 
-    let query = supabase
+    let query = db
       .from("stock_movements")
       .select(
         `*,

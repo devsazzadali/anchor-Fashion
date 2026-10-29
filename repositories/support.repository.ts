@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createDbClient } from "@/lib/db/client";
+import { createAdminDbClient } from "@/lib/db/client";
 
 export interface SupportTicketRecord {
   id: string;
@@ -35,15 +35,15 @@ export interface TicketMessageRecord {
 export class SupportRepository {
   private static async getClient() {
     try {
-      return createAdminClient();
+      return createAdminDbClient();
     } catch {
-      return await createClient();
+      return await createDbClient();
     }
   }
 
   static async getTickets(): Promise<SupportTicketRecord[]> {
-    const supabase = await this.getClient();
-    const { data: tickets, error } = await supabase
+    const db = await this.getClient();
+    const { data: tickets, error } = await db
       .from("support_tickets")
       .select("*")
       .order("updated_at", { ascending: false });
@@ -60,7 +60,7 @@ export class SupportRepository {
 
     let profilesMap: Record<string, { full_name: string; phone?: string | null }> = {};
     if (profileIds.length > 0) {
-      const { data: profiles } = await supabase
+      const { data: profiles } = await db
         .from("profiles")
         .select("id, first_name, last_name, phone")
         .in("id", profileIds);
@@ -78,7 +78,7 @@ export class SupportRepository {
     const enriched: SupportTicketRecord[] = await Promise.all(
       tickets.map(async (t: any) => {
         // Fetch last message
-        const { data: lastMsg } = await supabase
+        const { data: lastMsg } = await db
           .from("ticket_messages")
           .select("message, created_at, sender_type, read_at")
           .eq("ticket_id", t.id)
@@ -87,7 +87,7 @@ export class SupportRepository {
           .maybeSingle();
 
         // Fetch unread count from customer
-        const { count: unreadCount } = await supabase
+        const { count: unreadCount } = await db
           .from("ticket_messages")
           .select("id", { count: "exact", head: true })
           .eq("ticket_id", t.id)
@@ -111,8 +111,8 @@ export class SupportRepository {
   }
 
   static async getTicketMessages(ticketId: string): Promise<TicketMessageRecord[]> {
-    const supabase = await this.getClient();
-    const { data, error } = await supabase
+    const db = await this.getClient();
+    const { data, error } = await db
       .from("ticket_messages")
       .select("*")
       .eq("ticket_id", ticketId)
@@ -131,8 +131,8 @@ export class SupportRepository {
     message: string;
     isInternalNote?: boolean;
   }): Promise<TicketMessageRecord> {
-    const supabase = await this.getClient();
-    const { data, error } = await supabase
+    const db = await this.getClient();
+    const { data, error } = await db
       .from("ticket_messages")
       .insert({
         ticket_id: params.ticketId,
@@ -149,7 +149,7 @@ export class SupportRepository {
     }
 
     // Touch ticket updated_at
-    await supabase
+    await db
       .from("support_tickets")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", params.ticketId);
@@ -158,8 +158,8 @@ export class SupportRepository {
   }
 
   static async updateTicketStatus(ticketId: string, status: string): Promise<void> {
-    const supabase = await this.getClient();
-    const { error } = await supabase
+    const db = await this.getClient();
+    const { error } = await db
       .from("support_tickets")
       .update({
         status,
@@ -175,8 +175,8 @@ export class SupportRepository {
   }
 
   static async markMessagesRead(ticketId: string): Promise<void> {
-    const supabase = await this.getClient();
-    await supabase
+    const db = await this.getClient();
+    await db
       .from("ticket_messages")
       .update({ read_at: new Date().toISOString() })
       .eq("ticket_id", ticketId)
@@ -190,8 +190,8 @@ export class SupportRepository {
   }
 
   async getTicketById(id: string): Promise<any> {
-    const supabase = await SupportRepository.getClient();
-    const { data: ticket, error } = await supabase
+    const db = await SupportRepository.getClient();
+    const { data: ticket, error } = await db
       .from("support_tickets")
       .select("*, ticket_messages(*)")
       .eq("id", id)
@@ -199,7 +199,7 @@ export class SupportRepository {
 
     let finalTicket = ticket;
     if (error || !finalTicket) {
-      const { data: simpleTicket } = await supabase
+      const { data: simpleTicket } = await db
         .from("support_tickets")
         .select("*")
         .eq("id", id)
@@ -207,7 +207,7 @@ export class SupportRepository {
 
       if (!simpleTicket) return null;
 
-      const { data: messages } = await supabase
+      const { data: messages } = await db
         .from("ticket_messages")
         .select("*")
         .eq("ticket_id", id)
@@ -220,7 +220,7 @@ export class SupportRepository {
     }
 
     if (finalTicket && finalTicket.profile_id) {
-      const { data: profile } = await supabase
+      const { data: profile } = await db
         .from("profiles")
         .select("id, first_name, last_name, email, phone")
         .eq("id", finalTicket.profile_id)
@@ -247,10 +247,10 @@ export class SupportRepository {
     agentOrUserId?: string | null
   ): Promise<string | null> {
     if (!agentOrUserId || agentOrUserId === "none") return null;
-    const supabase = await this.getClient();
+    const db = await this.getClient();
 
     // 1. Check if already a valid support_agents.id
-    const { data: existingAgent } = await supabase
+    const { data: existingAgent } = await db
       .from("support_agents")
       .select("id")
       .eq("id", agentOrUserId)
@@ -259,7 +259,7 @@ export class SupportRepository {
     if (existingAgent) return existingAgent.id;
 
     // 2. Check if agentOrUserId is user_id in support_agents
-    const { data: agentByUser } = await supabase
+    const { data: agentByUser } = await db
       .from("support_agents")
       .select("id")
       .eq("user_id", agentOrUserId)
@@ -268,14 +268,14 @@ export class SupportRepository {
     if (agentByUser) return agentByUser.id;
 
     // 3. Auto register agent if user profile exists
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from("profiles")
       .select("id")
       .eq("id", agentOrUserId)
       .maybeSingle();
 
     if (profile) {
-      const { data: newAgent, error } = await supabase
+      const { data: newAgent, error } = await db
         .from("support_agents")
         .insert({
           user_id: profile.id,
@@ -292,7 +292,7 @@ export class SupportRepository {
   }
 
   async createTicket(data: any): Promise<any> {
-    const supabase = await SupportRepository.getClient();
+    const db = await SupportRepository.getClient();
     const allowed = [
       "profile_id",
       "subject",
@@ -324,7 +324,7 @@ export class SupportRepository {
       );
     }
 
-    const { data: ticket, error } = await supabase
+    const { data: ticket, error } = await db
       .from("support_tickets")
       .insert(payload)
       .select()
@@ -335,7 +335,7 @@ export class SupportRepository {
   }
 
   async updateTicket(id: string, data: any): Promise<any> {
-    const supabase = await SupportRepository.getClient();
+    const db = await SupportRepository.getClient();
     const allowed = [
       "profile_id",
       "subject",
@@ -376,7 +376,7 @@ export class SupportRepository {
       payload.closed_at = new Date().toISOString();
     }
 
-    const { data: ticket, error } = await supabase
+    const { data: ticket, error } = await db
       .from("support_tickets")
       .update(payload)
       .eq("id", id)
@@ -388,13 +388,13 @@ export class SupportRepository {
   }
 
   async deleteTicket(id: string): Promise<boolean> {
-    const supabase = await SupportRepository.getClient();
+    const db = await SupportRepository.getClient();
     try {
-      await supabase.from("ticket_attachments").delete().eq("ticket_id", id);
-      await supabase.from("ticket_messages").delete().eq("ticket_id", id);
+      await db.from("ticket_attachments").delete().eq("ticket_id", id);
+      await db.from("ticket_messages").delete().eq("ticket_id", id);
     } catch {}
 
-    const { error } = await supabase
+    const { error } = await db
       .from("support_tickets")
       .delete()
       .eq("id", id);
@@ -404,7 +404,7 @@ export class SupportRepository {
   }
 
   async createTicketMessage(data: any): Promise<any> {
-    const supabase = await SupportRepository.getClient();
+    const db = await SupportRepository.getClient();
     const messageText = (data.message || data.body || "").trim();
     const isInternal = !!(data.is_internal_note ?? data.is_internal);
 
@@ -418,7 +418,7 @@ export class SupportRepository {
       payload.sender_id = data.sender_id;
     }
 
-    const { data: msg, error } = await supabase
+    const { data: msg, error } = await db
       .from("ticket_messages")
       .insert(payload)
       .select()
@@ -427,7 +427,7 @@ export class SupportRepository {
     if (error) throw new Error(error.message);
 
     // Touch ticket updated_at
-    await supabase
+    await db
       .from("support_tickets")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", data.ticket_id);
@@ -436,8 +436,8 @@ export class SupportRepository {
   }
 
   async getKnowledgeBaseArticles(): Promise<any[]> {
-    const supabase = await SupportRepository.getClient();
-    const { data } = await supabase
+    const db = await SupportRepository.getClient();
+    const { data } = await db
       .from("knowledge_base_articles")
       .select("*")
       .order("created_at", { ascending: false });
@@ -446,12 +446,12 @@ export class SupportRepository {
   }
 
   async getAgents(): Promise<any[]> {
-    const supabase = await SupportRepository.getClient();
-    let { data: agents } = await supabase
+    const db = await SupportRepository.getClient();
+    let { data: agents } = await db
       .from("support_agents")
       .select("id, user_id, is_online, active_tickets_count");
 
-    const { data: profiles } = await supabase
+    const { data: profiles } = await db
       .from("profiles")
       .select("id, first_name, last_name, phone")
       .eq("is_active", true)
@@ -462,7 +462,7 @@ export class SupportRepository {
     if (profiles && profiles.length > 0) {
       for (const p of profiles) {
         if (!existingUserIds.has(p.id)) {
-          const { data: newSa } = await supabase
+          const { data: newSa } = await db
             .from("support_agents")
             .insert({
               user_id: p.id,
@@ -502,8 +502,8 @@ export class SupportRepository {
   }
 
   async createTicketAttachment(data: any): Promise<any> {
-    const supabase = await SupportRepository.getClient();
-    const { data: att, error } = await supabase
+    const db = await SupportRepository.getClient();
+    const { data: att, error } = await db
       .from("ticket_attachments")
       .insert(data)
       .select()

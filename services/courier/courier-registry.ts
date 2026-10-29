@@ -14,7 +14,7 @@ import { DHLProvider } from "./providers/dhl.provider";
 import { FedExProvider } from "./providers/fedex.provider";
 import { UPSProvider } from "./providers/ups.provider";
 import { SandboxProvider } from "./providers/sandbox.provider";
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import { decryptCredentialsObject } from "@/utils/encryption.util";
 
 type ProviderFactory = (
@@ -73,12 +73,17 @@ export class CourierRegistry {
     }
 
     try {
-      const supabase = createAdminClient();
-      const { data, error } = await supabase
+      const db = createAdminDbClient();
+      // Phase 8: the courier_providers table's real columns are
+      // (id, code, name, is_active, api_key, api_secret, config) — there is
+      // no "priority", "credentials" or "is_sandbox" column. The previous
+      // query ordered by "priority" and read those phantom columns, so the
+      // load always failed and NO real provider could ever register.
+      const { data, error } = await db
         .from("courier_providers")
         .select("*")
         .eq("is_active", true)
-        .order("priority", { ascending: true });
+        .order("created_at", { ascending: true });
 
       if (error) throw error;
 
@@ -90,29 +95,36 @@ export class CourierRegistry {
         const factory = PROVIDER_FACTORIES[code];
         if (!factory) continue;
 
-        const decryptedCreds = decryptCredentialsObject(row.credentials ?? {});
+        const config = (row.config ?? {}) as Record<string, any>;
+        // Credentials live in the api_key/api_secret columns; the config
+        // JSON may carry encrypted overrides (config.credentials) and
+        // extra provider settings — merge both, columns win as fallback.
+        const rawCreds: Record<string, any> = {
+          ...(config.credentials ?? {}),
+        };
+        if (rawCreds.apiKey === undefined && row.api_key) {
+          rawCreds.apiKey = row.api_key;
+        }
+        if (rawCreds.secretKey === undefined && row.api_secret) {
+          rawCreds.secretKey = row.api_secret;
+        }
+        const decryptedCreds = decryptCredentialsObject(rawCreds);
         const provider = factory(
           decryptedCreds,
-          row.is_sandbox ?? false
+          config.is_sandbox ?? code === "sandbox"
         );
         this.providers.set(code, provider);
         this.activeProviders.push(code);
       }
 
-      // Sandbox is always the default fallback in development
-      if (!this.providers.has("sandbox")) {
-        const sandbox = new SandboxProvider({}, true);
-        this.providers.set("sandbox", sandbox);
-      }
-
-      this.fallbackCode = "sandbox";
+      // Phase 8: NO implicit sandbox fallback. A sandbox provider registers
+      // only when an active "sandbox" row exists in courier_providers.
+      // Silently substituting a mock courier for a real one fabricated
+      // consignments that never existed.
+      this.fallbackCode = null;
       this.lastLoadedAt = now;
     } catch (err) {
       console.error("[CourierRegistry] Failed to load providers from DB:", err);
-      // Ensure sandbox always available as emergency fallback
-      if (!this.providers.has("sandbox")) {
-        this.providers.set("sandbox", new SandboxProvider({}, true));
-      }
     }
   }
 

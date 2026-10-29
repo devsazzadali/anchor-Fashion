@@ -61,6 +61,8 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
     basePrice: basePriceNum,
     sale_price: salePriceNum,
     salePrice: salePriceNum,
+    vat_percent: Number(p.vatPercent || 0),
+    vatPercent: Number(p.vatPercent || 0),
     cost_price: p.costPrice ? Number(p.costPrice) : null,
     sku: p.sku,
     barcode: p.barcode,
@@ -238,43 +240,35 @@ export const CatalogRepository = {
         const catSlug = params.category.toLowerCase().trim();
         if (catSlug === "sale") {
           andClauses.push({ salePrice: { not: null } });
-        } else if (catSlug === "men" || catSlug === "mens") {
-          andClauses.push({
-            OR: [
-              { gender: "MALE" },
-              { category: { slug: { in: ["men", "mens", "panjabi", "shirt", "polo", "t-shirt"] } } },
-              { category: { parent: { slug: { in: ["men", "mens"] } } } },
-              { productCategories: { some: { category: { slug: { in: ["men", "mens", "panjabi", "shirt", "polo", "t-shirt"] } } } } },
-              { productCategories: { some: { category: { parent: { slug: { in: ["men", "mens"] } } } } } },
-            ],
-          });
-        } else if (catSlug === "women" || catSlug === "womens") {
-          andClauses.push({
-            OR: [
-              { gender: "FEMALE" },
-              { category: { slug: { in: ["women", "womens", "saree", "kurti", "salwar", "bottom", "ethnic-wear"] } } },
-              { category: { parent: { slug: { in: ["women", "womens"] } } } },
-              { productCategories: { some: { category: { slug: { in: ["women", "womens", "saree", "kurti", "salwar", "bottom", "ethnic-wear"] } } } } },
-              { productCategories: { some: { category: { parent: { slug: { in: ["women", "womens"] } } } } } },
-            ],
-          });
-        } else if (catSlug === "kids") {
-          andClauses.push({
-            OR: [
-              { gender: "KIDS" },
-              { category: { slug: "kids" } },
-              { category: { parent: { slug: "kids" } } },
-              { productCategories: { some: { category: { slug: "kids" } } } },
-              { productCategories: { some: { category: { parent: { slug: "kids" } } } } },
-            ],
-          });
         } else {
+          // Phase 9: subtree aggregation — a category page lists products
+          // from the category itself plus its children and grandchildren,
+          // resolved from the DB tree by ID. The previous men/women/kids
+          // branches hardcoded slug lists for categories that do not exist
+          // in this catalog; unknown slugs now honestly return no products.
+          const root = await prisma.category.findFirst({
+            where: { slug: catSlug },
+            select: { id: true },
+          });
+          let subtreeIds: string[] = [];
+          if (root) {
+            const children = await prisma.category.findMany({
+              where: { parentId: root.id },
+              select: { id: true },
+            });
+            const childIds = children.map((c) => c.id);
+            const grandchildren = childIds.length
+              ? await prisma.category.findMany({
+                  where: { parentId: { in: childIds } },
+                  select: { id: true },
+                })
+              : [];
+            subtreeIds = [root.id, ...childIds, ...grandchildren.map((g) => g.id)];
+          }
           andClauses.push({
             OR: [
-              { category: { slug: catSlug } },
-              { category: { parent: { slug: catSlug } } },
-              { productCategories: { some: { category: { slug: catSlug } } } },
-              { productCategories: { some: { category: { parent: { slug: catSlug } } } } },
+              { categoryId: { in: subtreeIds } },
+              { productCategories: { some: { categoryId: { in: subtreeIds } } } },
             ],
           });
         }

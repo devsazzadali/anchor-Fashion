@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server-client";
+import { createDbClient } from "@/lib/db/client";
 import { PaymentProvider, PaymentProviderCode } from "@/types/payment.types";
 
 export class PaymentProviderRepository {
@@ -6,8 +6,8 @@ export class PaymentProviderRepository {
    * Get all payment providers
    */
   async getProviders(activeOnly: boolean = false): Promise<PaymentProvider[]> {
-    const supabase = await createClient();
-    let query = supabase.from("payment_providers").select("*");
+    const db = await createDbClient();
+    let query = db.from("payment_providers").select("*");
 
     if (activeOnly) {
       query = query.eq("status", "active");
@@ -28,8 +28,8 @@ export class PaymentProviderRepository {
   async getProviderByCode(
     code: PaymentProviderCode
   ): Promise<PaymentProvider | null> {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createDbClient();
+    const { data, error } = await db
       .from("payment_providers")
       .select("*")
       .eq("code", code)
@@ -50,8 +50,8 @@ export class PaymentProviderRepository {
     id: string,
     data: Partial<PaymentProvider>
   ): Promise<void> {
-    const supabase = await createClient();
-    const { error } = await supabase
+    const db = await createDbClient();
+    const { error } = await db
       .from("payment_providers")
       .update(data)
       .eq("id", id);
@@ -65,8 +65,8 @@ export class PaymentProviderRepository {
    * Get fallback provider
    */
   async getFallbackProvider(): Promise<PaymentProvider | null> {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createDbClient();
+    const { data, error } = await db
       .from("payment_providers")
       .select("*")
       .eq("is_fallback", true)

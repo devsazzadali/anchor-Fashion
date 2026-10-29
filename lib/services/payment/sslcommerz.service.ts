@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin-client";
+import { createAdminDbClient } from "@/lib/db/client";
 import crypto from "crypto";
 
 export interface SSLCommerzConfig {
@@ -133,8 +133,8 @@ export class SSLCommerzService {
 
     // 1. Check DB settings table ('payment_sslcommerz') - Highest priority (Dashboard)
     try {
-      const supabase = createAdminClient();
-      const { data: settingRow } = await supabase
+      const db = createAdminDbClient();
+      const { data: settingRow } = await db
         .from("settings")
         .select("value")
         .eq("key", "payment_sslcommerz")
@@ -177,7 +177,7 @@ export class SSLCommerzService {
       }
 
       // 2. Check DB payment_providers table ('sslcommerz')
-      const { data: provider } = await supabase
+      const { data: provider } = await db
         .from("payment_providers")
         .select("config")
         .eq("code", "sslcommerz")

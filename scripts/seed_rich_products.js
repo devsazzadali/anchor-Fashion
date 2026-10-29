@@ -3,8 +3,8 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const DATABASE_URL =
-  process.env.DIRECT_URL ||
-  "postgresql://neondb_owner:npg_zM5AjDtG1hkO@ep-dawn-bonus-b41nfjyi.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require";
+  process.env.DIRECT_URL || process.env.DATABASE_URL;
+if (!DATABASE_URL) { console.error("DIRECT_URL or DATABASE_URL is not set"); process.exit(1); }
 
 const WAREHOUSE_ID = "fc4ab9a5-7623-46ad-ada5-2bbdd95f3655";
 
@@ -35,8 +35,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "Festive 2026",
     careInstructions: "Dry clean only. Store in breathable garment bag away from direct sunlight.",
-    rating: 4.9,
-    reviewCount: 38,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: true,
     isNewArrival: true,
     images: [
@@ -70,8 +70,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "Summer 2026",
     careInstructions: "Machine wash cold delicate. Hang dry in shade. Warm steam iron while slightly damp.",
-    rating: 4.8,
-    reviewCount: 24,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: true,
     isNewArrival: true,
     images: [
@@ -108,8 +108,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "All-Season",
     careInstructions: "Machine wash warm 40°C. Tumble dry low and hang immediately for wrinkle-free wear.",
-    rating: 4.85,
-    reviewCount: 42,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: true,
     isNewArrival: false,
     images: [
@@ -137,8 +137,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "All-Season",
     careInstructions: "Machine wash cold. Warm iron.",
-    rating: 4.75,
-    reviewCount: 19,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: false,
     isNewArrival: true,
     images: [
@@ -174,8 +174,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "Summer / Autumn",
     careInstructions: "Machine wash cold inside out with mild detergent. Do not bleach. Dry flat.",
-    rating: 4.9,
-    reviewCount: 56,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: true,
     isNewArrival: true,
     images: [
@@ -203,8 +203,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "Spring / Summer",
     careInstructions: "Hand wash cold or dry clean. Do not wring. Dry flat.",
-    rating: 4.8,
-    reviewCount: 31,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: false,
     isNewArrival: true,
     images: [
@@ -240,8 +240,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "All-Season",
     careInstructions: "Wipe with damp cloth. Condition leather twice a year with natural beeswax balsam.",
-    rating: 4.95,
-    reviewCount: 68,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: true,
     isNewArrival: false,
     images: [
@@ -278,8 +278,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "All-Season",
     careInstructions: "Wear raw for 6 months before first wash. Wash inside out in cold water. Hang dry.",
-    rating: 4.88,
-    reviewCount: 45,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: true,
     isNewArrival: true,
     images: [
@@ -308,8 +308,8 @@ const SEED_PRODUCTS = [
     gender: "MEN",
     season: "Autumn / Winter",
     careInstructions: "Dry clean only. Steam refresh.",
-    rating: 4.9,
-    reviewCount: 22,
+    rating: 0,
+    reviewCount: 0,
     isFeatured: true,
     isNewArrival: true,
     images: [

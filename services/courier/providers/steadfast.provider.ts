@@ -36,9 +36,23 @@ export class SteadfastProvider implements ICourierProvider {
     };
   }
 
+  /** True only when both API credentials are present. */
+  isConfigured(): boolean {
+    return Boolean(this.apiKey?.trim() && this.secretKey?.trim());
+  }
+
   async createConsignment(
     request: ConsignmentRequest
   ): Promise<ProviderResponse<ConsignmentResponse>> {
+    // Phase 8: never call the Steadfast API with empty credentials — the
+    // request previously went out with blank Api-Key/Secret-Key headers
+    // and the failure was later masked upstream as a successful booking.
+    if (!this.isConfigured()) {
+      return this.errorResponse(
+        "NOT_CONFIGURED",
+        "Steadfast is not configured. Add the Steadfast API key and secret key in Shipping → Couriers before forwarding orders."
+      );
+    }
     try {
       const payload = {
         invoice: request.invoiceNumber,
