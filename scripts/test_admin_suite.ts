@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma";
-import { QA_USERS } from "./seed_all_qa_roles";
+import { QA_USERS, getQaPassword } from "./seed_all_qa_roles";
 import { CouponService } from "../services/coupon.service";
 import { WarehouseService } from "../services/warehouse.service";
 
@@ -73,7 +73,7 @@ export async function runAdminComprehensiveSuite() {
   const adminUserDef = QA_USERS.find(u => u.roleName === "ADMIN")!;
   const superAdminDef = QA_USERS.find(u => u.roleName === "SUPERADMIN")!;
 
-  const adminLogin = await login(adminUserDef.email, adminUserDef.password);
+  const adminLogin = await login(adminUserDef.email, getQaPassword(adminUserDef.email));
   record(
     "Authentication",
     "Admin Login (qa_admin@anchorfashion.com)",
@@ -82,7 +82,7 @@ export async function runAdminComprehensiveSuite() {
     adminLogin.error
   );
 
-  const superAdminLogin = await login(superAdminDef.email, superAdminDef.password);
+  const superAdminLogin = await login(superAdminDef.email, getQaPassword(superAdminDef.email));
   record(
     "Authentication",
     "SuperAdmin Login (qa_superadmin@anchorfashion.com)",
@@ -105,7 +105,7 @@ export async function runAdminComprehensiveSuite() {
 
   // Customer trying to hit /admin
   const customerDef = QA_USERS.find(u => u.roleName === "CUSTOMER")!;
-  const customerLogin = await login(customerDef.email, customerDef.password);
+  const customerLogin = await login(customerDef.email, getQaPassword(customerDef.email));
   if (customerLogin.success) {
     const custAdminRes = await fetchRoute("/admin", customerLogin.cookies);
     const custBlocked = ([302, 307, 308].includes(custAdminRes.status) && !custAdminRes.location.includes("/admin")) || custAdminRes.text.includes("/account/profile");

@@ -1,4 +1,5 @@
 import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 import { BlogPost, BlogCategory, BlogTag } from "@/types/blog.types";
 
 const UUID_REGEX =
@@ -95,12 +96,91 @@ async function populateMediaUrls(posts: any[]): Promise<void> {
   }
 }
 
+/**
+ * REG-83: attaches blog relations with batched Prisma reads.
+ *
+ * The fluent builder cannot attach embedded selects on blog_posts (the
+ * old `blog_categories(*)` / `blog_post_tags(blog_tags(*))` selects were
+ * silently dropped, so posts reached the storefront and admin without
+ * their category or tags). The post rows still come from the builder;
+ * the relations are resolved here with two indexed batch queries (no
+ * N+1) and attached in the shapes consumers read: `blog_categories`
+ * (single category object), `blog_post_tags` (join rows with the tag
+ * nested) and `blog_tags` (flat tag list, the declared BlogPost type).
+ */
+async function attachBlogRelations(posts: any[], withTags: boolean): Promise<void> {
+  if (!posts || posts.length === 0) return;
+
+  const categoryIds = [...new Set(posts.map((p) => p.category_id).filter(Boolean))];
+  const categoryById = new Map<string, BlogCategory>();
+  if (categoryIds.length > 0) {
+    const categories = await prisma.blogCategory.findMany({
+      where: { id: { in: categoryIds as string[] } },
+    });
+    for (const c of categories) {
+      categoryById.set(c.id, {
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        description: c.description ?? null,
+        created_at: c.createdAt,
+        updated_at: c.createdAt,
+      } as BlogCategory);
+    }
+  }
+  for (const post of posts) {
+    post.blog_categories = post.category_id
+      ? categoryById.get(post.category_id) ?? null
+      : null;
+  }
+
+  if (!withTags) return;
+
+  const postIds = posts.map((p) => p.id).filter(Boolean);
+  const joins = postIds.length
+    ? await (prisma as any).blog_post_tags.findMany({
+        where: { post_id: { in: postIds } },
+      })
+    : [];
+  const tagIds = [...new Set(joins.map((j: any) => j.tag_id).filter(Boolean))];
+  const tagById = new Map<string, BlogTag>();
+  if (tagIds.length > 0) {
+    const tags = await (prisma as any).blog_tags.findMany({
+      where: { id: { in: tagIds } },
+    });
+    for (const t of tags) {
+      tagById.set(t.id, {
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        created_at: t.created_at,
+      } as BlogTag);
+    }
+  }
+  const joinsByPost = new Map<string, any[]>();
+  for (const j of joins) {
+    if (!joinsByPost.has(j.post_id)) joinsByPost.set(j.post_id, []);
+    joinsByPost.get(j.post_id)!.push({
+      post_id: j.post_id,
+      tag_id: j.tag_id,
+      blog_tags: tagById.get(j.tag_id) ?? null,
+    });
+  }
+  for (const post of posts) {
+    const postJoins = joinsByPost.get(post.id) || [];
+    post.blog_post_tags = postJoins;
+    post.blog_tags = postJoins
+      .map((j: any) => j.blog_tags)
+      .filter((t: any): t is BlogTag => !!t);
+  }
+}
+
 export class BlogRepository {
   async getPosts(status?: string): Promise<BlogPost[]> {
     const admin = createAdminDbClient();
     let query = admin
       .from("blog_posts")
-      .select("*, blog_categories(*)")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (status) {
@@ -113,6 +193,7 @@ export class BlogRepository {
       throw new Error(error.message);
     }
     if (data && data.length > 0) {
+      await attachBlogRelations(data, false);
       await populateMediaUrls(data);
     }
     return data || [];
@@ -122,7 +203,7 @@ export class BlogRepository {
     const admin = createAdminDbClient();
     const { data, error } = await admin
       .from("blog_posts")
-      .select("*, blog_categories(*), blog_post_tags(blog_tags(*))")
+      .select("*")
       .eq("slug", slug)
       .single();
 
@@ -132,6 +213,7 @@ export class BlogRepository {
       throw new Error(error.message);
     }
     if (data) {
+      await attachBlogRelations([data], true);
       await populateMediaUrls([data]);
     }
     return data;
@@ -141,7 +223,7 @@ export class BlogRepository {
     const admin = createAdminDbClient();
     const { data, error } = await admin
       .from("blog_posts")
-      .select("*, blog_categories(*), blog_post_tags(blog_tags(*))")
+      .select("*")
       .eq("id", id)
       .single();
 
@@ -151,6 +233,7 @@ export class BlogRepository {
       throw new Error(error.message);
     }
     if (data) {
+      await attachBlogRelations([data], true);
       await populateMediaUrls([data]);
     }
     return data;

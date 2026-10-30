@@ -1,4 +1,5 @@
 import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 
 export type DateRange = {
   from: Date;
@@ -307,26 +308,44 @@ export class AnalyticsRepository {
     });
 
     // Also fetch items, products & addresses to get Category breakdown, Top selling products & customer names
-    const [itemsRes, productsRes, addressesRes] = await Promise.all([
+    // REG-83: the products read goes through Prisma, NOT the fluent
+    // builder — the builder silently drops the embedded `categories(name)`
+    // select, so every product arrived without its category and the
+    // breakdown below bucketed ALL sales under a literal fallback name.
+    const [itemsRes, products, addressesRes] = await Promise.all([
       db
         .from("order_items")
         .select("id, order_id, product_id, product_name, quantity, line_total"),
-      db
-        .from("products")
-        .select("id, name, category_id, categories(name)"),
+      prisma.product.findMany({
+        select: {
+          id: true,
+          name: true,
+          categoryId: true,
+          category: { select: { name: true } },
+        },
+      }),
       db
         .from("order_addresses")
         .select("order_id, first_name, last_name, city, address_type"),
     ]);
 
-    const productMap = new Map<string, any>((productsRes.data || []).map((p: any) => [p.id, p]));
+    // Same row shape the aggregation below already consumes.
+    const productRows = products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      category_id: p.categoryId,
+      categories: p.category ? { name: p.category.name } : null,
+    }));
+    const productMap = new Map<string, any>(productRows.map((p) => [p.id, p]));
     const categoryTotals: Record<string, number> = {};
     const productSalesMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
 
     (itemsRes.data || []).forEach((item: any) => {
       if (item.order_id && validOrderIds.has(item.order_id)) {
         const prod: any = productMap.get(item.product_id);
-        const catName = prod?.categories?.name || "Apparel";
+        // Honest label for a product with no category on file (the old
+        // fallback invented the category name "Apparel" for everything).
+        const catName = prod?.categories?.name || "Uncategorized";
         const lineTotal = Number(item.line_total) || 0;
         const qty = Number(item.quantity) || 1;
 

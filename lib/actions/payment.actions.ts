@@ -54,34 +54,40 @@ const DEFAULTS: AllPaymentConfigs = {
     enabled: true,
     instructions: "Pay with cash upon receiving your delivery at your doorstep.",
   },
+  // REG-80: manual gateways ship UNCONFIGURED — disabled, with empty
+  // account fields. They previously carried placeholder account numbers
+  // (sequential test numbers and an invented bank account) as the
+  // defaults, so an unset admin config showed customers fake numbers to
+  // send real money to. An admin must enter the real account details and
+  // enable the method in Admin → Payments before it appears at checkout.
   bkash: {
-    enabled: true,
-    account_number: "01700000000",
+    enabled: false,
+    account_number: "",
     account_type: "Personal",
     instructions:
       "Go to your bKash app or dial *247# -> Choose Send Money -> Enter our bKash number -> Enter your Order Total -> Enter Reference -> Complete payment and copy the Transaction ID (TrxID).",
   },
   nagad: {
-    enabled: true,
-    account_number: "01800000000",
+    enabled: false,
+    account_number: "",
     account_type: "Personal",
     instructions:
       "Go to your Nagad app or dial *167# -> Send Money to our number -> Enter your Order Total -> Confirm with PIN and copy the Transaction ID (TrxID).",
   },
   rocket: {
-    enabled: true,
-    account_number: "01900000000-0",
+    enabled: false,
+    account_number: "",
     account_type: "Personal",
     instructions:
       "Go to your Rocket app or dial *322# -> Send Money -> Enter our Rocket account -> Complete payment and copy the Transaction ID.",
   },
   bank: {
-    enabled: true,
-    bank_name: "Dutch-Bangla Bank Limited (DBBL)",
-    account_name: "Anchor Fashion Ltd",
-    account_number: "123.456.7890",
-    branch_name: "Gulshan Branch, Dhaka",
-    routing_number: "090261548",
+    enabled: false,
+    bank_name: "",
+    account_name: "",
+    account_number: "",
+    branch_name: "",
+    routing_number: "",
     instructions:
       "Transfer the exact order amount via Online/Internet Banking, BEFTN, NPSB, or Direct Cash Deposit. Enter your Order Number in the deposit/transfer reference.",
   },

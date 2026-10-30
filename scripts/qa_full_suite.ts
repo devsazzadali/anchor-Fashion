@@ -1,4 +1,4 @@
-import { QA_USERS } from './seed_all_qa_roles';
+import { QA_USERS, getQaPassword } from './seed_all_qa_roles';
 import { prisma } from '../lib/prisma';
 
 export async function loginUser(
@@ -85,7 +85,7 @@ export async function runFullQASuite() {
   const rolesToLogin = ["CUSTOMER", "MANAGER", "ADMIN", "SUPERADMIN"];
   for (const roleName of rolesToLogin) {
     const userDef = QA_USERS.find(u => u.roleName === roleName)!;
-    const login = await loginUser(userDef.email, userDef.password);
+    const login = await loginUser(userDef.email, getQaPassword(userDef.email));
     if (login.success) {
       sessions[roleName] = { cookies: login.cookies, user: login.user };
       record("Authentication", `Login as ${roleName}`, true, `Session acquired for ${userDef.email}`);

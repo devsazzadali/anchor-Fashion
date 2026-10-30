@@ -22,7 +22,7 @@ npx tsx scripts/seed_all_qa_roles.ts
 - `STAFF`: `qa_staff@anchorfashion.com`
 - `SUPPORT`: `qa_support@anchorfashion.com`
 - `CUSTOMER`: `qa_customer@anchorfashion.com`
-- **Default QA Password**: `Password123!`
+- **QA Passwords**: there is NO default password (REG-59 — a shared hardcoded password was removed). Set `QA_PASSWORD_<ACCOUNT>` per account or `QA_SEED_PASSWORD` before running, or let the script generate a unique password per account and print it once at startup.
 
 ---
 

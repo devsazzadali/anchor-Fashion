@@ -15,7 +15,7 @@ import {
   Plus,
 } from "lucide-react";
 import Link from "next/link";
-import { createDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 import { OperationsInventoryClient } from "@/features/inventory/components/OperationsInventoryClient";
 
 export const metadata: Metadata = {
@@ -24,13 +24,67 @@ export const metadata: Metadata = {
 };
 
 export default async function InventoryDashboard() {
-  const db = await createDbClient();
-  const { data: inventory } = await db
-    .from("inventory_levels")
-    .select("*, variants(sku, price_override, sale_price, attributes, products(name, base_price)), warehouses(name)")
-    .order("quantity_available", { ascending: true });
+  // REG-83: Prisma read, not the fluent builder — the builder never
+  // attaches the embedded `variants(...)` / `warehouses(name)` selects
+  // on inventory_levels, so every row arrived without its variant and
+  // the Inventory Value KPI below computed from a missing price (always
+  // ৳0) while the ledger rendered "N/A" SKUs and fallback names. Rows
+  // are mapped into the snake_case shape the page and the client table
+  // already consume.
+  const levels = await prisma.inventoryLevel.findMany({
+    orderBy: { quantityAvailable: "asc" },
+    select: {
+      id: true,
+      variantId: true,
+      warehouseId: true,
+      quantityAvailable: true,
+      quantityReserved: true,
+      reorderPoint: true,
+      createdAt: true,
+      updatedAt: true,
+      variant: {
+        select: {
+          sku: true,
+          priceOverride: true,
+          salePrice: true,
+          attributes: true,
+          product: { select: { name: true, basePrice: true } },
+        },
+      },
+      warehouse: { select: { name: true } },
+    },
+  });
 
-  const realInventory = inventory || [];
+  const realInventory = levels.map((level) => ({
+    id: level.id,
+    variant_id: level.variantId,
+    warehouse_id: level.warehouseId,
+    quantity_available: level.quantityAvailable,
+    quantity_reserved: level.quantityReserved,
+    reorder_point: level.reorderPoint,
+    created_at: level.createdAt,
+    updated_at: level.updatedAt,
+    variants: level.variant
+      ? {
+          sku: level.variant.sku,
+          price_override:
+            level.variant.priceOverride != null ? Number(level.variant.priceOverride) : null,
+          sale_price:
+            level.variant.salePrice != null ? Number(level.variant.salePrice) : null,
+          attributes: level.variant.attributes,
+          products: level.variant.product
+            ? {
+                name: level.variant.product.name,
+                base_price:
+                  level.variant.product.basePrice != null
+                    ? Number(level.variant.product.basePrice)
+                    : null,
+              }
+            : null,
+        }
+      : null,
+    warehouses: level.warehouse ? { name: level.warehouse.name } : null,
+  }));
   
   const totalItems = realInventory.reduce((sum: number, item: any) => sum + (item.quantity_available || 0), 0);
   

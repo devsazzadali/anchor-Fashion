@@ -1,11 +1,42 @@
 import { NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
+import {
+  getPresentedWebhookSecret,
+  isValidConsignmentId,
+  sharedSecretMatches,
+} from "@/lib/webhooks/shared-secret";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
+    // ── Webhook authenticity (REG-70: fail CLOSED) ─────────────────────
+    // This handler previously processed ANY unauthenticated POST: when
+    // the Pathao provider wasn't resolved from the DB it trusted the raw
+    // payload and applied shipment/order status updates from it, so
+    // anyone who knew or guessed a consignment id could forge a
+    // delivery. The caller must now present the configured
+    // PATHAO_WEBHOOK_SECRET (header `x-webhook-secret` or `?token=`),
+    // and the call is rejected before any parsing or mutation when the
+    // secret is unset or wrong.
+    const webhookSecret = process.env.PATHAO_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error(
+        "[PathaoWebhook] REJECTED: PATHAO_WEBHOOK_SECRET is not set — refusing to process an unverifiable webhook call. Set the secret and register the webhook URL with the matching token/header to enable Pathao status updates."
+      );
+      return NextResponse.json(
+        { success: false, message: "Webhook not configured" },
+        { status: 401 }
+      );
+    }
+    if (!sharedSecretMatches(getPresentedWebhookSecret(req), webhookSecret)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid webhook secret" },
+        { status: 401 }
+      );
+    }
+
     const rawPayload = await req.json();
     const headersList: Record<string, string> = {};
     req.headers.forEach((value, key) => {
@@ -43,6 +74,14 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    // REG-70: strictly validate the identifier's format before it is used
+    // anywhere — a payload value must never be able to alter a query.
+    if (!isValidConsignmentId(String(parsed.consignmentId))) {
+      return NextResponse.json(
+        { success: false, message: "Invalid consignment identifier" },
+        { status: 400 }
+      );
+    }
 
     const eventId = `pathao_${parsed.consignmentId}_${parsed.status}_${Date.now()}`;
 
@@ -60,12 +99,27 @@ export async function POST(req: Request) {
       console.warn("[PathaoWebhook] Warning logging webhook event:", e.message);
     }
 
-    // 4. Find matching shipment
-    const { data: shipment } = await adminDb
-      .from("shipments")
-      .select("id, status, order_id")
-      .or(`consignment_id.eq.${parsed.consignmentId},tracking_number.eq.${parsed.consignmentId}`)
-      .maybeSingle();
+    // 4. Find matching shipment — bound equality lookups only. The raw
+    // payload value is never interpolated into a filter string (the old
+    // `.or()` template let a crafted consignment id inject extra filter
+    // clauses and match shipments it should never have touched).
+    let shipment: any = null;
+    {
+      const byConsignment = await adminDb
+        .from("shipments")
+        .select("id, status, order_id")
+        .eq("consignment_id", parsed.consignmentId)
+        .maybeSingle();
+      shipment = byConsignment.data;
+      if (!shipment) {
+        const byTracking = await adminDb
+          .from("shipments")
+          .select("id, status, order_id")
+          .eq("tracking_number", parsed.consignmentId)
+          .maybeSingle();
+        shipment = byTracking.data;
+      }
+    }
 
     if (shipment) {
       // 5. Update shipment status if provided

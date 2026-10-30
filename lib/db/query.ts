@@ -32,6 +32,84 @@ function assertIdent(name: string, kind = "identifier"): string {
   return name;
 }
 
+/* ------------------------------------------------------------------ */
+/* REG-83: embedded-select support matrix.                             */
+/*                                                                     */
+/* PostgREST-style embedded selects (`relation(cols)`) are attached    */
+/* by attachRelations() for exactly the (table → relations) pairs      */
+/* below. Any other embedded select used to be SILENTLY DROPPED — the  */
+/* caller received rows without the relation and no error, which       */
+/* produced wrong data downstream (e.g. analytics bucketing every      */
+/* product under a literal fallback category name). Unsupported        */
+/* embedded selects now fail loudly: an error result in development,   */
+/* an explicit error log in production, until the call site is         */
+/* migrated to a Prisma read.                                          */
+/* ------------------------------------------------------------------ */
+
+const EMBEDDED_SELECT_SUPPORT: Record<string, ReadonlySet<string>> = {
+  profiles: new Set(["roles"]),
+  customer_profiles: new Set(["roles"]),
+  orders: new Set(["order_items"]),
+  customer_orders: new Set(["order_items"]),
+  products: new Set(["variants", "product_media"]),
+  store_products: new Set(["variants", "product_media"]),
+};
+
+/** Splits a select list on top-level commas (paren-depth aware). */
+function splitSelectList(selectCols: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of selectCols) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) parts.push(current);
+  return parts;
+}
+
+/** Extracts embedded relation names (`relation(cols)`, `alias:relation(cols)`, `relation!hint(cols)`). */
+function parseEmbeddedRelations(selectCols: string): string[] {
+  if (!selectCols || selectCols.trim() === "*") return [];
+  const relations: string[] = [];
+  for (const segment of splitSelectList(selectCols)) {
+    const open = segment.indexOf("(");
+    if (open === -1) continue;
+    let head = segment.slice(0, open).trim();
+    if (head.includes(":")) head = head.split(":").pop()!.trim(); // alias:relation
+    head = head.split("!")[0].trim(); // relation!hint
+    if (SAFE_IDENT.test(head)) relations.push(head);
+  }
+  return relations;
+}
+
+/**
+ * Throws (dev) / logs (production) for every embedded relation in the
+ * select that attachRelations() cannot attach for this table.
+ */
+function assertEmbeddedSelectsSupported(tableName: string, selectCols: string): void {
+  const supported = EMBEDDED_SELECT_SUPPORT[tableName];
+  for (const relation of parseEmbeddedRelations(selectCols)) {
+    if (supported?.has(relation)) continue;
+    const message =
+      `[DbQueryBuilder] Unsupported embedded select "${relation}(...)" on table "${tableName}" — ` +
+      `this builder cannot attach that relation, so rows would be returned WITHOUT it. ` +
+      `Migrate this call site to a Prisma read (REG-83).`;
+    if (process.env.NODE_ENV !== "production") {
+      const err = new Error(message) as Error & { code?: string };
+      err.code = "REG83_UNSUPPORTED_EMBED";
+      throw err;
+    }
+    console.error(message);
+  }
+}
+
 export function serializePlain(val: any): any {
   if (val === null || val === undefined) return val;
   if (val instanceof Date) return val.toISOString();
@@ -733,6 +811,10 @@ export class DbQueryBuilder implements PromiseLike<any> {
   }
 
   private async attachRelations(rows: any[]) {
+    // REG-83: fail loudly on embedded selects this builder cannot attach
+    // (checked even for empty result sets, and outside the try/catch
+    // below so the development error is never swallowed into a warning).
+    assertEmbeddedSelectsSupported(this.tableName, this.selectCols);
     if (!rows || rows.length === 0) return rows;
     try {
       if (

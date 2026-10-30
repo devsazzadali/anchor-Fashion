@@ -221,9 +221,13 @@ export class SupportRepository {
 
   async getTicketById(id: string): Promise<any> {
     const db = await SupportRepository.getClient();
+    // REG-83 cleanup: the embedded `ticket_messages(*)` select was never
+    // attached by the DB layer (and now fails loudly in dev) — the plain
+    // select plus the explicit message attach below (S3-2) is the real
+    // read path.
     const { data: ticket, error } = await db
       .from("support_tickets")
-      .select("*, ticket_messages(*)")
+      .select("*")
       .eq("id", id)
       .maybeSingle();
 

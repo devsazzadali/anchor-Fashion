@@ -1,33 +1,39 @@
 import { NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
+import {
+  getPresentedWebhookSecret,
+  isValidConsignmentId,
+  sharedSecretMatches,
+} from "@/lib/webhooks/shared-secret";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    // ── Webhook authenticity ────────────────────────────────────────────
+    // ── Webhook authenticity (REG-76: fail CLOSED) ─────────────────────
     // This endpoint previously applied shipment/order status updates from
     // ANY unauthenticated POST — anyone who learned a consignment id could
-    // forge a "delivered" event. When STEADFAST_WEBHOOK_SECRET is
-    // configured, the caller must present it (header `x-webhook-secret` or
-    // `?token=`). When it is not configured the request is still processed
-    // (Steadfast's own dashboard cannot send custom secrets in every plan)
-    // but the gap is logged loudly — set the secret to enforce.
+    // forge a "delivered" event. The caller must present the configured
+    // STEADFAST_WEBHOOK_SECRET (header `x-webhook-secret` or `?token=`).
+    // When the secret is not configured the request is REJECTED, not
+    // processed: there is no safe unauthenticated mode. (If Steadfast's
+    // dashboard cannot send a custom secret on the owner's plan, the
+    // webhook URL registered there must carry the token query parameter.)
     const webhookSecret = process.env.STEADFAST_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const presented =
-        req.headers.get("x-webhook-secret") ||
-        new URL(req.url).searchParams.get("token");
-      if (presented !== webhookSecret) {
-        return NextResponse.json(
-          { success: false, message: "Invalid webhook secret" },
-          { status: 401 }
-        );
-      }
-    } else {
-      console.warn(
-        "[SteadfastWebhook] STEADFAST_WEBHOOK_SECRET is not set — accepting unauthenticated webhook. Configure it to reject forged status updates."
+    if (!webhookSecret) {
+      console.error(
+        "[SteadfastWebhook] REJECTED: STEADFAST_WEBHOOK_SECRET is not set — refusing to process an unverifiable webhook call. Set the secret and register the webhook URL with the matching token/header to enable courier status updates."
+      );
+      return NextResponse.json(
+        { success: false, message: "Webhook not configured" },
+        { status: 401 }
+      );
+    }
+    if (!sharedSecretMatches(getPresentedWebhookSecret(req), webhookSecret)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid webhook secret" },
+        { status: 401 }
       );
     }
 
@@ -64,6 +70,15 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    // REG-70 (applied here too): never interpolate a payload value into a
+    // filter string — strictly validate the identifier's format and look
+    // it up with bound equality filters only.
+    if (!isValidConsignmentId(targetCode)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid consignment identifier" },
+        { status: 400 }
+      );
+    }
 
     const eventId = `steadfast_${targetCode}_${parsed.status}_${Date.now()}`;
 
@@ -81,12 +96,25 @@ export async function POST(req: Request) {
       console.warn("[SteadfastWebhook] Warning logging webhook event:", e.message);
     }
 
-    // 4. Find matching shipment
-    const { data: shipment } = await adminDb
-      .from("shipments")
-      .select("id, status, order_id")
-      .or(`consignment_id.eq.${targetCode},tracking_number.eq.${targetCode}`)
-      .maybeSingle();
+    // 4. Find matching shipment — bound equality lookups, no filter-string
+    // interpolation (try the consignment id, then the tracking number).
+    let shipment: any = null;
+    {
+      const byConsignment = await adminDb
+        .from("shipments")
+        .select("id, status, order_id")
+        .eq("consignment_id", targetCode)
+        .maybeSingle();
+      shipment = byConsignment.data;
+      if (!shipment) {
+        const byTracking = await adminDb
+          .from("shipments")
+          .select("id, status, order_id")
+          .eq("tracking_number", targetCode)
+          .maybeSingle();
+        shipment = byTracking.data;
+      }
+    }
 
     if (shipment) {
       // 5. Update shipment status if provided

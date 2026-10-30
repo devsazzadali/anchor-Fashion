@@ -34,13 +34,14 @@ export async function getOperationsReturnsAction(filters: {
   try {
     const db = createAdminDbClient();
 
+    // REG-83: plain select + explicit relation attach. The embedded
+    // `items:return_items(*)` / `customer:customers(...)` selects are not
+    // attached by the DB layer (silently dropped), so the operations
+    // returns list rendered without items or customer. Items and
+    // customers are now fetched with batched plain queries and attached.
     let query = db
       .from("returns")
-      .select(`
-        *,
-        items:return_items(*),
-        customer:customers(id, name, email, phone)
-      `)
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (filters.status && filters.status !== "ALL") {
@@ -52,28 +53,35 @@ export async function getOperationsReturnsAction(filters: {
     }
 
     const { data: returns, error } = await query;
+    if (error) return { success: false, error: error.message };
 
-    if (error) {
-      // Fallback query without customer join if foreign key differs
-      let fallbackQuery = db
-        .from("returns")
-        .select("*, items:return_items(*)")
-        .order("created_at", { ascending: false });
-
-      if (filters.status && filters.status !== "ALL") {
-        fallbackQuery = fallbackQuery.eq("status", filters.status.toUpperCase());
+    const rows: any[] = returns || [];
+    if (rows.length > 0) {
+      const returnIds = rows.map((r: any) => r.id).filter(Boolean);
+      const customerIds = [...new Set(rows.map((r: any) => r.customer_id).filter(Boolean))];
+      const [{ data: itemRows }, { data: customerRows }] = await Promise.all([
+        returnIds.length
+          ? db.from("return_items").select("*").in("return_id", returnIds)
+          : Promise.resolve({ data: [] as any[] }),
+        customerIds.length
+          ? db.from("customers").select("id, name, email, phone").in("id", customerIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const itemsByReturn = new Map<string, any[]>();
+      for (const item of itemRows || []) {
+        if (!itemsByReturn.has(item.return_id)) itemsByReturn.set(item.return_id, []);
+        itemsByReturn.get(item.return_id)!.push(item);
       }
-      if (filters.search) {
-        fallbackQuery = fallbackQuery.ilike("return_number", `%${filters.search}%`);
+      const customerById = new Map<string, any>(
+        (customerRows || []).map((c: any) => [c.id, c] as [string, any])
+      );
+      for (const row of rows) {
+        row.items = itemsByReturn.get(row.id) || [];
+        row.customer = row.customer_id ? customerById.get(row.customer_id) ?? null : null;
       }
-
-      const { data: fallbackData, error: fbErr } = await fallbackQuery;
-      if (fbErr) return { success: false, error: fbErr.message };
-
-      return { success: true, data: fallbackData || [] };
     }
 
-    return { success: true, data: returns || [] };
+    return { success: true, data: rows };
   } catch (err: any) {
     console.error("[getOperationsReturnsAction]", err);
     return { success: false, error: err.message || "Failed to fetch returns" };
@@ -156,14 +164,25 @@ export async function updateOperationsReturnStatusAction(
       updateData.notes = notes;
     }
 
-    const { data: updated, error } = await db
+    const { data: updatedRow, error } = await db
       .from("returns")
       .update(updateData)
       .eq("id", returnId)
-      .select("*, items:return_items(*)")
+      .select("*")
       .single();
 
     if (error) throw error;
+
+    // REG-83: the items MUST be fetched explicitly — the old code read
+    // them from an embedded `items:return_items(*)` select on the update
+    // result, which the DB layer never attaches, so `updated.items` was
+    // always undefined and the RECEIVED restock below never ran:
+    // returned "good" items silently vanished from sellable stock.
+    const { data: returnItems } = await db
+      .from("return_items")
+      .select("*")
+      .eq("return_id", returnId);
+    const updated: any = { ...updatedRow, items: returnItems || [] };
 
     // If status is marked as RECEIVED and items exist, restock "good" condition items
     if (newStatus === "RECEIVED" && updated.items?.length) {

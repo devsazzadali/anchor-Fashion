@@ -144,17 +144,33 @@ export function ManualPaymentFields({
     ? "bg-purple-600 text-white"
     : "bg-slate-800 text-white";
 
-  const accountNumber =
-    config?.account_number ||
-    (isBkash
-      ? "01700000000"
-      : isNagad
-      ? "01800000000"
-      : isRocket
-      ? "01900000000-0"
-      : "123.456.7890");
+  // REG-80: the receiver account comes ONLY from the admin-configured
+  // payment settings. There is deliberately no fallback number/name here:
+  // this component previously invented placeholder account details when
+  // the config was empty, telling customers to send real money to fake
+  // accounts. Unconfigured renders the honest unavailable state below.
+  const accountNumber = config?.account_number || "";
 
   const accountType = config?.account_type || "Personal";
+
+  if (!accountNumber) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 text-xs text-amber-950 flex items-start gap-2.5 animate-in fade-in-50 duration-200">
+        <ShieldAlert className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <p className="font-semibold text-amber-900">
+            This payment method is not available right now
+          </p>
+          <p className="leading-relaxed text-amber-800">
+            It has not been configured yet, so no payment account can be
+            shown. Please choose another payment method, or contact us to
+            complete your order. (এই পেমেন্ট পদ্ধতিটি এখনো সেটআপ করা হয়নি —
+            অনুগ্রহ করে অন্য একটি পেমেন্ট পদ্ধতি বেছে নিন।)
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm animate-in fade-in-50 duration-200">
@@ -179,22 +195,28 @@ export function ManualPaymentFields({
         {isBank ? (
           <div className="space-y-1.5 pt-1 text-slate-800">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-              <div>
-                <span className="text-slate-500 font-medium">Bank Name:</span>{" "}
-                <span className="font-bold">{config?.bank_name || "Dutch-Bangla Bank Ltd"}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 font-medium">Account Name:</span>{" "}
-                <span className="font-bold">{config?.account_name || "Anchor Fashion Ltd"}</span>
-              </div>
+              {config?.bank_name && (
+                <div>
+                  <span className="text-slate-500 font-medium">Bank Name:</span>{" "}
+                  <span className="font-bold">{config.bank_name}</span>
+                </div>
+              )}
+              {config?.account_name && (
+                <div>
+                  <span className="text-slate-500 font-medium">Account Name:</span>{" "}
+                  <span className="font-bold">{config.account_name}</span>
+                </div>
+              )}
               <div>
                 <span className="text-slate-500 font-medium">Account Number:</span>{" "}
                 <span className="font-mono font-bold">{accountNumber}</span>
               </div>
-              <div>
-                <span className="text-slate-500 font-medium">Branch Name:</span>{" "}
-                <span className="font-bold">{config?.branch_name || "Gulshan Branch, Dhaka"}</span>
-              </div>
+              {config?.branch_name && (
+                <div>
+                  <span className="text-slate-500 font-medium">Branch Name:</span>{" "}
+                  <span className="font-bold">{config.branch_name}</span>
+                </div>
+              )}
               {config?.routing_number && (
                 <div>
                   <span className="text-slate-500 font-medium">Routing No:</span>{" "}
