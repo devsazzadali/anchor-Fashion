@@ -64,7 +64,7 @@ export async function transferStock(
   notes?: string
 ) {
   // SECURITY: server actions are public endpoints; authorize every call.
-  await verifyStaff();
+  const user = await verifyStaff();
   try {
     const service = new InventoryService();
     await service.transferStock(
@@ -73,7 +73,8 @@ export async function transferStock(
       toWarehouseId,
       quantity,
       reason,
-      notes
+      notes,
+      (user as any)?.id
     );
     return { success: true };
   } catch (error: any) {
@@ -629,6 +630,8 @@ export async function createAuditAction(data: {
       warehouse_id: data.warehouse_id,
       zone_id: data.zone_id,
       blind_count: !!data.blind_count,
+      scheduled_date: data.scheduled_date,
+      notes: data.notes,
       status: "SCHEDULED",
     });
     try {

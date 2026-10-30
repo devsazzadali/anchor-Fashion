@@ -207,11 +207,21 @@ export async function processCheckoutAction(
 
     const guestEmail = parsedData.information.email;
 
-    // 2. Compute authoritative server-side order summary
+    // 2. Compute authoritative server-side order summary.
+    // S5-2: the shipping address (and session) MUST be passed here —
+    // without them the delivery fee resolves from the bare shipping
+    // method / flat fallback instead of the address's delivery zone,
+    // so the fraud evaluation below priced the order at a total the
+    // customer was never charged (persisted signal quoted ৳3,542.5 on
+    // an order whose charged total was ৳3,572.50). placeOrder computes
+    // its own summary WITH the address; evaluating on the same inputs
+    // makes the evaluated total the charged total.
     const summary = await OrderService.calculateSummary(
       cartId,
       userId,
-      parsedData.shipping.shipping_method
+      parsedData.shipping.shipping_method,
+      checkoutSessionId,
+      parsedData.information.shipping_address
     );
 
     let riskMetadata: {

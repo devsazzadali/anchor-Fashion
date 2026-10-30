@@ -857,14 +857,23 @@ export class WarehouseRepository {
 
   async deleteBin(id: string): Promise<void> {
     const db = this.getAdminClient();
-    // Check if stock exists in bin
-    const { data: stock } = await db
-      .from("inventory_levels")
-      .select("quantity_available")
-      .eq("bin_id", id)
-      .limit(1);
+    // S4-10: inventory_levels has NO bin_id column — stock is tracked per
+    // variant + warehouse, never per bin. The old guard queried
+    // inventory_levels by bin_id; the DB layer silently drops that
+    // filter, so the query returned an arbitrary stock row from ANY bin
+    // and the guard fired on every bin ("stock is currently assigned")
+    // whenever any stock existed anywhere. The bin's own recorded load
+    // (warehouse_bins.current_quantity) is the only per-bin stock figure
+    // in the schema — guard on that instead.
+    const { data: bin, error: binError } = await db
+      .from("warehouse_bins")
+      .select("id, current_quantity")
+      .eq("id", id)
+      .maybeSingle();
 
-    if (stock && stock.length > 0 && (stock[0].quantity_available || 0) > 0) {
+    if (binError) throw new Error(`Failed to load bin: ${binError.message}`);
+    if (!bin) throw new Error("Bin not found.");
+    if ((bin.current_quantity || 0) > 0) {
       throw new Error("Cannot delete bin: stock is currently assigned to this bin.");
     }
 

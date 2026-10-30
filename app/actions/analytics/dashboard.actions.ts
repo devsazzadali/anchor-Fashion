@@ -3,6 +3,7 @@
 import { AnalyticsService } from "@/services/analytics.service";
 import { DateRange } from "@/repositories/analytics.repository";
 import { verifyManager } from "@/lib/security/roles";
+import { buildSalesReportCsv } from "@/lib/analytics/sales-report-csv";
 
 export async function getExecutiveSummaryAction(dateRange?: DateRange) {
   // SECURITY: server actions are public endpoints; authorize every call.
@@ -21,6 +22,39 @@ export async function getSalesAnalyticsAction(dateRange?: DateRange) {
   try {
     const data = await AnalyticsService.getSalesAnalytics(dateRange);
     return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * S6-8: CSV export for the Sales Report page. The old Export button
+ * called window.print() on the chart-heavy page — the tab hung and no
+ * file was produced. This action rebuilds the SAME aggregated report
+ * the page is showing (same date range) and renders it through the
+ * bounded pure builder in lib/analytics/sales-report-csv; the client
+ * downloads the returned text as a Blob.
+ */
+export async function exportSalesReportCsvAction(fromIso?: string, toIso?: string) {
+  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyManager();
+  try {
+    const to = toIso ? new Date(toIso) : new Date();
+    const from = fromIso
+      ? new Date(fromIso)
+      : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sales = await AnalyticsService.getSalesAnalytics({ from, to });
+    const fromLabel = from.toISOString().slice(0, 10);
+    const toLabel = to.toISOString().slice(0, 10);
+    const csv = buildSalesReportCsv(sales as any, {
+      from: fromLabel,
+      to: toLabel,
+    });
+    return {
+      success: true,
+      csv,
+      filename: `sales-report-${fromLabel}-${toLabel}.csv`,
+    };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

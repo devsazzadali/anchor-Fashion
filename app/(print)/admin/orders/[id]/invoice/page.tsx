@@ -5,6 +5,7 @@ import { STAFF_ROLES } from "@/lib/constants/auth";
 import { InvoiceToolbar } from "@/components/print/invoice-toolbar";
 import { InvoiceSheet, InvoiceData } from "@/components/print/invoice-sheet";
 import { getStoreInfo, getInvoiceInfo } from "@/lib/actions/settings.actions";
+import { dhakaDateParts, formatDhakaDate, formatDhakaTime } from "@/lib/utils/datetime";
 
 export default async function AdminPrintInvoicePage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -69,16 +70,13 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
   const invoiceNumber = order.invoice_number || (order.order_number ? order.order_number.replace(/^ORD-/, "INV-") : "INV-ADMIN");
   const orderNumber = order.order_number || order.id?.slice(0, 8).toUpperCase() || "ORD-0000";
 
+  // S5-6: render in Asia/Dhaka — the Date getters use the server's
+  // timezone (UTC on Vercel), which printed "12:00:29" for an order
+  // placed 6:00:29 PM Dhaka time.
   const orderDateObj = new Date(order.created_at || Date.now());
-  const day = String(orderDateObj.getDate()).padStart(2, "0");
-  const month = String(orderDateObj.getMonth() + 1).padStart(2, "0");
-  const year = orderDateObj.getFullYear();
-  const orderDate = `${day}-${month}-${year}`;
-
-  const hours = String(orderDateObj.getHours()).padStart(2, "0");
-  const minutes = String(orderDateObj.getMinutes()).padStart(2, "0");
-  const seconds = String(orderDateObj.getSeconds()).padStart(2, "0");
-  const orderTime = `${hours}:${minutes}:${seconds}`;
+  const { day, month, year } = dhakaDateParts(orderDateObj);
+  const orderDate = formatDhakaDate(orderDateObj);
+  const orderTime = formatDhakaTime(orderDateObj);
 
   const cleanNumericDigits = (order.id || "").replace(/\D/g, "").slice(0, 10);
   const barcodeValue = `${year.toString().slice(-2)}${month}${day}${cleanNumericDigits.padEnd(10, "0")}`;

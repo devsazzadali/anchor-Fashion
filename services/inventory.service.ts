@@ -178,7 +178,8 @@ export class InventoryService {
     toWarehouseId: string,
     quantity: number,
     reason: string,
-    notes?: string
+    notes?: string,
+    userId?: string
   ): Promise<void> {
     await this.repository.transferStock(
       variantId,
@@ -186,7 +187,8 @@ export class InventoryService {
       toWarehouseId,
       quantity,
       reason,
-      notes
+      notes,
+      userId
     );
     await this.checkStockAlerts(variantId, fromWarehouseId);
     await this.checkStockAlerts(variantId, toWarehouseId);

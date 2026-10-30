@@ -42,6 +42,85 @@ export class WalletService {
     return wallet;
   }
 
+  /**
+   * Read-only balance lookup (S6-4b): unlike getWallet this NEVER
+   * creates a wallet — display surfaces must not mint wallet rows for
+   * customers who simply don't have one yet.
+   */
+  static async getBalance(userId: string): Promise<number> {
+    const db = await this.getClient();
+    const { data } = await db
+      .from("customer_wallets")
+      .select("balance")
+      .eq("customer_id", userId)
+      .maybeSingle();
+    return data ? Number(data.balance) || 0 : 0;
+  }
+
+  /**
+   * Admin wallet adjustment (S6-4c): a signed credit/debit applied by
+   * an admin with a mandatory reason. Writes through the same
+   * balance-update + wallet_transactions ledger pattern as topUp /
+   * withdraw, with reference_type ADMIN_ADJUSTMENT and the reason +
+   * admin identity in the description, so the adjustment is a truthful
+   * audit-trail row — never a silent balance edit.
+   */
+  static async adjustBalance(params: {
+    userId: string;
+    signedAmount: number;
+    reason: string;
+    adminMarker: string;
+  }): Promise<{ wallet: CustomerWallet; transaction: WalletTransaction }> {
+    const delta = Number(params.signedAmount);
+    if (!delta || !Number.isFinite(delta)) {
+      throw new Error("Adjustment amount must be a non-zero number");
+    }
+    if (!params.reason?.trim()) {
+      throw new Error("A reason is required for wallet adjustments");
+    }
+
+    const db = await this.getClient();
+    const wallet = await this.getWallet(params.userId);
+    const newBalance = Number((Number(wallet.balance) + delta).toFixed(2));
+    if (newBalance < 0) {
+      throw new Error("Adjustment would make the wallet balance negative");
+    }
+
+    const { data: updatedWallet, error: updateError } = await db
+      .from("customer_wallets")
+      .update({
+        balance: newBalance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", wallet.id)
+      .select()
+      .single();
+
+    if (updateError || !updatedWallet) {
+      throw new Error(`Failed to update wallet balance: ${updateError?.message}`);
+    }
+
+    const { data: transaction, error: txError } = await db
+      .from("wallet_transactions")
+      .insert({
+        wallet_id: wallet.id,
+        type: delta > 0 ? "CREDIT" : "DEBIT",
+        amount: Math.abs(delta),
+        balance_after: newBalance,
+        reference_type: "ADMIN_ADJUSTMENT",
+        reference_id: null,
+        description: `Admin adjustment by ${params.adminMarker}: ${params.reason.trim()}`,
+      })
+      .select()
+      .single();
+
+    if (txError || !transaction) {
+      throw new Error(`Failed to record adjustment transaction: ${txError?.message}`);
+    }
+
+    return { wallet: updatedWallet, transaction };
+  }
+
   static async getTransactions(walletId: string): Promise<WalletTransaction[]> {
     const db = await this.getClient();
     const { data, error } = await db

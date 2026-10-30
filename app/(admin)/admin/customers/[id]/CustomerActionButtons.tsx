@@ -28,16 +28,20 @@ import {
   Copy,
   Check,
   Sparkles,
+  Wallet,
 } from "lucide-react";
 import {
   updateCustomerByAdminAction,
   deleteCustomerByAdminAction,
   getCustomerPasswordAction,
+  adjustCustomerWalletAction,
 } from "@/app/actions/crm/customer-admin.actions";
 
 export interface CustomerActionButtonsProps {
   customerId: string;
   initialPoints: number;
+  /** S6-4: customer's current wallet balance (from the detail data). */
+  walletBalance?: number;
   initialData?: {
     firstName?: string;
     lastName?: string;
@@ -50,6 +54,7 @@ export interface CustomerActionButtonsProps {
 export function CustomerActionButtons({
   customerId,
   initialPoints,
+  walletBalance,
   initialData,
 }: CustomerActionButtonsProps) {
   const router = useRouter();
@@ -57,8 +62,15 @@ export function CustomerActionButtons({
   // Dialog open states
   const [isMessageOpen, setIsMessageOpen] = useState(false);
   const [isPointsOpen, setIsPointsOpen] = useState(false);
+  const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+  // Wallet adjust state
+  const [walletBal, setWalletBal] = useState(walletBalance ?? 0);
+  const [walletAmount, setWalletAmount] = useState("");
+  const [walletReason, setWalletReason] = useState("");
+  const [isAdjustingWallet, setIsAdjustingWallet] = useState(false);
 
   // Points state
   const [points, setPoints] = useState(initialPoints);
@@ -89,6 +101,42 @@ export function CustomerActionButtons({
     toast.success(`Successfully adjusted points by ${pointsDelta}`);
     setPoints(points + Number(pointsDelta));
     setIsPointsOpen(false);
+  };
+
+  const handleAdjustWallet = async () => {
+    const amount = Number(walletAmount);
+    if (!amount || !Number.isFinite(amount)) {
+      toast.error("Enter a non-zero adjustment amount.");
+      return;
+    }
+    if (!walletReason.trim()) {
+      toast.error("A reason is required for wallet adjustments.");
+      return;
+    }
+    try {
+      setIsAdjustingWallet(true);
+      const res = await adjustCustomerWalletAction({
+        customerId,
+        amount,
+        reason: walletReason.trim(),
+      });
+      if (!res.success) {
+        toast.error(res.error || "Failed to adjust wallet.");
+        return;
+      }
+      if (typeof res.balance === "number") setWalletBal(res.balance);
+      toast.success(
+        `Wallet adjusted by ৳${amount}. New balance: ৳${res.balance}`
+      );
+      setIsWalletOpen(false);
+      setWalletAmount("");
+      setWalletReason("");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err?.message || "An unexpected error occurred.");
+    } finally {
+      setIsAdjustingWallet(false);
+    }
   };
 
   const handleSendMessage = async () => {
@@ -288,6 +336,63 @@ export function CustomerActionButtons({
               Cancel
             </Button>
             <Button onClick={handleAdjustPoints}>Apply Adjustment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Wallet Dialog (S6-4c) */}
+      <Dialog open={isWalletOpen} onOpenChange={setIsWalletOpen}>
+        <DialogTrigger render={<Button variant="outline" size="sm" className="flex items-center gap-1.5" />}>
+          <Wallet className="h-4 w-4" />
+          <span>Adjust Wallet (৳{walletBal.toLocaleString()})</span>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adjust Wallet Balance</DialogTitle>
+            <DialogDescription>
+              Credit or debit this customer&apos;s wallet. Every adjustment
+              is recorded in the wallet ledger with your reason.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Amount (use negative to debit)</Label>
+              <Input
+                type="number"
+                placeholder="e.g. 500 or -500"
+                value={walletAmount}
+                onChange={(e) => setWalletAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>
+                Reason <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                placeholder="Why is this adjustment being made?"
+                value={walletReason}
+                onChange={(e) => setWalletReason(e.target.value)}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Current balance: ৳{walletBal.toLocaleString()} → New balance: ৳
+              {(walletBal + (Number(walletAmount) || 0)).toLocaleString()}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsWalletOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAdjustWallet} disabled={isAdjustingWallet}>
+              {isAdjustingWallet ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Applying...
+                </>
+              ) : (
+                "Apply Adjustment"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

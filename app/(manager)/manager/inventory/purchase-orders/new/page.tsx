@@ -24,6 +24,12 @@ export default function NewPurchaseOrderPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   
   const [items, setItems] = useState([{ variant_id: "", quantity_ordered: 1, unit_cost: 0 }]);
+  // S4-6: controlled supplier/warehouse selects (see the admin form —
+  // uncontrolled `name`-only selects never visibly bind with the shared
+  // Select component, whose trigger label resolves from the controlled
+  // value only).
+  const [supplierId, setSupplierId] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
 
   useEffect(() => {
     async function fetchData() {
@@ -58,9 +64,9 @@ export default function NewPurchaseOrderPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const supplier_id = formData.get("supplier_id") as string;
-    const destination_warehouse_id = formData.get("destination_warehouse_id") as string;
-    
+    const supplier_id = supplierId;
+    const destination_warehouse_id = warehouseId;
+
     if (!supplier_id || !destination_warehouse_id) {
       toast.error("Please select a supplier and destination warehouse.");
       setLoading(false);
@@ -131,7 +137,7 @@ export default function NewPurchaseOrderPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="supplier_id">Supplier <span className="text-destructive">*</span></Label>
-                <Select name="supplier_id" required>
+                <Select value={supplierId} onValueChange={(val) => setSupplierId(val || "")} required>
                   <SelectTrigger>
                     <SelectValue placeholder="Select supplier..." />
                   </SelectTrigger>
@@ -144,7 +150,7 @@ export default function NewPurchaseOrderPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="destination_warehouse_id">Destination Warehouse <span className="text-destructive">*</span></Label>
-                <Select name="destination_warehouse_id" required>
+                <Select value={warehouseId} onValueChange={(val) => setWarehouseId(val || "")} required>
                   <SelectTrigger>
                     <SelectValue placeholder="Select warehouse..." />
                   </SelectTrigger>

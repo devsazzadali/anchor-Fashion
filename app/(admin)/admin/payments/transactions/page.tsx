@@ -1,4 +1,4 @@
-import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 import {
   Table,
   TableBody,
@@ -11,22 +11,31 @@ import { Badge } from "@/components/ui/badge";
 
 export const revalidate = 0;
 
+/**
+ * S6-7: this page read a `payment_transactions` table that does not
+ * exist in the schema (the polyfill resolved it to an empty result, so
+ * the page rendered "No transactions found" forever — even the error
+ * branch never fired). It now reads the real `payments` ledger via
+ * Prisma, joined to its order. Rows are written at order placement and
+ * flipped to SUCCESS when the order is paid (see
+ * lib/payments/order-payment-record). Legacy POS rows carry status
+ * COMPLETED — both SUCCESS and COMPLETED render as paid.
+ */
 export default async function TransactionsPage() {
-  const db = await createAdminDbClient();
-  const { data: transactions, error } = await db
-    .from("payment_transactions")
-    .select(
-      `
-      *,
-      payment_providers (name)
-    `
-    )
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const transactions = await prisma.payment.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: {
+      order: { select: { orderNumber: true } },
+    },
+  });
 
-  if (error) {
-    return <div>Error loading transactions: {error.message}</div>;
-  }
+  const statusVariant = (status: string) => {
+    const s = status.toUpperCase();
+    if (s === "SUCCESS" || s === "COMPLETED") return "default" as const;
+    if (s === "FAILED") return "destructive" as const;
+    return "secondary" as const;
+  };
 
   return (
     <div className="space-y-6">
@@ -39,45 +48,35 @@ export default async function TransactionsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Reference</TableHead>
-              <TableHead>Order ID</TableHead>
-              <TableHead>Provider</TableHead>
+              <TableHead>Order</TableHead>
+              <TableHead>Method</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Date</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {transactions?.map((txn: any) => (
+            {transactions.map((txn) => (
               <TableRow key={txn.id}>
                 <TableCell className="font-mono text-xs">
-                  {txn.reference_number}
+                  {txn.transactionId || txn.id}
                 </TableCell>
                 <TableCell className="font-mono text-xs">
-                  {txn.order_id}
+                  {txn.order?.orderNumber || txn.orderId}
                 </TableCell>
-                <TableCell>{txn.payment_providers?.name}</TableCell>
+                <TableCell>{txn.method}</TableCell>
+                <TableCell>৳{Number(txn.amount).toFixed(2)} BDT</TableCell>
                 <TableCell>
-                  {txn.amount} {txn.currency}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      txn.status === "completed"
-                        ? "default"
-                        : txn.status === "failed"
-                          ? "destructive"
-                          : "secondary"
-                    }
-                  >
+                  <Badge variant={statusVariant(txn.status)}>
                     {txn.status}
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {new Date(txn.created_at).toLocaleString()}
+                  {new Date(txn.createdAt).toLocaleString()}
                 </TableCell>
               </TableRow>
             ))}
-            {(!transactions || transactions.length === 0) && (
+            {transactions.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
                   No transactions found.

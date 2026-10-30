@@ -127,6 +127,12 @@ export class InventoryRepository {
       reason: String(rawReason).slice(0, 50),
       reason_code: rawReasonCode ? String(rawReasonCode).slice(0, 50) : null,
       reference_id: movement.reference_id || null,
+      reference_type: movement.reference_type || null,
+      // S4-9: callers that know the real before/after quantities pass them
+      // through; without them the DB layer defaults previous=0 / new=quantity,
+      // which corrupts the audit trail's quantity columns.
+      previous_quantity: movement.previous_quantity,
+      new_quantity: movement.new_quantity,
       to_warehouse_id: movement.to_warehouse_id || null,
       from_bin_id: movement.from_bin_id || null,
       to_bin_id: movement.to_bin_id || null,
@@ -349,7 +355,8 @@ export class InventoryRepository {
     toWarehouseId: string,
     quantity: number,
     reason: string,
-    notes?: string
+    notes?: string,
+    userId?: string
   ): Promise<void> {
     if (quantity <= 0) {
       throw new Error(`Quantity must be greater than zero`);
@@ -358,6 +365,12 @@ export class InventoryRepository {
     if (fromWarehouseId === toWarehouseId) {
       throw new Error(`Source and destination warehouse must be different`);
     }
+
+    // created_by is a uuid column; only stamp well-formed ids.
+    const createdBy =
+      userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
+        ? userId
+        : null;
 
     // Perform fully atomic transfer using Prisma transaction
     await prisma.$transaction(async (tx) => {
@@ -411,7 +424,8 @@ export class InventoryRepository {
         });
       }
 
-      // 4. Record movements
+      // 4. Record movements (S4-9: stamp the acting user + transfer
+      // reference so the audit log shows who moved what, where).
       await tx.stockMovement.create({
         data: {
           variantId,
@@ -420,7 +434,10 @@ export class InventoryRepository {
           quantity: -quantity,
           previousQuantity: sourceAvail,
           newQuantity: newSourceAvail,
+          referenceType: "TRANSFER",
+          referenceId: toWarehouseId,
           notes: notes || `Transferred to warehouse ${toWarehouseId}`,
+          createdBy,
         },
       });
 
@@ -432,7 +449,10 @@ export class InventoryRepository {
           quantity: quantity,
           previousQuantity: destAvail,
           newQuantity: newDestAvail,
+          referenceType: "TRANSFER",
+          referenceId: fromWarehouseId,
           notes: notes || `Received from warehouse ${fromWarehouseId}`,
+          createdBy,
         },
       });
     });
@@ -440,22 +460,46 @@ export class InventoryRepository {
 
   // --- Audits ---
 
+  /**
+   * Attach warehouse names to audit rows. The DB layer does not resolve
+   * embedded relations (`warehouse:warehouses(...)` selects come back
+   * without the embed), so names are joined manually — both the singular
+   * `warehouse` key (perform page) and the plural `warehouses` key
+   * (audits list client) are populated.
+   */
+  private async attachAuditWarehouses(rows: any[]): Promise<any[]> {
+    if (!rows || rows.length === 0) return rows;
+    const db = this.getAdminClient();
+    const ids = [...new Set(rows.map((r: any) => r.warehouse_id).filter(Boolean))];
+    if (ids.length === 0) return rows;
+    const { data: warehouses } = await db
+      .from("warehouses")
+      .select("id, name")
+      .in("id", ids);
+    const byId = new Map<string, any>((warehouses || []).map((w: any) => [w.id, w] as [string, any]));
+    return rows.map((r: any) => {
+      const w = byId.get(r.warehouse_id);
+      const wh = w ? { id: w.id, name: w.name } : null;
+      return { ...r, warehouse: wh, warehouses: wh };
+    });
+  }
+
   async getAudits(): Promise<any[]> {
     const db = this.getAdminClient();
     const { data, error } = await db
       .from("inventory_audits")
-      .select("*, warehouse:warehouses(name)")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) throw new Error(`Failed to get audits: ${error.message}`);
-    return data;
+    return this.attachAuditWarehouses(data || []);
   }
 
   async getAuditById(id: string): Promise<any> {
     const db = this.getAdminClient();
     const { data, error } = await db
       .from("inventory_audits")
-      .select("*, warehouse:warehouses(name)")
+      .select("*")
       .eq("id", id)
       .single();
 
@@ -463,22 +507,31 @@ export class InventoryRepository {
       if (error.code === "PGRST116") return null;
       throw new Error(`Failed to get audit: ${error.message}`);
     }
-    return data;
+    if (!data) return null;
+    const [withWh] = await this.attachAuditWarehouses([data]);
+    return withWh;
   }
 
   async createAudit(auditData: any): Promise<any> {
     const db = this.getAdminClient();
+    // S4-7: inventory_audits' real columns are only id, warehouse_id,
+    // status, notes, created_by, created_at. The previous payload always
+    // carried `blind_count` (and optionally `zone_id` / `assigned_to`) —
+    // the DB layer silently discards ANY write containing an unknown
+    // column, so scheduling toasted "success" while nothing persisted.
+    // Only real columns are sent now; the scheduled date and blind-count
+    // choice are preserved in `notes` (the table has no columns for them).
+    const noteParts: string[] = [];
+    if (auditData.notes) noteParts.push(String(auditData.notes));
+    if (auditData.scheduled_date) noteParts.push(`Scheduled for ${auditData.scheduled_date}`);
+    if (auditData.blind_count !== undefined) {
+      noteParts.push(auditData.blind_count ? "Blind count" : "Open count");
+    }
     const payload: any = {
       warehouse_id: auditData.warehouse_id,
       status: auditData.status === "PLANNED" ? "SCHEDULED" : (auditData.status || "SCHEDULED"),
-      blind_count: auditData.blind_count ?? true,
+      notes: noteParts.length > 0 ? noteParts.join(" · ") : null,
     };
-    if (auditData.zone_id && auditData.zone_id !== "all") {
-      payload.zone_id = auditData.zone_id;
-    }
-    if (auditData.assigned_to) {
-      payload.assigned_to = auditData.assigned_to;
-    }
     if (auditData.created_by) {
       payload.created_by = auditData.created_by;
     }
@@ -490,15 +543,43 @@ export class InventoryRepository {
       .single();
 
     if (error) throw new Error(`Failed to create audit: ${error.message}`);
-    return data;
+    if (!data) throw new Error("Failed to create audit: no row was persisted.");
+
+    // Snapshot the warehouse's current stock as the audit's expected
+    // quantities, so the perform page has countable items. (Previously
+    // nothing ever created audit items, so even a persisted audit would
+    // have opened empty.)
+    try {
+      const { data: levels } = await db
+        .from("inventory_levels")
+        .select("variant_id, quantity_available")
+        .eq("warehouse_id", auditData.warehouse_id);
+      const items = (levels || []).map((l: any) => ({
+        audit_id: data.id,
+        variant_id: l.variant_id,
+        expected_quantity: Number(l.quantity_available || 0),
+        // Explicitly uncounted: actual stays NULL until a count is entered,
+        // so a genuine count of 0 is distinguishable from "not counted".
+        actual_quantity: null,
+      }));
+      if (items.length > 0) {
+        await this.createAuditItems(items);
+      }
+    } catch (e: any) {
+      console.warn(`Could not snapshot audit items for audit ${data.id}:`, e?.message);
+    }
+
+    const [withWh] = await this.attachAuditWarehouses([data]);
+    return withWh;
   }
 
   async updateAuditStatus(id: string, status: string): Promise<void> {
     const db = this.getAdminClient();
     const dbStatus = status === "PLANNED" ? "SCHEDULED" : status;
+    // S4-7: inventory_audits has no `updated_at` column — including it
+    // made the DB layer silently discard the whole status update.
     const updates: any = {
       status: dbStatus,
-      updated_at: new Date().toISOString(),
     };
 
     const { error } = await db
@@ -513,19 +594,71 @@ export class InventoryRepository {
     const db = this.getAdminClient();
     const { data, error } = await db
       .from("inventory_audit_items")
-      .select("*, variant:variants(sku, product:products(name))")
+      .select("*")
       .eq("audit_id", auditId);
 
     if (error) throw new Error(`Failed to get audit items: ${error.message}`);
-    return data;
+    const items = data || [];
+    if (items.length === 0) return items;
+
+    // The DB layer does not attach embedded variant/product relations;
+    // resolve them manually. Also expose the counted quantity + derived
+    // status under the key names the perform form renders
+    // (`counted_quantity`, `status`) — the real columns are
+    // `actual_quantity` and there is no status column.
+    const variantIds: string[] = [...new Set(items.map((i: any) => i.variant_id).filter(Boolean))] as string[];
+    const variants = await prisma.variant.findMany({
+      where: { id: { in: variantIds } },
+      select: {
+        id: true,
+        sku: true,
+        product: { select: { name: true } },
+      },
+    });
+    const byId = new Map<string, any>(variants.map((v: any) => [v.id, v] as [string, any]));
+    return items.map((i: any) => {
+      const v = byId.get(i.variant_id);
+      const counted = i.actual_quantity;
+      const status =
+        counted === null || counted === undefined
+          ? "PENDING"
+          : Number(i.variance || 0) === 0
+            ? "COUNTED"
+            : "DISCREPANCY";
+      return {
+        ...i,
+        counted_quantity: counted ?? null,
+        status,
+        variant: v ? { sku: v.sku, product: { name: v.product?.name || "Product" } } : null,
+      };
+    });
   }
 
   async createAuditItems(items: any[]): Promise<void> {
     if (items.length === 0) return;
     const db = this.getAdminClient();
+    // Real columns only: audit_id, variant_id, expected_quantity,
+    // actual_quantity, variance. Translate the legacy `counted_quantity`
+    // key if a caller still sends it.
+    const rows = items.map((i: any) => {
+      const row: any = {
+        audit_id: i.audit_id,
+        variant_id: i.variant_id,
+        expected_quantity: Number(i.expected_quantity || 0),
+      };
+      if ("actual_quantity" in i) {
+        // Preserve an explicit null: it marks the item as not yet counted
+        // (a genuine count of 0 must stay distinguishable from uncounted).
+        row.actual_quantity = i.actual_quantity === null ? null : Number(i.actual_quantity);
+      } else if (i.counted_quantity !== undefined && i.counted_quantity !== null) {
+        row.actual_quantity = Number(i.counted_quantity);
+      }
+      if (i.variance !== undefined && i.variance !== null) row.variance = Number(i.variance);
+      return row;
+    });
     const { error } = await db
       .from("inventory_audit_items")
-      .insert(items);
+      .insert(rows);
 
     if (error) throw new Error(`Failed to create audit items: ${error.message}`);
   }
@@ -544,14 +677,15 @@ export class InventoryRepository {
 
     const expected = item.expected_quantity;
     const variance = countedQuantity - expected;
-    const status = variance === 0 ? "COUNTED" : "DISCREPANCY";
 
+    // S4-7: the counted value lives in `actual_quantity`; there is no
+    // `counted_quantity` or `status` column — sending them silently
+    // discarded the whole update.
     const { error } = await db
       .from("inventory_audit_items")
       .update({
-        counted_quantity: countedQuantity,
+        actual_quantity: countedQuantity,
         variance,
-        status
       })
       .eq("id", itemId);
 
@@ -663,8 +797,11 @@ export class InventoryRepository {
       warehouse_id: payload.warehouse_id,
       movement_type: "RECEIVE",
       quantity: qty,
+      previous_quantity: existingLevels && existingLevels.length > 0 ? Number(existingLevels[0].quantity_available || 0) : 0,
+      new_quantity: Number((updatedLevel as any).quantity_available ?? qty),
       to_bin_id: payload.bin_id || null,
       reference_id: payload.purchase_order_id || null,
+      reference_type: payload.purchase_order_id ? "PURCHASE_ORDER" : null,
       reason_code: "PURCHASE_RECEIPT",
       notes: movementNotes || `Stock In of ${qty} units`,
       user_id: payload.userId || null,
@@ -776,6 +913,8 @@ export class InventoryRepository {
       warehouse_id: payload.warehouse_id,
       movement_type: "SHIP",
       quantity: -qty,
+      previous_quantity: currentAvail,
+      new_quantity: newAvail,
       from_bin_id: payload.bin_id || null,
       reference_id: payload.reference_id || null,
       reason_code: payload.reason || "STOCK_OUT",
@@ -862,6 +1001,8 @@ export class InventoryRepository {
       warehouse_id: payload.warehouse_id,
       movement_type: "ADJUST",
       quantity: variance,
+      previous_quantity: systemQty,
+      new_quantity: physical,
       from_bin_id: payload.bin_id || null,
       reason_code: payload.reason,
       notes: `Physical Count Adjustment: System was ${systemQty}, counted ${physical} (Variance: ${variance > 0 ? "+" : ""}${variance}). Notes: ${payload.notes || ""}`,
@@ -894,70 +1035,108 @@ export class InventoryRepository {
 
     let query = db
       .from("stock_movements")
-      .select(
-        `*,
-        variant:variants(
-          id,
-          sku,
-          product:products(id, name)
-        ),
-        warehouse:warehouses!warehouse_id(id, name, warehouse_code),
-        to_warehouse:warehouses!to_warehouse_id(id, name, warehouse_code),
-        from_bin:warehouse_bins!from_bin_id(id, code, zone:warehouse_zones(name)),
-        to_bin:warehouse_bins!to_bin_id(id, code, zone:warehouse_zones(name))`,
-        { count: "exact" }
-      )
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(start, start + limit - 1);
 
     if (options?.warehouseId) {
-      query = query.or(`warehouse_id.eq.${options.warehouseId},to_warehouse_id.eq.${options.warehouseId}`);
+      query = query.eq("warehouse_id", options.warehouseId);
     }
     if (options?.variantId) {
       query = query.eq("variant_id", options.variantId);
     }
     if (options?.type && options.type !== "all") {
-      query = query.ilike("reason", `%${options.type}%`);
+      query = query.ilike("movement_type", `%${options.type}%`);
     }
 
     const { data, count, error } = await query;
     if (error) throw new Error(`Failed to fetch stock movements: ${error.message}`);
 
-    const movements = (data || []).map((m: any) => {
-      let friendlyType = "Movement";
-      const r = (m.reason || m.reason_code || "").toUpperCase();
-      const change = Number(m.quantity_change) || 0;
+    const rows = data || [];
 
-      if (r.includes("RECEIVE") || r.includes("PURCHASE") || change > 0 && !r.includes("TRANSFER")) {
-        friendlyType = "Stock In";
-      } else if (r.includes("SHIP") || r.includes("SALES") || r.includes("ORDER")) {
-        friendlyType = "Stock Out";
-      } else if (r.includes("TRANSFER")) {
-        friendlyType = "Transfer";
-      } else if (r.includes("ADJUST") || r.includes("PHYSICAL")) {
-        friendlyType = "Adjustment";
-      } else if (r.includes("DAMAGE")) {
+    // S4-9: stock_movements' real columns are movement_type, quantity,
+    // previous_quantity, new_quantity, reference_type, reference_id,
+    // notes, created_by. The previous implementation read a phantom
+    // schema (quantity_change / reason / reason_code / user_id) and
+    // embedded relations the DB layer never attaches — so every row
+    // rendered as Quantity 0, type "Movement", product "Product",
+    // warehouse "Warehouse", user "System". Resolve the real relations
+    // manually in batch instead.
+    const variantIds: string[] = [...new Set(rows.map((m: any) => m.variant_id).filter(Boolean))] as string[];
+    const warehouseIds = [
+      ...new Set(
+        rows
+          .flatMap((m: any) => [m.warehouse_id, m.reference_type === "TRANSFER" ? m.reference_id : null])
+          .filter(Boolean)
+      ),
+    ];
+    const userIds = [...new Set(rows.map((m: any) => m.created_by).filter(Boolean))];
+
+    const [variantRows, warehouseRows, profileRows] = await Promise.all([
+      variantIds.length
+        ? prisma.variant.findMany({
+            where: { id: { in: variantIds } },
+            select: { id: true, sku: true, product: { select: { name: true } } },
+          })
+        : Promise.resolve([]),
+      warehouseIds.length
+        ? db.from("warehouses").select("id, name, code").in("id", warehouseIds).then((r: any) => r.data || [])
+        : Promise.resolve([]),
+      userIds.length
+        ? db.from("profiles").select("id, first_name, last_name, email").in("id", userIds).then((r: any) => r.data || [])
+        : Promise.resolve([]),
+    ]);
+    const variantById = new Map<string, any>((variantRows as any[]).map((v: any) => [v.id, v] as [string, any]));
+    const warehouseById = new Map<string, any>((warehouseRows as any[]).map((w: any) => [w.id, w] as [string, any]));
+    const profileById = new Map<string, any>((profileRows as any[]).map((p: any) => [p.id, p] as [string, any]));
+
+    const movements = rows.map((m: any) => {
+      const t = String(m.movement_type || "").toUpperCase();
+      let friendlyType = "Movement";
+      if (t.includes("DAMAGE")) {
         friendlyType = "Damage";
-      } else if (r.includes("RETURN")) {
+      } else if (t.includes("RETURN")) {
         friendlyType = "Return";
+      } else if (t.includes("TRANSFER")) {
+        friendlyType = "Transfer";
+      } else if (t.includes("ADJUST") || t.includes("PHYSICAL")) {
+        friendlyType = "Adjustment";
+      } else if (t.includes("RECEIVE") || t.includes("PURCHASE") || t === "IN") {
+        friendlyType = "Stock In";
+      } else if (t.includes("SHIP") || t.includes("SALES") || t.includes("ORDER") || t === "OUT") {
+        friendlyType = "Stock Out";
       }
+
+      const variant = variantById.get(m.variant_id);
+      const warehouse = warehouseById.get(m.warehouse_id);
+      const toWarehouse =
+        m.reference_type === "TRANSFER" && t === "TRANSFER_OUT"
+          ? warehouseById.get(m.reference_id)
+          : undefined;
+      const profile = m.created_by ? profileById.get(m.created_by) : undefined;
+      const userDisplay = profile
+        ? [profile.first_name, profile.last_name].filter(Boolean).join(" ") || profile.email || "System"
+        : "System";
 
       return {
         id: m.id,
         created_at: m.created_at,
-        product_name: m.variant?.product?.name || "Product",
-        sku: m.variant?.sku || "—",
-        warehouse_name: m.warehouse?.name || "Warehouse",
-        warehouse_code: m.warehouse?.warehouse_code || "",
-        to_warehouse_name: m.to_warehouse?.name,
-        zone_name: m.to_bin?.zone?.name || m.from_bin?.zone?.name || "—",
-        bin_code: m.to_bin?.code || m.from_bin?.code || "—",
+        product_name: variant?.product?.name || "Product",
+        sku: variant?.sku || "—",
+        warehouse_name: warehouse?.name || "Warehouse",
+        warehouse_code: warehouse?.code || "",
+        to_warehouse_name: toWarehouse?.name,
+        // stock_movements has no bin/zone columns — shown as unassigned.
+        zone_name: "—",
+        bin_code: "—",
         movement_type: friendlyType,
-        raw_type: m.reason || m.reason_code || "ADJUST",
-        quantity: change,
+        raw_type: m.movement_type || "MOVEMENT",
+        quantity: Number(m.quantity) || 0,
+        previous_quantity: m.previous_quantity,
+        new_quantity: m.new_quantity,
         reference_id: m.reference_id || "—",
-        user_id: m.user_id || "System",
-        notes: m.notes || m.reason || "",
+        user_id: userDisplay,
+        notes: m.notes || "",
       };
     });
 

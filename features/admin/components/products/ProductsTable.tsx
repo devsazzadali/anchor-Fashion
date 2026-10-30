@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { PrintBarcodeModal, BarcodeLabelData } from "@/components/admin/inventory/PrintBarcodeModal";
 import { generateEAN13Sync } from "@/lib/utils/barcode";
+import { priceWithVat } from "@/lib/utils/vat";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -108,6 +109,13 @@ export function ProductsTable({
     const prodSku = product.sku || "AFPRD1";
     const prodBarcode = product.barcode || generateEAN13Sync();
     const prodPrice = Number(product.basePrice || 0);
+    // S4-2: the sticker is labelled "(Inc.VAT)" and must carry the
+    // VAT-inclusive price, matching the storefront — this path previously
+    // passed the raw VAT-exclusive price (the other label builders in
+    // ProductForm / InventoryMasterHub already use priceWithVat).
+    const vatPercent = Number(
+      (product as any).vatPercent ?? (product as any).vat_percent ?? 0
+    );
     const vars = (product as any).variants || [];
 
     let labels: BarcodeLabelData[] = [];
@@ -119,7 +127,7 @@ export function ProductsTable({
         barcode: v.barcode || prodBarcode,
         color: (v.attributes as any)?.Color || "",
         size: (v.attributes as any)?.Size || "",
-        price: Number(v.priceOverride || prodPrice),
+        price: priceWithVat(Number(v.priceOverride ?? prodPrice), vatPercent),
       }));
     } else {
       labels = [
@@ -128,7 +136,7 @@ export function ProductsTable({
           sku: prodSku,
           styleCode: prodSku,
           barcode: prodBarcode,
-          price: prodPrice,
+          price: priceWithVat(prodPrice, vatPercent),
         },
       ];
     }

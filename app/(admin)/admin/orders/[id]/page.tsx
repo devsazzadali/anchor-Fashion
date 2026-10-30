@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrderDetails } from "@/hooks/oms/use-order-details";
@@ -23,6 +23,7 @@ import {
   rejectManualPaymentAction,
 } from "@/lib/actions/payment.actions";
 import { OrderSmsCard } from "@/components/admin/orders/order-sms-card";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import {
   Printer,
   FileText,
@@ -49,9 +50,11 @@ export default function AdminOrderDetailsPage() {
   const params = useParams();
   const orderId = params.id as string;
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { order, isLoading, error, updateStatus, isUpdatingStatus } =
     useOrderDetails(orderId);
 
+  const [cancelGateOpen, setCancelGateOpen] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -77,8 +80,29 @@ export default function AdminOrderDetailsPage() {
 
   const handleStatusUpdate = async (newStatus: OrderStatus) => {
     try {
-      await updateStatus({ order_id: order.id, new_status: newStatus });
+      const updated: any = await updateStatus({ order_id: order.id, new_status: newStatus });
       toast.success(`Order status updated to ${newStatus}`);
+      // S5-4: several transitions previously left the page showing the
+      // old state until a manual reload (the invalidation refetch raced
+      // and lost). Patch the cached order with the mutation's own
+      // authoritative result immediately, then refresh the route so
+      // every server-rendered fragment agrees.
+      if (updated) {
+        queryClient.setQueryData(["order", orderId], (old: any) =>
+          old
+            ? {
+                ...old,
+                status: updated.status ?? old.status,
+                shipped_at: updated.shipped_at ?? old.shipped_at,
+                delivered_at: updated.delivered_at ?? old.delivered_at,
+                payment_status: updated.payment_status ?? old.payment_status,
+                paid_at: updated.paid_at ?? old.paid_at,
+              }
+            : old
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      router.refresh();
     } catch (e: any) {
       toast.error(`Failed to update status: ${e.message}`);
     }
@@ -232,8 +256,25 @@ export default function AdminOrderDetailsPage() {
                         <p className="font-semibold text-foreground">{item.product_name}</p>
                         <p className="text-xs text-muted-foreground mt-0.5 font-mono">
                           SKU: {item.sku || "N/A"}{" "}
-                          {item.variant_name ? `| ${item.variant_name}` : ""}
+                          {/* S5-1: the stored variant_name merely echoes the
+                              SKU ("SKU: AF-…"); only show it when it carries
+                              real information. Size/colour render from the
+                              variant's attributes instead. */}
+                          {item.variant_name && item.variant_name !== `SKU: ${item.sku}`
+                            ? `| ${item.variant_name}`
+                            : ""}
                         </p>
+                        {(item.variant_label || item.variant_size || item.variant_color) && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {item.variant_label ||
+                              [
+                                item.variant_size ? `Size: ${item.variant_size}` : null,
+                                item.variant_color ? `Colour: ${item.variant_color}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">
@@ -662,7 +703,7 @@ export default function AdminOrderDetailsPage() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => handleStatusUpdate("cancelled")}
+                      onClick={() => setCancelGateOpen(true)}
                       disabled={isUpdatingStatus}
                     >
                       Cancel Order
@@ -794,6 +835,25 @@ export default function AdminOrderDetailsPage() {
           </Card>
         </div>
       </div>
+
+      {/* S5-12: cancelling an order is irreversible and releases its
+          reserved stock — it previously fired on a single click with no
+          confirmation (the one destructive action round 3 missed).
+          Route it through the shared ConfirmDialog. */}
+      <ConfirmDialog
+        open={cancelGateOpen}
+        title="Cancel this order?"
+        description={`Order #${order.order_number} will be cancelled and its reserved stock released back to available inventory. This cannot be undone.`}
+        confirmLabel="Cancel Order"
+        cancelLabel="Keep Order"
+        variant="destructive"
+        isLoading={isUpdatingStatus}
+        onConfirm={() => {
+          setCancelGateOpen(false);
+          handleStatusUpdate("cancelled");
+        }}
+        onCancel={() => setCancelGateOpen(false)}
+      />
 
       {/* Reject Payment Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>

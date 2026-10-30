@@ -307,7 +307,7 @@ export async function createProcurementOrder(
   }>
 ) {
   // SECURITY: server actions are public endpoints; authorize every call.
-  await verifyStaff();
+  const user = await verifyStaff();
   try {
     const db = createAdminDbClient();
 
@@ -340,46 +340,53 @@ export async function createProcurementOrder(
 
     const poNumber = poData.po_number || `PO-${Date.now().toString().slice(-6)}`;
 
-    // 3. Insert Procurement Order with authoritative grand total
+    // 3. Insert the order with authoritative grand total.
+    // S4-6: the real tables are `purchase_orders` / `purchase_order_items`
+    // (columns: warehouse_id, expected_date / purchase_order_id,
+    // quantity). This action previously inserted into a nonexistent
+    // `procurement_orders` table — the DB layer answered with an empty
+    // success, `po` came back null, and reading `po.id` threw
+    // "Cannot read properties of null (reading 'id')" on every submit.
+    const createdBy =
+      (user as any)?.id &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((user as any).id)
+        ? (user as any).id
+        : null;
     const { data: po, error: poError } = await db
-      .from("procurement_orders")
+      .from("purchase_orders")
       .insert({
         po_number: poNumber,
         supplier_id: poData.supplier_id,
-        destination_warehouse_id: poData.destination_warehouse_id,
-        expected_delivery_date: poData.expected_delivery_date || null,
+        warehouse_id: poData.destination_warehouse_id,
+        expected_date: poData.expected_delivery_date || null,
         total_amount: grandTotal,
         notes: poData.notes || `Subtotal: BDT ${subtotal.toFixed(2)}, Tax (${(taxRate * 100).toFixed(0)}%): BDT ${taxAmount.toFixed(2)}, Grand Total: BDT ${grandTotal.toFixed(2)}`,
         status: "DRAFT",
+        created_by: createdBy,
       })
       .select()
       .single();
 
     if (poError) return { success: false, error: poError.message };
+    if (!po) return { success: false, error: "Failed to create purchase order: no row was persisted." };
 
     // 4. Insert Items with line totals
     const itemsToInsert = processedItems.map((item) => ({
-      po_id: po.id,
+      purchase_order_id: po.id,
       variant_id: item.variant_id,
-      quantity_ordered: item.quantity_ordered,
+      quantity: item.quantity_ordered,
       unit_cost: item.unit_cost,
       total_cost: item.total_cost,
     }));
 
     const { error: itemsError } = await db
-      .from("procurement_items")
+      .from("purchase_order_items")
       .insert(itemsToInsert);
 
     if (itemsError) {
-      console.warn("Could not insert with total_cost column, retrying with base columns:", itemsError);
-      await db.from("procurement_items").insert(
-        processedItems.map((item) => ({
-          po_id: po.id,
-          variant_id: item.variant_id,
-          quantity_ordered: item.quantity_ordered,
-          unit_cost: item.unit_cost,
-        }))
-      );
+      // Roll back the order so a failed item insert never orphans a PO.
+      await db.from("purchase_orders").delete().eq("id", po.id);
+      return { success: false, error: itemsError.message || "Failed to create purchase order items." };
     }
 
     revalidatePath("/admin/inventory/purchases");
@@ -404,24 +411,68 @@ export async function getProcurementOrderDetails(poId: string) {
   await verifyStaff();
   try {
     const db = createAdminDbClient();
+    // S4-6: read the real `purchase_orders` family (see
+    // createProcurementOrder). Relations are resolved manually — the DB
+    // layer does not attach embedded selects — and mapped into the
+    // shape the purchases client renders (supplier_profiles /
+    // warehouses / expected_delivery_date / quantity_ordered / variants).
     const { data: po, error: poErr } = await db
-      .from("procurement_orders")
-      .select("*, supplier_profiles(*), warehouses(*)")
+      .from("purchase_orders")
+      .select("*")
       .eq("id", poId)
       .single();
 
     if (poErr) return { success: false, error: poErr.message };
+    if (!po) return { success: false, error: "Purchase order not found" };
 
-    const { data: items } = await db
-      .from("procurement_items")
-      .select("*, variants(id, sku, name)")
-      .eq("po_id", poId);
+    const [{ data: supplier }, { data: warehouse }, { data: items }] = await Promise.all([
+      db.from("suppliers").select("*").eq("id", po.supplier_id).maybeSingle(),
+      db.from("warehouses").select("*").eq("id", po.warehouse_id).maybeSingle(),
+      db.from("purchase_order_items").select("*").eq("purchase_order_id", poId),
+    ]);
+
+    const itemRows = items || [];
+    const variantIds = [...new Set(itemRows.map((i: any) => i.variant_id).filter(Boolean))];
+    let variantById = new Map<string, any>();
+    if (variantIds.length > 0) {
+      const { data: variants } = await db
+        .from("variants")
+        .select("id, sku, attributes, product_id")
+        .in("id", variantIds);
+      const productIds = [...new Set((variants || []).map((v: any) => v.product_id).filter(Boolean))];
+      const { data: products } = productIds.length
+        ? await db.from("products").select("id, name").in("id", productIds)
+        : { data: [] as any[] };
+      const productById = new Map<string, any>((products || []).map((p: any) => [p.id, p] as [string, any]));
+      variantById = new Map<string, any>(
+        (variants || []).map((v: any) => {
+          const pName = productById.get(v.product_id)?.name || "Product";
+          const attrStr = v.attributes ? Object.values(v.attributes).filter(Boolean).join(" / ") : "";
+          const label = attrStr ? `${pName} (${v.sku} - ${attrStr})` : `${pName} (${v.sku})`;
+          return [v.id, { id: v.id, sku: v.sku, name: label }] as [string, any];
+        })
+      );
+    }
 
     return {
       success: true,
       data: {
         ...po,
-        items: items || [],
+        expected_delivery_date: po.expected_date || null,
+        supplier_profiles: supplier
+          ? {
+              company_name: supplier.name,
+              contact_person: supplier.contact_name || "",
+              email: supplier.email || "",
+              phone: supplier.phone || "",
+            }
+          : null,
+        warehouses: warehouse ? { name: warehouse.name, code: warehouse.code || "" } : null,
+        items: itemRows.map((i: any) => ({
+          ...i,
+          quantity_ordered: i.quantity,
+          variants: variantById.get(i.variant_id) || null,
+        })),
       },
     };
   } catch (error: any) {
@@ -438,7 +489,7 @@ export async function updateProcurementOrderStatus(
   try {
     const db = createAdminDbClient();
     const { error } = await db
-      .from("procurement_orders")
+      .from("purchase_orders")
       .update({ status, updated_at: new Date().toISOString() })
       .eq("id", poId);
 
@@ -454,14 +505,16 @@ export async function updateProcurementOrderStatus(
 
 export async function receiveProcurementOrderAction(poId: string, notes?: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
-  await verifyStaff();
+  const user = await verifyStaff();
   try {
     const db = createAdminDbClient();
 
-    // 1. Fetch PO and items
+    // 1. Fetch PO and items (S4-6: real `purchase_orders` family; the
+    // embedded-items select is not resolved by the DB layer, so items
+    // are fetched with their own query.)
     const { data: po, error: poErr } = await db
-      .from("procurement_orders")
-      .select("*, procurement_items(*)")
+      .from("purchase_orders")
+      .select("*")
       .eq("id", poId)
       .single();
 
@@ -473,20 +526,30 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
       return { success: false, error: "This purchase order has already been received." };
     }
 
-    const destinationWarehouseId = po.destination_warehouse_id;
+    const destinationWarehouseId = po.warehouse_id;
     if (!destinationWarehouseId) {
       return { success: false, error: "No destination warehouse assigned to this PO." };
     }
 
-    const items = po.procurement_items || [];
+    const { data: itemRows } = await db
+      .from("purchase_order_items")
+      .select("*")
+      .eq("purchase_order_id", poId);
+    const items = itemRows || [];
     if (items.length === 0) {
       return { success: false, error: "Purchase order has no items to receive." };
     }
 
+    const createdBy =
+      (user as any)?.id &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((user as any).id)
+        ? (user as any).id
+        : null;
+
     // 2. Increment stock in inventory_levels for each item
     for (const item of items) {
       const variantId = item.variant_id;
-      const qtyReceived = Number(item.quantity_ordered) || 0;
+      const qtyReceived = Number(item.quantity) || 0;
       if (!variantId || qtyReceived <= 0) continue;
 
       const { data: existingLevel } = await db
@@ -516,15 +579,21 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
         });
       }
 
-      // Record stock movement
+      // Record stock movement — real stock_movements columns only
+      // (movement_type / quantity / previous_quantity / new_quantity /
+      // reference_type / reference_id / notes / created_by).
       try {
         await db.from("stock_movements").insert({
           variant_id: variantId,
           warehouse_id: destinationWarehouseId,
-          quantity_change: qtyReceived,
-          reason: notes || `Goods received from PO: ${po.po_number || poId}`,
-          reason_code: "PURCHASE_RECEIPT",
-          reference_id: po.po_number || poId,
+          movement_type: "IN",
+          quantity: qtyReceived,
+          previous_quantity: previousQty,
+          new_quantity: newQty,
+          reference_type: "PURCHASE_ORDER",
+          reference_id: po.id,
+          notes: notes || `Goods received from PO: ${po.po_number || poId}`,
+          created_by: createdBy,
         });
       } catch (e: any) {
         console.warn("Could not insert stock_movements log:", e?.message);
@@ -533,7 +602,7 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
 
     // 3. Mark PO as DELIVERED / FULFILLED
     await db
-      .from("procurement_orders")
+      .from("purchase_orders")
       .update({
         status: "DELIVERED",
         updated_at: new Date().toISOString(),

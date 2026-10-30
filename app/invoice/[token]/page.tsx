@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { InvoiceSheet, InvoiceData } from "@/components/print/invoice-sheet";
 import { getStoreInfo, getInvoiceInfo } from "@/lib/actions/settings.actions";
+import { dhakaDateParts, formatDhakaDate, formatDhakaTime } from "@/lib/utils/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -36,16 +37,11 @@ export default async function PublicInvoicePage(props: {
 
   const shippingAddress = (order.shippingAddress || {}) as Record<string, any>;
 
+  // S5-6: Asia/Dhaka rendering (see the admin invoice page).
   const orderDateObj = order.createdAt || new Date();
-  const day = String(orderDateObj.getDate()).padStart(2, "0");
-  const month = String(orderDateObj.getMonth() + 1).padStart(2, "0");
-  const year = orderDateObj.getFullYear();
-  const orderDate = `${day}-${month}-${year}`;
-  const orderTime = [
-    String(orderDateObj.getHours()).padStart(2, "0"),
-    String(orderDateObj.getMinutes()).padStart(2, "0"),
-    String(orderDateObj.getSeconds()).padStart(2, "0"),
-  ].join(":");
+  const { day, month, year } = dhakaDateParts(orderDateObj);
+  const orderDate = formatDhakaDate(orderDateObj);
+  const orderTime = formatDhakaTime(orderDateObj);
 
   const cleanNumericDigits = (order.id || "").replace(/\D/g, "").slice(0, 10);
   const barcodeValue = `${year.toString().slice(-2)}${month}${day}${cleanNumericDigits.padEnd(10, "0")}`;

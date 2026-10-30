@@ -78,6 +78,10 @@ export interface OrderItem {
   sku: string;
   product_name: string;
   variant_name: string | null;
+  /** S5-1: readable variant attributes from variants.attributes JSON. */
+  variant_size?: string | null;
+  variant_color?: string | null;
+  variant_label?: string | null;
   unit_price: number;
   quantity: number;
   discount: number;

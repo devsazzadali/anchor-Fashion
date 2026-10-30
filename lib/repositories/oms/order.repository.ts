@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { Order, OrderStatus } from "@/types/oms";
+import { parseVariantAttributes } from "@/lib/utils/variant-attributes";
+import {
+  recordOrderPayment,
+  markOrderPaymentSuccess,
+} from "@/lib/payments/order-payment-record";
 
 export class OrderRepository {
   async getOrderById(id: string, _?: any): Promise<Order | null> {
@@ -9,12 +14,18 @@ export class OrderRepository {
     if (isUuid) {
       order = await prisma.order.findUnique({
         where: { id },
-        include: { items: true, statusHistory: true },
+        include: {
+          items: { include: { variant: { select: { attributes: true } } } },
+          statusHistory: true,
+        },
       });
     } else {
       order = await prisma.order.findUnique({
         where: { orderNumber: id },
-        include: { items: true, statusHistory: true },
+        include: {
+          items: { include: { variant: { select: { attributes: true } } } },
+          statusHistory: true,
+        },
       });
     }
 
@@ -25,7 +36,10 @@ export class OrderRepository {
   async getOrderByNumber(orderNumber: string, _?: any): Promise<Order | null> {
     const order = await prisma.order.findUnique({
       where: { orderNumber },
-      include: { items: true, statusHistory: true },
+      include: {
+        items: { include: { variant: { select: { attributes: true } } } },
+        statusHistory: true,
+      },
     });
     if (!order) return null;
     return mapPrismaOrderToOms(order);
@@ -211,6 +225,20 @@ export class OrderRepository {
       include: { items: true, statusHistory: true },
     });
 
+    // S6-7: record the order's payment row (Finance → Transactions was
+    // permanently empty — nothing ever wrote the payments table).
+    // Never let the ledger write fail the placement itself.
+    try {
+      await recordOrderPayment({
+        orderId: created.id,
+        amount: Number(created.totalAmount) || 0,
+        method: created.paymentMethod,
+        paymentStatus: created.paymentStatus,
+      });
+    } catch (payErr) {
+      console.error("[OrderRepository.createOrder] Payment record failed:", payErr);
+    }
+
     return mapPrismaOrderToOms(created);
   }
 
@@ -226,13 +254,55 @@ export class OrderRepository {
         updatedBy
       );
 
+    const target = status.toUpperCase();
+
+    // S3-5: lifecycle fields were never stamped — orders advanced through
+    // the OMS kept shipped_at / delivered_at NULL and COD orders stayed
+    // UNPAID after delivery. Stamp them on the transitions that mean them:
+    //   SHIPPED              → shippedAt = now
+    //   DELIVERED / COMPLETED → deliveredAt = now; a COD order is paid in
+    //                          cash on delivery, so paymentStatus → PAID
+    //                          (+ paidAt) for COD only — prepaid flows
+    //                          already carry their own payment state.
+    const current = await prisma.order.findUnique({
+      where: { id },
+      select: {
+        paymentMethod: true,
+        paymentStatus: true,
+        totalAmount: true,
+        shippingFee: true,
+        shippingAddress: true,
+      },
+    });
+    const now = new Date();
+    const lifecycle: {
+      shippedAt?: Date;
+      deliveredAt?: Date;
+      paymentStatus?: string;
+      paidAt?: Date;
+    } = {};
+    if (target === "SHIPPED") {
+      lifecycle.shippedAt = now;
+    }
+    if (target === "DELIVERED" || target === "COMPLETED") {
+      lifecycle.deliveredAt = now;
+      if (
+        String(current?.paymentMethod || "").toUpperCase() === "COD" &&
+        String(current?.paymentStatus || "").toUpperCase() !== "PAID"
+      ) {
+        lifecycle.paymentStatus = "PAID";
+        lifecycle.paidAt = now;
+      }
+    }
+
     const updated = await prisma.order.update({
       where: { id },
       data: {
-        status: status.toUpperCase(),
+        status: target,
+        ...lifecycle,
         statusHistory: {
           create: {
-            status: status.toUpperCase(),
+            status: target,
             notes: updatedBy
               ? `Order status updated to ${status} (by ${updatedBy})`
               : `Order status updated to ${status}`,
@@ -242,6 +312,81 @@ export class OrderRepository {
       },
       include: { items: true, statusHistory: true },
     });
+
+    // S5-8: shipping an order never created a shipment record — the
+    // shipments table sat at 0 rows while orders went SHIPPED/DELIVERED,
+    // leaving Shipment Management permanently empty and the lifecycle
+    // disconnected from the shipping module. Birth the shipment here,
+    // at the single status write point: exactly one per order, created
+    // on the SHIPPED transition, carrying the recipient snapshot and
+    // COD amount from the order, in the "created" state (born, awaiting
+    // courier assignment — no courier is implied yet).
+    if (target === "SHIPPED") {
+      try {
+        const existing = await prisma.shipment.findFirst({
+          where: { orderId: id },
+          select: { id: true },
+        });
+        if (!existing) {
+          const addr = (current?.shippingAddress ?? {}) as Record<string, any>;
+          const recipientName =
+            addr.recipient_name ||
+            addr.recipientName ||
+            addr.name ||
+            [addr.first_name || addr.firstName, addr.last_name || addr.lastName]
+              .filter(Boolean)
+              .join(" ")
+              .trim() ||
+            null;
+          const recipientAddress =
+            [addr.address_line_1 || addr.addressLine1 || addr.street, addr.address_line_2 || addr.addressLine2]
+              .filter(Boolean)
+              .join(", ") || null;
+          const isCod =
+            String(current?.paymentMethod || "").toUpperCase() === "COD";
+          await prisma.shipment.create({
+            data: {
+              orderId: id,
+              shipmentNumber: `SHP-${Date.now()}`,
+              status: "created",
+              courier: null,
+              recipientName,
+              recipientPhone: addr.phone || null,
+              recipientAddress,
+              recipientCity: addr.city || null,
+              recipientDistrict: addr.district || addr.state || null,
+              isCod,
+              codAmount: isCod ? Number(current?.totalAmount ?? 0) : 0,
+              shippingCharge: Number(current?.shippingFee ?? 0),
+              shippedAt: now,
+              createdBy: isUserUuid ? updatedBy! : null,
+            },
+          });
+        }
+      } catch (shipErr) {
+        // The status transition itself has already committed; a shipment
+        // failure must not fail the order update, but it must be loud —
+        // silent auxiliary failures are how S5-8 went unnoticed.
+        console.error(
+          `[OrderRepository] Failed to create shipment for shipped order ${id}:`,
+          shipErr
+        );
+      }
+    }
+
+    // S6-7: when this transition marked the order PAID (the round-5 COD
+    // hook above), flip its payment ledger row to SUCCESS so Finance →
+    // Transactions reflects the cash actually collected.
+    if (lifecycle.paymentStatus === "PAID") {
+      try {
+        await markOrderPaymentSuccess(id);
+      } catch (payErr) {
+        console.error(
+          `[OrderRepository] Failed to mark payment SUCCESS for order ${id}:`,
+          payErr
+        );
+      }
+    }
 
     return mapPrismaOrderToOms(updated);
   }
@@ -302,20 +447,28 @@ function mapPrismaOrderToOms(record: any): Order {
     delivered_at: record.deliveredAt?.toISOString() || null,
     cancelled_at: record.cancelledAt?.toISOString() || null,
     updated_by: null,
-    items: (record.items || []).map((item: any) => ({
-      id: item.id,
-      order_id: item.orderId,
-      product_id: item.productId,
-      variant_id: item.variantId,
-      sku: item.sku,
-      product_name: item.productName,
-      variant_name: item.variantName,
-      quantity: item.quantity,
-      unit_price: Number(item.unitPrice || 0),
-      line_total: Number(item.totalPrice || 0),
-      total_price: Number(item.totalPrice || 0),
-      created_at: item.createdAt?.toISOString(),
-    })),
+    items: (record.items || []).map((item: any) => {
+      // S5-1: readable size/colour from the variant's attribute JSON
+      // when the query included it; nulls otherwise.
+      const attrs = parseVariantAttributes(item.variant?.attributes);
+      return {
+        id: item.id,
+        order_id: item.orderId,
+        product_id: item.productId,
+        variant_id: item.variantId,
+        sku: item.sku,
+        product_name: item.productName,
+        variant_name: item.variantName,
+        variant_size: attrs.size,
+        variant_color: attrs.color,
+        variant_label: attrs.label,
+        quantity: item.quantity,
+        unit_price: Number(item.unitPrice || 0),
+        line_total: Number(item.totalPrice || 0),
+        total_price: Number(item.totalPrice || 0),
+        created_at: item.createdAt?.toISOString(),
+      };
+    }),
     shipping_address: shippingAddr ? (shippingAddr as any) : undefined,
     billing_address: billingAddr ? (billingAddr as any) : undefined,
   } as Order;

@@ -4,7 +4,7 @@ import { verifyStaff } from "@/lib/security/roles";
 
 export async function POST(request: NextRequest) {
   try {
-    await verifyStaff();
+    const user = await verifyStaff();
     const body = await request.json();
     if (!body.variant_id || !body.from_warehouse_id || !body.to_warehouse_id || !body.quantity) {
       return NextResponse.json(
@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
       body.to_warehouse_id,
       body.quantity,
       body.reason || "WAREHOUSE_TRANSFER",
-      body.notes
+      body.notes,
+      (user as any)?.id
     );
     return NextResponse.json({ success: true, message: "Stock transferred successfully." });
   } catch (error: any) {

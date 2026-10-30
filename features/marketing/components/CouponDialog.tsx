@@ -171,7 +171,7 @@ export function CouponDialog({ open, onOpenChange, onSuccess }: CouponDialogProp
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="PERCENTAGE">Percentage (%)</SelectItem>
-                        <SelectItem value="FIXED">Fixed Amount ($)</SelectItem>
+                        <SelectItem value="FIXED">Fixed Amount (৳)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

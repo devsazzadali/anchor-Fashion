@@ -177,7 +177,7 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
                         <TableCell className="font-medium">
                           {coupon.discount_type === "PERCENTAGE"
                             ? `${coupon.value}% OFF`
-                            : `$${coupon.value} OFF`}
+                            : `৳${coupon.value} OFF`}
                         </TableCell>
                         <TableCell className="capitalize text-xs">
                           {coupon.discount_type === "PERCENTAGE" ? "Percentage" : "Fixed Amount"}

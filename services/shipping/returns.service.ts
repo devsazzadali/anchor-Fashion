@@ -27,6 +27,33 @@ export interface ReturnPolicySettings {
   allowed_reasons: string[];
 }
 
+/**
+ * Round 8 (S5-flag): the returns table has NO refund_status /
+ * refund_method / completed_at columns — the write sanitizer silently
+ * dropped them, so settled state never persisted and the refund lock
+ * (which filtered on refund_status) dead-locked every refund. Writes
+ * now use only real columns: lifecycle lives in `status`, and the
+ * settlement record lives in `notes` as appended lines — the exact
+ * lines the round-7 read path (attachItemsAndRefundState) derives
+ * refund_status / refund_method from. Nothing is silently dropped.
+ */
+function appendNoteLine(
+  notes: string | null | undefined,
+  line: string
+): string {
+  return [typeof notes === "string" ? notes.trim() : "", line]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function refundSettledLine(method: string, amount: number): string {
+  return `Refund settled (${method}) by admin. Amount: ৳${amount}.`;
+}
+
+function refundMethodLine(method: string): string {
+  return `Refund method: ${method}`;
+}
+
 const DEFAULT_POLICY_SETTINGS: ReturnPolicySettings = {
   return_window_days: 7,
   require_photo_for_damaged: true,
@@ -344,6 +371,11 @@ export class ReturnsService {
     );
 
     // 5. Generate return number and insert record
+    // Round 8: ONLY real returns/return_items columns are written.
+    // refund_status / refund_method / exchange_* / photo_urls and the
+    // item-level sku / product_name / refund_amount have no columns —
+    // the sanitizer silently dropped them. The chosen refund method is
+    // persisted as a notes line instead (the read path derives it back).
     const returnNumber = this.generateReturnNumber();
     const returnData = {
       return_number: returnNumber,
@@ -351,14 +383,11 @@ export class ReturnsService {
       customer_id: customerId,
       status: "requested" as const,
       reason: input.reason,
-      notes: input.customerNote || null,
-      customer_note: input.customerNote || null,
-      refund_status: "PENDING" as const,
+      notes: appendNoteLine(
+        input.customerNote || null,
+        refundMethodLine(input.refundMethod || "ORIGINAL_PAYMENT")
+      ),
       refund_amount: finalRefundAmount,
-      refund_method: input.refundMethod || "ORIGINAL_PAYMENT",
-      exchange_requested: Boolean(input.exchangeRequested),
-      exchange_variant_id: input.exchangeVariantId || null,
-      photo_urls: input.photoUrls || [],
     };
 
     const createdReturn = await this.returnRepo.createReturn(
@@ -366,13 +395,10 @@ export class ReturnsService {
       returnItemsPayload.map((it) => ({
         order_item_id: it.orderItemId,
         variant_id: it.variantId || null,
-        sku: it.sku,
-        product_name: it.productName,
         quantity: it.quantity,
         reason: it.reason,
         condition: it.condition,
         restocked: false,
-        refund_amount: it.refundAmount,
       })) as any
     );
 
@@ -496,10 +522,21 @@ export class ReturnsService {
     const items = await this.returnRepo.getReturnItems(returnId);
 
     for (const item of items) {
-      const condition = itemConditions[item.id] || item.condition;
+      // S5-7: customer-submitted returns are created with condition
+      // "unknown" (only damaged/defective reasons carry a condition),
+      // and the admin Inspect & Sync action passes no per-item
+      // conditions — so under the old rule (restock only stored "good")
+      // NOTHING ever restocked: levels and movements stayed untouched
+      // while the return advanced to "Inventory Synced". The Inspect &
+      // Sync step IS the inspection: an item with no explicit override
+      // and no recorded damage is inspected-good. Items recorded (or
+      // overridden) as damaged/defective remain quarantined.
+      const condition =
+        itemConditions[item.id] ||
+        (item.condition === "unknown" ? "good" : item.condition);
 
-      // Update condition on return item
-      if (itemConditions[item.id] && itemConditions[item.id] !== item.condition) {
+      // Persist the resolved condition on return item
+      if (condition !== item.condition) {
         await db
           .from("return_items")
           .update({ condition } as any)
@@ -543,11 +580,23 @@ export class ReturnsService {
           }
 
           if (variantId) {
-            const defaultWh = await prisma.warehouse.findFirst({
-              where: { isActive: true },
-              select: { id: true },
+            // S5-7: restock into the warehouse that already holds this
+            // variant's level (the order's warehouse in this
+            // single-warehouse operation); fall back to the first
+            // active warehouse when the variant has no level yet.
+            const existingLevel = await prisma.inventoryLevel.findFirst({
+              where: { variantId },
+              select: { warehouseId: true },
             });
-            warehouseId = defaultWh?.id || null;
+            if (existingLevel?.warehouseId) {
+              warehouseId = existingLevel.warehouseId;
+            } else {
+              const defaultWh = await prisma.warehouse.findFirst({
+                where: { isActive: true },
+                select: { id: true },
+              });
+              warehouseId = defaultWh?.id || null;
+            }
 
             if (warehouseId) {
               let level = await prisma.inventoryLevel.findFirst({
@@ -624,11 +673,16 @@ export class ReturnsService {
       return { success: true, method: returnRecord.refund_method || "ORIGINAL_PAYMENT" };
     }
 
-    // ATOMIC LOCK: Prevent concurrent refund processing
+    // ATOMIC LOCK: Prevent concurrent refund processing.
+    // Round 8: the old lock filtered on the nonexistent refund_status
+    // column and dead-locked EVERY refund. claimRefundProcessing is a
+    // compare-and-swap on the real status/notes columns; it also
+    // returns the row whose notes become the base for the settle-line
+    // appends below.
+    let notesBase: string | null = (returnRecord as any).notes ?? null;
     try {
-      await this.returnRepo.atomicUpdateRefundStatus(returnId, ["PENDING", null], {
-        refund_status: "PROCESSING"
-      }, adminUserId);
+      const claimed = await this.returnRepo.claimRefundProcessing(returnId, adminUserId);
+      notesBase = (claimed as any).notes ?? notesBase;
     } catch (lockError) {
       return { success: false, method: "UNKNOWN", error: "Refund is already being processed or was completed." };
     }
@@ -643,12 +697,22 @@ export class ReturnsService {
       throw new Error(`Order ${returnRecord.order_id} not found.`);
     }
 
-    const { data: paymentTransactions } = await db
-      .from("payment_transactions")
-      .select("*")
-      .eq("order_id", returnRecord.order_id);
+    // Gateway transaction lookup. (There is no payment_transactions
+    // table in this schema — the read resolves empty; gateway branches
+    // below then fall through to their manual-pending notes, which is
+    // the truthful state without gateway records.)
+    let paymentTransactions: any[] = [];
+    try {
+      const { data } = await db
+        .from("payment_transactions")
+        .select("*")
+        .eq("order_id", returnRecord.order_id);
+      paymentTransactions = data || [];
+    } catch {
+      paymentTransactions = [];
+    }
 
-    (order as any).payment_transactions = paymentTransactions || [];
+    (order as any).payment_transactions = paymentTransactions;
 
     const refundAmount = Number(returnRecord.refund_amount || 0);
     const refundMethod = returnRecord.refund_method || "ORIGINAL_PAYMENT";
@@ -668,9 +732,8 @@ export class ReturnsService {
       });
 
       await this.returnRepo.updateReturn(returnId, {
-        refund_status: "PROCESSED",
-        completed_at: new Date().toISOString(),
         status: "completed",
+        notes: appendNoteLine(notesBase, refundSettledLine("WALLET", refundAmount)),
       });
 
       try {
@@ -686,10 +749,15 @@ export class ReturnsService {
     // 2. COD Orders (Cash on Delivery)
     if (order.payment_method === "COD") {
       // Cash was paid to delivery agent; gateway refund is impossible.
-      // Customer chose non-wallet: record as PENDING manual transfer or mark completed if admin confirms.
+      // Customer chose non-wallet: the refund stays PENDING (status is
+      // NOT completed, so the derived refund_status stays PENDING) and
+      // the manual obligation is appended to notes — the old code wrote
+      // refund_status/internal_note keys the sanitizer folded/dropped.
       await this.returnRepo.updateReturn(returnId, {
-        refund_status: "PENDING",
-        internal_note: `COD Order: Manual bank/cash refund required of ৳${refundAmount}.`,
+        notes: appendNoteLine(
+          notesBase,
+          `COD Order: Manual bank/cash refund required of ৳${refundAmount}.`
+        ),
       });
 
       return {
@@ -716,10 +784,11 @@ export class ReturnsService {
 
           if (res.refundTrxID) {
             await this.returnRepo.updateReturn(returnId, {
-              refund_status: "PROCESSED",
-              completed_at: new Date().toISOString(),
               status: "completed",
-              internal_note: `bKash refund completed. TrxID: ${res.refundTrxID}`,
+              notes: appendNoteLine(
+                notesBase,
+                `${refundSettledLine("BKASH", refundAmount)} TrxID: ${res.refundTrxID}`
+              ),
             });
 
             try {
@@ -738,8 +807,10 @@ export class ReturnsService {
 
       // If provider refund threw or was in sandbox without credentials
       await this.returnRepo.updateReturn(returnId, {
-        refund_status: "PENDING",
-        internal_note: `bKash refund pending admin manual dispatch of ৳${refundAmount}.`,
+        notes: appendNoteLine(
+          notesBase,
+          `bKash refund pending admin manual dispatch of ৳${refundAmount}.`
+        ),
       });
       return { success: true, method: "BKASH_PENDING" };
     }
@@ -761,10 +832,11 @@ export class ReturnsService {
 
           if (res.status === "success" || res.refund_ref_id) {
             await this.returnRepo.updateReturn(returnId, {
-              refund_status: "PROCESSED",
-              completed_at: new Date().toISOString(),
               status: "completed",
-              internal_note: `SSLCommerz refund initiated. Ref: ${res.refund_ref_id || res.trans_id}`,
+              notes: appendNoteLine(
+                notesBase,
+                `${refundSettledLine("SSLCOMMERZ", refundAmount)} Ref: ${res.refund_ref_id || res.trans_id}`
+              ),
             });
 
             try {
@@ -782,16 +854,20 @@ export class ReturnsService {
       }
 
       await this.returnRepo.updateReturn(returnId, {
-        refund_status: "PENDING",
-        internal_note: `SSLCommerz refund pending manual settlement of ৳${refundAmount}.`,
+        notes: appendNoteLine(
+          notesBase,
+          `SSLCommerz refund pending manual settlement of ৳${refundAmount}.`
+        ),
       });
       return { success: true, method: "SSLCOMMERZ_PENDING" };
     }
 
     // Default fallback
     await this.returnRepo.updateReturn(returnId, {
-      refund_status: "PENDING",
-      internal_note: `Refund of ৳${refundAmount} pending admin processing.`,
+      notes: appendNoteLine(
+        notesBase,
+        `Refund of ৳${refundAmount} pending admin processing.`
+      ),
     });
     return { success: true, method: "MANUAL_PENDING" };
   }
@@ -815,25 +891,23 @@ export class ReturnsService {
         return_number: returnNumber,
         order_id: input.orderId,
         customer_id: customerId ?? null,
-        shipment_id: input.shipmentId ?? null,
         status: "requested",
         reason: input.reason,
-        notes: input.customerNote || null,
-        customer_note: input.customerNote || null,
-        refund_method: input.refundMethod || "ORIGINAL_PAYMENT",
-        exchange_requested: Boolean(input.exchangeRequested),
-        exchange_variant_id: input.exchangeVariantId || null,
-        photo_urls: input.photoUrls || [],
+        // Round 8: real columns only (see requestReturn) — the method
+        // is persisted as a notes line; shipment_id / exchange_* /
+        // photo_urls have no columns and were silently dropped.
+        notes: appendNoteLine(
+          input.customerNote || null,
+          refundMethodLine(input.refundMethod || "ORIGINAL_PAYMENT")
+        ),
       } as any,
       input.items.map((item) => ({
         order_item_id: item.orderItemId ?? null,
-        sku: item.sku,
-        product_name: item.productName,
+        variant_id: (item as any).variantId ?? null,
         quantity: item.quantity,
         reason: item.reason ?? null,
         condition: item.condition ?? "unknown",
         restocked: false,
-        refund_amount: item.refundAmount || 0,
       })) as any
     );
 
@@ -912,9 +986,10 @@ export class ReturnsService {
    * Complete the return process.
    */
   async completeReturn(returnId: string, updatedBy?: string): Promise<ReturnRequest> {
+    // Round 8: completed_at has no column (silently dropped) — the
+    // completion time is the row's updated_at, stamped by the update.
     return this.returnRepo.atomicUpdateStatus(returnId, ["inventory_synced", "received", "approved"], {
       status: "completed",
-      completed_at: new Date().toISOString(),
     }, updatedBy);
   }
 
@@ -951,12 +1026,20 @@ export class ReturnsService {
       }
     }
 
-    // 2. Mark return as completed and refund processed
+    // 2. Mark return as completed and refund processed.
+    // Round 8: real columns only — the old payload's refund_status and
+    // completed_at were silently dropped by the sanitizer, and its
+    // internal_note only survived when `notes` happened to be empty
+    // (the sanitizer folds internal_note into notes ONLY if notes is
+    // unset — with a customer note present the settle line was LOST).
+    // The settle line is now appended to the persisted notes, which is
+    // exactly what the read path derives refund state from.
     await this.returnRepo.updateReturn(returnRecord.id, {
       status: "completed",
-      refund_status: "PROCESSED",
-      completed_at: new Date().toISOString(),
-      internal_note: options?.note || `Refund settled (${chosenMethod}) by admin. Amount: ৳${refundAmount}.`,
+      notes: appendNoteLine(
+        (returnRecord as any).notes,
+        options?.note || refundSettledLine(chosenMethod, refundAmount)
+      ),
     });
 
     // 3. Try to reverse referral reward if applicable

@@ -30,6 +30,10 @@ export function useOrderDetails(orderId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      // S5-4: force an immediate refetch of the detail query as well —
+      // invalidation alone left the page on the pre-transition state for
+      // several transitions until a manual reload.
+      queryClient.refetchQueries({ queryKey: ["order", orderId] });
     },
   });
 

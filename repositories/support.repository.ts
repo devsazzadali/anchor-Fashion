@@ -32,6 +32,22 @@ export interface TicketMessageRecord {
   created_at: string;
 }
 
+/**
+ * S3-2: ticket_messages' real columns are `body` and `is_internal` — there
+ * is no `message`, `is_internal_note` or `read_at` column. Rows read through
+ * the DB layer come back keyed by the real columns, so normalize them into
+ * the record shape the consoles render.
+ */
+function normalizeTicketMessage(row: any): TicketMessageRecord {
+  if (!row) return row;
+  return {
+    ...row,
+    message: row.message ?? row.body ?? "",
+    is_internal_note: row.is_internal_note ?? !!row.is_internal,
+    read_at: row.read_at ?? null,
+  };
+}
+
 export class SupportRepository {
   private static async getClient() {
     try {
@@ -77,22 +93,25 @@ export class SupportRepository {
     // Attach customer and message stats
     const enriched: SupportTicketRecord[] = await Promise.all(
       tickets.map(async (t: any) => {
-        // Fetch last message
-        const { data: lastMsg } = await db
+        // Fetch recent messages (real column is `body`; there is no
+        // `message` / `read_at` column on ticket_messages). The unread
+        // count is derived from the same rows: customer messages sent
+        // after the latest staff/system message are unread. (The old
+        // count query filtered on the phantom `read_at` column, which
+        // poisoned it into always returning nothing.)
+        const { data: recentMsgs } = await db
           .from("ticket_messages")
-          .select("message, created_at, sender_type, read_at")
+          .select("body, created_at, sender_type")
           .eq("ticket_id", t.id)
           .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        // Fetch unread count from customer
-        const { count: unreadCount } = await db
-          .from("ticket_messages")
-          .select("id", { count: "exact", head: true })
-          .eq("ticket_id", t.id)
-          .eq("sender_type", "CUSTOMER")
-          .is("read_at", null);
+          .limit(100);
+        const msgs = recentMsgs || [];
+        const lastMsg = msgs[0];
+        let unreadCount = 0;
+        for (const m of msgs) {
+          if (m.sender_type === "CUSTOMER") unreadCount += 1;
+          else break;
+        }
 
         const cust = t.profile_id && profilesMap[t.profile_id]
           ? { id: t.profile_id, ...profilesMap[t.profile_id] }
@@ -101,7 +120,7 @@ export class SupportRepository {
         return {
           ...t,
           customer: cust,
-          last_message: lastMsg?.message || t.description || "Ticket opened",
+          last_message: lastMsg?.body || t.description || "Ticket opened",
           unread_count: unreadCount || 0,
         };
       })
@@ -122,7 +141,7 @@ export class SupportRepository {
       console.error("Error fetching ticket messages:", error);
       return [];
     }
-    return data || [];
+    return (data || []).map(normalizeTicketMessage);
   }
 
   static async sendMessage(params: {
@@ -132,14 +151,19 @@ export class SupportRepository {
     isInternalNote?: boolean;
   }): Promise<TicketMessageRecord> {
     const db = await this.getClient();
+    // S3-2: the payload previously sent `message` and `is_internal_note`,
+    // which are NOT columns of ticket_messages (real columns: `body`,
+    // `is_internal`). The DB layer silently discards any write containing
+    // an unknown column, so every staff reply vanished while the UI
+    // reported success. Only real columns may be sent.
     const { data, error } = await db
       .from("ticket_messages")
       .insert({
         ticket_id: params.ticketId,
         sender_id: params.senderId || null,
         sender_type: "AGENT",
-        message: params.message.trim(),
-        is_internal_note: !!params.isInternalNote,
+        body: params.message.trim(),
+        is_internal: !!params.isInternalNote,
       })
       .select()
       .single();
@@ -154,7 +178,7 @@ export class SupportRepository {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", params.ticketId);
 
-    return data;
+    return normalizeTicketMessage(data);
   }
 
   static async updateTicketStatus(ticketId: string, status: string): Promise<void> {
@@ -177,13 +201,17 @@ export class SupportRepository {
   }
 
   static async markMessagesRead(ticketId: string): Promise<void> {
-    const db = await this.getClient();
-    await db
-      .from("ticket_messages")
-      .update({ read_at: new Date().toISOString() })
-      .eq("ticket_id", ticketId)
-      .eq("sender_type", "CUSTOMER")
-      .is("read_at", null);
+    // ticket_messages has no `read_at` column (real columns: id,
+    // ticket_id, sender_id, sender_type, body, is_internal, created_at),
+    // so there is nothing to stamp — the previous update payload named
+    // the phantom column and the DB layer silently discarded it (and its
+    // `.is("read_at", null)` filter poisoned the query regardless).
+    // Read state is therefore DERIVED at read time instead: getTickets
+    // counts customer messages sent after the latest staff reply as
+    // unread. This method is kept as an explicit no-op so existing
+    // callers (ticket-open actions) keep working without pretending a
+    // write happened.
+    void ticketId;
   }
 
   // --- Instance methods for SupportService compatibility ---
@@ -209,6 +237,15 @@ export class SupportRepository {
 
       if (!simpleTicket) return null;
 
+      finalTicket = simpleTicket;
+    }
+
+    // S3-2 (read side): the DB layer does not attach the embedded
+    // `ticket_messages(*)` relation, so a successful ticket fetch arrives
+    // with no messages at all and the admin detail renders an empty
+    // thread. Always attach the messages explicitly when the embed did
+    // not provide them.
+    if (finalTicket && !Array.isArray(finalTicket.ticket_messages)) {
       const { data: messages } = await db
         .from("ticket_messages")
         .select("*")
@@ -216,8 +253,8 @@ export class SupportRepository {
         .order("created_at", { ascending: true });
 
       finalTicket = {
-        ...simpleTicket,
-        ticket_messages: messages || [],
+        ...finalTicket,
+        ticket_messages: (messages || []).map(normalizeTicketMessage),
       };
     }
 
@@ -405,11 +442,14 @@ export class SupportRepository {
     const messageText = (data.message || data.body || "").trim();
     const isInternal = !!(data.is_internal_note ?? data.is_internal);
 
+    // S3-2: write the REAL columns (`body`, `is_internal`) — sending the
+    // legacy `message` / `is_internal_note` keys made the DB layer discard
+    // the insert silently (see sendMessage above).
     const payload: Record<string, any> = {
       ticket_id: data.ticket_id,
       sender_type: data.sender_type || "AGENT",
-      message: messageText,
-      is_internal_note: isInternal,
+      body: messageText,
+      is_internal: isInternal,
     };
     if (data.sender_id) {
       payload.sender_id = data.sender_id;
@@ -429,7 +469,7 @@ export class SupportRepository {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", data.ticket_id);
 
-    return msg;
+    return normalizeTicketMessage(msg);
   }
 
   async getKnowledgeBaseArticles(): Promise<any[]> {

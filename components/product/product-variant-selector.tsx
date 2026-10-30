@@ -384,6 +384,17 @@ export function ProductVariantSelector({
       matchedVariant?.price ??
       productPrice;
 
+    // S4-1: the compare-at ("retail") price is the HIGHER of the variant's
+    // regular price and the product's base price. Products published from
+    // inventory carry the selling price as the variant's price_override
+    // while the retail price lives on the product's base_price — comparing
+    // the product sale price only against the variant override made the
+    // struck-through compare-at vanish whenever override == sale price.
+    const regularPrice = Math.max(
+      Number(baseRegularPrice) || 0,
+      Number(productPrice) || 0
+    );
+
     // Flash sale check
     if (flashSale && flashSale.stock_allocated > flashSale.stock_sold) {
       return {
@@ -394,19 +405,19 @@ export function ProductVariantSelector({
     }
 
     // Variant sale price
-    if (matchedVariant?.sale_price && matchedVariant.sale_price < baseRegularPrice) {
+    if (matchedVariant?.sale_price && matchedVariant.sale_price < regularPrice) {
       return {
         effectivePrice: matchedVariant.sale_price,
-        compareAtPrice: baseRegularPrice,
+        compareAtPrice: regularPrice,
         isFlashActive: false,
       };
     }
 
     // Product sale price fallback
-    if (productSalePrice && productSalePrice < baseRegularPrice) {
+    if (productSalePrice && productSalePrice < regularPrice) {
       return {
         effectivePrice: productSalePrice,
-        compareAtPrice: baseRegularPrice,
+        compareAtPrice: regularPrice,
         isFlashActive: false,
       };
     }

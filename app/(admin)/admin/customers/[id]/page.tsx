@@ -13,7 +13,16 @@ import {
   MessageSquare,
   Trophy,
   Activity,
+  Wallet,
 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { fetchCustomerDetailsAction } from "@/app/actions/crm/customer.actions";
 import { getCustomerPasswordAction } from "@/app/actions/crm/customer-admin.actions";
 import { CustomerActionButtons } from "./CustomerActionButtons";
@@ -37,7 +46,7 @@ export default async function CustomerProfilePage({
     );
   }
 
-  const { profile, ticketsCount, tier, points, ltv, segments, totalOrders } = data;
+  const { profile, ticketsCount, tier, points, ltv, segments, totalOrders, orders, walletBalance } = data;
   const customer = {
     name: profile.first_name
       ? `${profile.first_name} ${profile.last_name || ""}`
@@ -84,6 +93,7 @@ export default async function CustomerProfilePage({
         <CustomerActionButtons
           customerId={customerId}
           initialPoints={customer.points}
+          walletBalance={walletBalance}
           initialData={{
             firstName: profile.first_name || "",
             lastName: profile.last_name || "",
@@ -95,7 +105,7 @@ export default async function CustomerProfilePage({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -125,6 +135,22 @@ export default async function CustomerProfilePage({
             <div className="text-2xl font-bold">
               {customer.points.toLocaleString()}
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Wallet Balance
+            </CardTitle>
+            <Wallet className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              ৳{Number(walletBalance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Adjust it with the Adjust Wallet control above
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -172,11 +198,49 @@ export default async function CustomerProfilePage({
           <Card>
             <CardHeader>
               <CardTitle>Purchase History</CardTitle>
+              <CardDescription>
+                This customer&apos;s real orders, newest first.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-sm text-muted-foreground">
-                Order history table placeholder.
-              </div>
+              {orders && orders.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order #</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Items</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((o) => (
+                      <TableRow key={o.order_number}>
+                        <TableCell className="font-mono text-xs">
+                          {o.order_number}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(o.date).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {o.items_count}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          ৳{o.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{o.status}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  No orders yet for this customer.
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

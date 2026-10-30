@@ -27,8 +27,9 @@ import { AlphaSmsService } from "@/lib/services/sms/alpha-sms.service";
  * (webhook-id / webhook-timestamp / webhook-signature, HMAC-SHA256 over
  * `${id}.${timestamp}.${body}` with the endpoint's whsec_ secret).
  * Verification is enforced when NEON_AUTH_WEBHOOK_SECRET is set (do this
- * at registration time); without it the receiver accepts + logs, which
- * matches the posture of the other receivers in app/api/webhooks/*.
+ * at registration time). Without it the receiver accepts + logs ONLY in
+ * local/dev; in production it fails closed with 401 (S3-1) — an unsigned
+ * send.otp must never reach the SMS provider from a production deploy.
  */
 
 const OTP_EVENTS = new Set(["send.otp", "send_otp", "otp.send", "phone.otp"]);
@@ -79,6 +80,26 @@ export async function POST(req: Request) {
   const rawBody = await req.text();
 
   const secret = process.env.NEON_AUTH_WEBHOOK_SECRET;
+  if (!secret) {
+    // S3-1 (security): fail CLOSED in production. While the secret is unset
+    // this receiver cannot distinguish a genuine Neon Auth event from a
+    // forged one, and a forged send.otp reaches the SMS provider with an
+    // attacker-chosen phone number and message — an open SMS relay the
+    // moment the SMS account is funded. Local/dev keeps the accept + log
+    // posture so the payload contract can still be observed there.
+    const isProduction =
+      process.env.NODE_ENV === "production" ||
+      process.env.NEXT_PUBLIC_ENVIRONMENT === "production";
+    if (isProduction) {
+      console.error(
+        "[NeonAuth Webhook] REJECTED: NEON_AUTH_WEBHOOK_SECRET is not set in production — refusing to process an unverifiable webhook call. Register the webhook + secret in the Neon Console to enable phone-OTP delivery."
+      );
+      return NextResponse.json(
+        { error: "Webhook not configured" },
+        { status: 401 }
+      );
+    }
+  }
   if (secret) {
     if (!verifyStandardWebhook(rawBody, req.headers, secret)) {
       console.warn("[NeonAuth Webhook] Signature verification failed");

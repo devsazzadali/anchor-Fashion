@@ -255,6 +255,55 @@ export async function deleteCustomerByAdminAction(
   }
 }
 
+/**
+ * S6-4(c): admin wallet adjustment for the customer detail page.
+ * Signed amount (positive = credit, negative = debit) + a REQUIRED
+ * reason; writes through WalletService.adjustBalance, which records a
+ * wallet_transactions audit row (reference_type ADMIN_ADJUSTMENT,
+ * reason + admin identity in the description).
+ */
+export async function adjustCustomerWalletAction(data: {
+  customerId: string;
+  amount: number;
+  reason: string;
+}): Promise<{ success: boolean; balance?: number; error?: string }> {
+  try {
+    const admin: any = await verifyAdmin();
+
+    const cleanId = data.customerId?.trim();
+    const cleanReason = data.reason?.trim();
+    const amount = Number(data.amount);
+
+    if (!cleanId) {
+      return { success: false, error: "Customer ID is required." };
+    }
+    if (!cleanReason) {
+      return { success: false, error: "A reason is required for wallet adjustments." };
+    }
+    if (!amount || !Number.isFinite(amount)) {
+      return { success: false, error: "Enter a non-zero adjustment amount." };
+    }
+
+    const { WalletService } = await import("@/services/wallet.service");
+    const adminMarker = admin?.email || admin?.id || "admin";
+    const { wallet } = await WalletService.adjustBalance({
+      userId: cleanId,
+      signedAmount: amount,
+      reason: cleanReason,
+      adminMarker,
+    });
+
+    revalidatePath(`/admin/customers/${cleanId}`);
+    return { success: true, balance: Number(wallet.balance) };
+  } catch (error: any) {
+    console.error("[adjustCustomerWalletAction] Error:", error);
+    return {
+      success: false,
+      error: error?.message || "Failed to adjust wallet.",
+    };
+  }
+}
+
 export async function getCustomerPasswordAction(
   customerId: string
 ): Promise<{ success: boolean; password?: string | null; error?: string }> {

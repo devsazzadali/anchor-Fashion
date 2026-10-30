@@ -432,7 +432,7 @@ export async function stockAdjustmentAction(payload: StockAdjustmentPayload): Pr
 
 export async function stockTransferAction(payload: StockTransferPayload): Promise<{ success: boolean; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
-  await verifyStaff();
+  const user = await verifyStaff();
   try {
     const repo = new InventoryRepository();
     await repo.transferStock(
@@ -441,7 +441,8 @@ export async function stockTransferAction(payload: StockTransferPayload): Promis
       payload.to_warehouse_id,
       payload.quantity,
       payload.reason || "WAREHOUSE_TRANSFER",
-      payload.notes
+      payload.notes,
+      (user as any)?.id
     );
     revalidatePath("/admin/inventory/warehouses");
     revalidatePath(`/admin/inventory/warehouses/${payload.from_warehouse_id}`);

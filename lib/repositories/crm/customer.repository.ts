@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { LoyaltyTier } from "@/features/crm/components/LoyaltyTiers";
 import { CustomerLifecycleStage } from "@/features/crm/components/CustomersList";
+import {
+  LOYALTY_TIERS,
+  tierForLifetimePoints,
+  tierTitleCase,
+} from "@/lib/loyalty/tiers";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -166,8 +171,42 @@ export class CustomerRepository {
       );
     }
 
+    // S6-2: the directory's tier badge is the customer's REAL loyalty
+    // tier, derived from their loyalty account's lifetime earned points
+    // via the canonical ladder (lib/loyalty/tiers). Previously the list
+    // labelled anyone with lifetime spend > ৳5,000 "Platinum" and used a
+    // health-score guess for everyone else — a 57-point customer showed
+    // as PLATINUM here while his detail page said Silver.
+    const pageRows = merged.slice(0, limit);
+    const allIds = pageRows.flatMap((c) =>
+      [c.id, c.altId].filter(Boolean) as string[]
+    );
+    const loyaltyAccounts = allIds.length
+      ? await prisma.loyalty_accounts.findMany({
+          where: { customer_id: { in: allIds } },
+          select: {
+            customer_id: true,
+            points_balance: true,
+            total_points_earned: true,
+          },
+        })
+      : [];
+    const loyaltyByCustomerId = new Map(
+      loyaltyAccounts.map((a) => [a.customer_id, a])
+    );
+    const loyaltyFor = (c: MergedCustomer) => {
+      const account =
+        loyaltyByCustomerId.get(c.id) ||
+        (c.altId ? loyaltyByCustomerId.get(c.altId) : undefined);
+      if (!account) return { loyalty_tier: "SILVER", loyalty_points: 0 };
+      return {
+        loyalty_tier: tierForLifetimePoints(account.total_points_earned || 0),
+        loyalty_points: account.points_balance || 0,
+      };
+    };
+
     const rows = await Promise.all(
-      merged.slice(0, limit).map(async (c) => {
+      pageRows.map(async (c) => {
         const agg = await this.aggregatesFor(c);
         const lastInteraction = new Date(
           Math.max(
@@ -183,6 +222,7 @@ export class CustomerRepository {
           phone: c.phone || "",
           assigned_password: null,
           is_vip: agg.totalSpent > 5000,
+          ...loyaltyFor(c),
           customer_lifecycle_stage: this.deriveStage(
             agg.ordersCount,
             agg.totalSpent,
@@ -250,36 +290,17 @@ export class CustomerRepository {
         (a) => String(a.tier || "SILVER").toUpperCase() === tier
       ).length;
 
-    return [
-      {
-        tier: "SILVER" as LoyaltyTier,
-        benefits: ["Basic support", "5% discount on birthdays"],
-        customerCount: countFor("SILVER"),
-        minPoints: 0,
-        color: "bg-slate-300",
-      },
-      {
-        tier: "GOLD" as LoyaltyTier,
-        benefits: ["Priority support", "Free shipping", "10% discount on birthdays"],
-        customerCount: countFor("GOLD"),
-        minPoints: 1000,
-        color: "bg-yellow-400",
-      },
-      {
-        tier: "PLATINUM" as LoyaltyTier,
-        benefits: ["Dedicated manager", "Free express shipping", "Early access to sales"],
-        customerCount: countFor("PLATINUM"),
-        minPoints: 5000,
-        color: "bg-slate-800 text-white",
-      },
-      {
-        tier: "VIP" as LoyaltyTier,
-        benefits: ["All Platinum benefits", "Exclusive event invites", "Personal stylist"],
-        customerCount: countFor("VIP"),
-        minPoints: 20000,
-        color: "bg-purple-900 text-white",
-      },
-    ];
+    // S6-2: this tiers tab is the merchant-facing definition of the
+    // program, so it renders the canonical ladder from
+    // lib/loyalty/tiers — the same module the list badge, the detail
+    // header, the earn service and the storefront page now derive from.
+    return LOYALTY_TIERS.map((def) => ({
+      tier: def.tier as LoyaltyTier,
+      benefits: def.benefits,
+      customerCount: countFor(def.tier),
+      minPoints: def.minPoints,
+      color: def.color,
+    }));
   }
 
   async getCRMSummary() {
@@ -391,10 +412,44 @@ export class CustomerRepository {
       where: { customer_id: { in: ids } },
     });
     if (!account) return { points: 0, tier: "Silver" };
-    const rawTier = String(account.tier || "SILVER").toLowerCase();
+    // S6-2: derive the tier from lifetime earned points via the
+    // canonical ladder instead of echoing the stored column, so the
+    // detail header can never disagree with the tiers tab again.
     return {
       points: account.points_balance || 0,
-      tier: rawTier.charAt(0).toUpperCase() + rawTier.slice(1),
+      tier: tierTitleCase(
+        tierForLifetimePoints(account.total_points_earned || 0)
+      ),
     };
+  }
+
+  /**
+   * S6-4(a): the customer's real orders for the admin detail Purchase
+   * History tab (previously a literal "Order history table
+   * placeholder." string). Newest first; items counted from the real
+   * order_items rows.
+   */
+  async getCustomerOrders(id: string) {
+    const ids = await this.linkedIds(id);
+    const orders = await prisma.order.findMany({
+      where: {
+        OR: [{ customerId: { in: ids } }, { profileId: { in: ids } }],
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        orderNumber: true,
+        createdAt: true,
+        status: true,
+        totalAmount: true,
+        _count: { select: { items: true } },
+      },
+    });
+    return orders.map((o) => ({
+      order_number: o.orderNumber,
+      date: o.createdAt.toISOString(),
+      items_count: o._count.items,
+      total: Number(o.totalAmount) || 0,
+      status: String(o.status || "").toUpperCase(),
+    }));
   }
 }

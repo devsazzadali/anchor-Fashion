@@ -10,10 +10,15 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { RedeemRewardsDialog } from "@/features/customer/RedeemRewardsDialog";
 import { fetchLoyaltyAction } from "@/app/actions/customer.actions";
+import {
+  LOYALTY_TIERS,
+  tierForLifetimePoints,
+  nextTierProgress,
+  tierTitleCase,
+} from "@/lib/loyalty/tiers";
 
 export default function LoyaltyPage() {
   const [points, setPoints] = useState<number>(0);
-  const [tier, setTier] = useState<string>("MEMBER");
   const [lifetimePoints, setLifetimePoints] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
@@ -23,7 +28,6 @@ export default function LoyaltyPage() {
         const res = await fetchLoyaltyAction();
         if (res.success && res.data) {
           setPoints(res.data.points_balance || 0);
-          setTier(res.data.tier || "MEMBER");
           setLifetimePoints(res.data.lifetime_points || 0);
         }
       } catch (err) {
@@ -35,15 +39,15 @@ export default function LoyaltyPage() {
     loadLoyalty();
   }, []);
 
-  const getNextTierInfo = () => {
-    if (tier === "MEMBER") return { next: "BRONZE", threshold: 1000 };
-    if (tier === "BRONZE") return { next: "SILVER", threshold: 5000 };
-    if (tier === "SILVER") return { next: "GOLD", threshold: 15000 };
-    if (tier === "GOLD") return { next: "PLATINUM", threshold: 50000 };
-    return null;
-  };
-
-  const nextTier = getNextTierInfo();
+  // S6-2: tier + progress derive from the canonical ladder
+  // (lib/loyalty/tiers — the same definition the admin tiers tab
+  // renders). This page previously ran a private MEMBER/BRONZE ladder
+  // that put GOLD at 15,000 lifetime points while admin said 1,000,
+  // and showed a Bronze tier that does not exist in the program.
+  // Deriving from lifetime points (not the stored tier string) keeps
+  // this page consistent even if the stored column ever lags.
+  const currentTier = tierForLifetimePoints(lifetimePoints);
+  const nextTier = nextTierProgress(lifetimePoints);
   const progressPercent = nextTier ? Math.min((lifetimePoints / nextTier.threshold) * 100, 100) : 100;
 
   if (loading) {
@@ -73,7 +77,7 @@ export default function LoyaltyPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <TierBadge tier={tier} />
+                  <TierBadge tier={tierTitleCase(currentTier)} />
                   <span className="text-xs text-gray-400">Lifetime Points: {lifetimePoints.toLocaleString()}</span>
                 </div>
               </div>
@@ -118,26 +122,20 @@ export default function LoyaltyPage() {
       <div className="space-y-6">
         <h3 className="text-lg font-medium text-[#1A1A1A]">Your Tier Benefits</h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <BenefitCard 
-            title="Bronze" 
-            description="Access to member-only sales" 
-            active={tier === "BRONZE" || tier === "SILVER" || tier === "GOLD" || tier === "PLATINUM"} 
-          />
-          <BenefitCard 
-            title="Silver" 
-            description="Birthday gift and standard free shipping" 
-            active={tier === "SILVER" || tier === "GOLD" || tier === "PLATINUM"} 
-          />
-          <BenefitCard 
-            title="Gold" 
-            description="Free express shipping and early access" 
-            active={tier === "GOLD" || tier === "PLATINUM"} 
-          />
-          <BenefitCard 
-            title="Platinum" 
-            description="VIP events, priority support, and stylist" 
-            active={tier === "PLATINUM"} 
-          />
+          {LOYALTY_TIERS.map((def) => {
+            const rank = LOYALTY_TIERS.findIndex((d) => d.tier === def.tier);
+            const currentRank = LOYALTY_TIERS.findIndex(
+              (d) => d.tier === currentTier
+            );
+            return (
+              <BenefitCard
+                key={def.tier}
+                title={tierTitleCase(def.tier)}
+                description={def.benefits.join(" · ")}
+                active={rank <= currentRank}
+              />
+            );
+          })}
         </div>
       </div>
     </div>

@@ -17,7 +17,9 @@ import {
 import { format, subDays } from "date-fns";
 import { useState, useTransition } from "react";
 import { DateRange } from "react-day-picker";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { exportSalesReportCsvAction } from "@/app/actions/analytics/dashboard.actions";
 import {
   Select,
   SelectContent,
@@ -65,8 +67,51 @@ export function AnalyticsFilters({
     });
   };
 
-  const handleExport = () => {
-    window.print();
+  const [isExporting, setIsExporting] = useState(false);
+
+  /**
+   * S6-8: on the Sales Report page, Export downloads a CSV of the
+   * report currently shown (same from/to range the page is rendering).
+   * The old handler called window.print() on the chart-heavy page —
+   * the tab froze and no file was produced. The CSV is generated
+   * server-side from the same aggregated data and delivered as a Blob
+   * download; nothing heavy runs on the main thread.
+   * (This filter bar is shared by the other analytics pages; their
+   * Export keeps the legacy print behaviour and is out of this fix's
+   * scope.)
+   */
+  const handleExport = async () => {
+    if (!pathname?.endsWith("/analytics/sales")) {
+      window.print();
+      return;
+    }
+    try {
+      setIsExporting(true);
+      const from =
+        searchParams.get("from") || dateRange?.from?.toISOString();
+      const to = searchParams.get("to") || dateRange?.to?.toISOString();
+      const res = await exportSalesReportCsvAction(
+        from || undefined,
+        to || undefined
+      );
+      if (!res.success || !res.csv) {
+        toast.error(res.error || "Failed to export the sales report.");
+        return;
+      }
+      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.filename || "sales-report.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to export the sales report.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleQuickFilter = (days: number) => {
@@ -168,9 +213,16 @@ export function AnalyticsFilters({
         </Button>
 
         {showExport && (
-          <Button variant="outline" className="gap-2" onClick={handleExport}>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleExport}
+            disabled={isExporting}
+          >
             <DownloadIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
+            <span className="hidden sm:inline">
+              {isExporting ? "Exporting..." : "Export"}
+            </span>
           </Button>
         )}
       </div>

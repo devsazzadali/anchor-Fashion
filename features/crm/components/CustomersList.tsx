@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { TierBadge, LoyaltyTier } from "@/components/customer/loyalty/tier-badges";
+import { tierTitleCase } from "@/lib/loyalty/tiers";
 import { CustomerAdminActions } from "./CustomerAdminActions";
 
 export type CustomerLifecycleStage =
@@ -27,6 +28,9 @@ export interface CrmCustomer {
   phone?: string;
   assigned_password?: string | null;
   is_vip: boolean;
+  /** S6-2: real loyalty tier from the canonical ladder (lib/loyalty/tiers). */
+  loyalty_tier?: string;
+  loyalty_points?: number;
   customer_lifecycle_stage: CustomerLifecycleStage;
   health_score: number;
   total_support_tickets: number;
@@ -78,11 +82,17 @@ export const CustomersList = ({
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-2 items-start">
-                      {customer.is_vip ? (
-                        <TierBadge tier="Platinum" />
-                      ) : (
-                        <TierBadge tier={(customer.health_score > 80 ? "Gold" : "Silver") as LoyaltyTier} />
-                      )}
+                      {/* S6-2: badge = the customer's real loyalty tier
+                          from the canonical ladder. The old rule
+                          (spend > ৳5,000 → "Platinum", else a
+                          health-score guess) labelled a 57-point
+                          customer PLATINUM while his detail page and
+                          the tiers tab said Silver. */}
+                      <TierBadge
+                        tier={tierTitleCase(
+                          customer.loyalty_tier || "SILVER"
+                        ) as LoyaltyTier}
+                      />
                       <div className="flex gap-1 flex-wrap">
                         <span className="text-[9px] uppercase tracking-widest font-bold bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">
                           {customer.total_support_tickets > 2 ? "High Touch" : "Self Service"}

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Order, OrderAddress, OrderItem, OrderStatus } from "@/types/checkout.types";
+import { recordOrderPayment } from "@/lib/payments/order-payment-record";
 
 function mapPrismaOrderToCheckoutOrder(record: any): Order {
   const shippingAddr = record.shippingAddress as Record<string, any> | null;
@@ -249,6 +250,19 @@ export class OrderRepository {
         statusHistory: true,
       },
     });
+
+    // S6-7: record the payment ledger row for this placement (the
+    // storefront checkout path — see lib/payments/order-payment-record).
+    try {
+      await recordOrderPayment({
+        orderId: createdPrismaOrder.id,
+        amount: Number(createdPrismaOrder.totalAmount) || 0,
+        method: createdPrismaOrder.paymentMethod,
+        paymentStatus: createdPrismaOrder.paymentStatus,
+      });
+    } catch (payErr) {
+      console.error("[OrderRepository.createOrder] Payment record failed:", payErr);
+    }
 
     return mapPrismaOrderToCheckoutOrder(createdPrismaOrder);
   }

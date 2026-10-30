@@ -2,9 +2,12 @@
 
 import React from "react";
 import Link from "next/link";
-import { PackageOpen, Eye } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { PackageOpen, Eye, Printer, Play, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { updateOrderStatusAction } from "@/app/actions/oms/order.actions";
 import {
   Table,
   TableBody,
@@ -80,6 +83,21 @@ function StatusBadge({ status }: { status: string }) {
   }
 }
 
+/**
+ * S5-11: the workspace listed orders but offered no fulfilment actions.
+ * The advance step mirrors the order detail page's lifecycle chain and
+ * goes through the SAME server action (updateOrderStatusAction →
+ * OrderService → OrderRepository.updateOrderStatus), so lifecycle side
+ * effects (stock release, shipment birth, notifications) stay identical
+ * no matter which surface advances the order.
+ */
+const NEXT_STEP: Record<string, { to: string; label: string }> = {
+  CONFIRMED: { to: "preparing", label: "Start Preparing" },
+  PREPARING: { to: "picking", label: "Start Picking" },
+  PICKING: { to: "packing", label: "Start Packing" },
+  PACKING: { to: "ready_for_shipment", label: "Ready for Shipment" },
+};
+
 function courierState(order: FulfillmentOrderRow): string {
   if (order.shipment) {
     const parts = [
@@ -100,6 +118,28 @@ function courierState(order: FulfillmentOrderRow): string {
 }
 
 export function FulfillmentClient({ orders = [] }: FulfillmentClientProps) {
+  const router = useRouter();
+  const [advancingId, setAdvancingId] = React.useState<string | null>(null);
+
+  const handleAdvance = async (order: FulfillmentOrderRow) => {
+    const step = NEXT_STEP[(order.status || "").toUpperCase()];
+    if (!step) return;
+    setAdvancingId(order.id);
+    try {
+      const res = await updateOrderStatusAction({
+        order_id: order.id,
+        new_status: step.to as any,
+      });
+      if (!res.success) throw new Error(res.error || "Status update failed");
+      toast.success(`Order ${order.orderNumber} moved to ${step.to.replace(/_/g, " ")}`);
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update order status");
+    } finally {
+      setAdvancingId(null);
+    }
+  };
+
   const countsByStatus = React.useMemo(() => {
     const counts: Record<string, number> = {};
     for (const status of FULFILLMENT_STATUSES) counts[status] = 0;
@@ -169,12 +209,37 @@ export function FulfillmentClient({ orders = [] }: FulfillmentClientProps) {
                 </TableCell>
                 <TableCell className="text-muted-foreground">{courierState(order)}</TableCell>
                 <TableCell className="text-right">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/admin/orders/${order.id}`}>
-                      <Eye className="mr-1.5 h-3.5 w-3.5" />
-                      View order
-                    </Link>
-                  </Button>
+                  <div className="flex items-center justify-end gap-1.5">
+                    {NEXT_STEP[(order.status || "").toUpperCase()] && (
+                      <Button
+                        size="sm"
+                        disabled={advancingId === order.id}
+                        onClick={() => handleAdvance(order)}
+                      >
+                        {advancingId === order.id ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Play className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {NEXT_STEP[(order.status || "").toUpperCase()].label}
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/admin/orders/${order.id}/packing-slip`}
+                        target="_blank"
+                      >
+                        <Printer className="mr-1.5 h-3.5 w-3.5" />
+                        Packing Slip
+                      </Link>
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/admin/orders/${order.id}`}>
+                        <Eye className="mr-1.5 h-3.5 w-3.5" />
+                        View order
+                      </Link>
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

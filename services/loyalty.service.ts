@@ -2,13 +2,16 @@ import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { LoyaltyRepository } from "@/repositories/loyalty.repository";
 import { LoyaltyAccount, LoyaltyTransaction } from "@/types/customer.types";
 import { WalletService } from "@/services/wallet.service";
+import { tierForLifetimePoints } from "@/lib/loyalty/tiers";
 
-/** Tier ladder, driven by lifetime earned points (shared by earn/reverse). */
+/**
+ * Tier ladder, driven by lifetime earned points (shared by earn/reverse).
+ * S6-2: delegates to the canonical ladder in lib/loyalty/tiers — this
+ * service previously ran its own thresholds (GOLD at 2,000, VIP at
+ * 10,000) that disagreed with the admin tiers tab (1,000 / 20,000).
+ */
 function tierForTotalEarned(totalEarned: number): string {
-  if (totalEarned >= 10000) return "VIP";
-  if (totalEarned >= 5000) return "PLATINUM";
-  if (totalEarned >= 2000) return "GOLD";
-  return "SILVER";
+  return tierForLifetimePoints(totalEarned);
 }
 
 export interface RewardCatalogItem {

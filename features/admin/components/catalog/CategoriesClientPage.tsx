@@ -497,7 +497,7 @@ export function CategoriesClientPage({
     setIsDeleting(true);
     const res = await deleteCategoryAction({ id: deleteTarget.id });
     if (res.success) {
-      toast.success("Category deleted");
+      toast.success("Category deactivated");
       setCategories((prev) => prev.filter((c) => c.id !== deleteTarget.id));
     } else {
       toast.error(res.error || "Failed to delete category");
@@ -902,7 +902,7 @@ export function CategoriesClientPage({
       <ConfirmDialog
         open={confirmOpen}
         title={`Delete "${deleteTarget?.name}"?`}
-        description="This will permanently delete the category. Products in this category will become uncategorized."
+        description="This will deactivate the category. It will no longer appear in menus or the storefront. Products in this category will become uncategorized."
         confirmLabel="Delete"
         isLoading={isDeleting}
         onConfirm={handleDelete}
