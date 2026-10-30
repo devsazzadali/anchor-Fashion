@@ -7,18 +7,19 @@ export class MarketingRepository {
     const db = createAdminDbClient();
     const { data, error } = await db
       .from("campaigns")
-      .select("*, campaign_audiences(*)")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) throw new Error(error.message);
-    return data || [];
+    const campaigns = data || [];
+    return (await this.attachAudiences(db, campaigns)) as Campaign[];
   }
 
   async getCampaignById(id: string): Promise<Campaign | null> {
     const db = createAdminDbClient();
     const { data, error } = await db
       .from("campaigns")
-      .select("*, campaign_audiences(*)")
+      .select("*")
       .eq("id", id)
       .maybeSingle();
 
@@ -26,7 +27,40 @@ export class MarketingRepository {
       if (error.code === "PGRST116") return null;
       throw new Error(error.message);
     }
-    return data;
+    if (!data) return null;
+    const [withAudiences] = await this.attachAudiences(db, [data]);
+    return withAudiences as Campaign;
+  }
+
+  /**
+   * REG-83: the campaign_audiences(*) embed on campaigns never attaches
+   * (unsupported pair), so campaign audiences were always missing. Fetch
+   * them explicitly by campaign_id and attach as an array, preserving
+   * the shape the embed used to promise.
+   */
+  private async attachAudiences(
+    db: ReturnType<typeof createAdminDbClient>,
+    campaigns: Record<string, any>[]
+  ): Promise<Record<string, any>[]> {
+    if (campaigns.length === 0) return campaigns;
+    const ids = campaigns.map((c) => c.id).filter(Boolean);
+    const audiencesByCampaign = new Map<string, any[]>();
+    if (ids.length > 0) {
+      const { data: audiences } = await db
+        .from("campaign_audiences")
+        .select("*")
+        .in("campaign_id", ids);
+      for (const a of audiences || []) {
+        if (!a?.campaign_id) continue;
+        const list = audiencesByCampaign.get(a.campaign_id) || [];
+        list.push(a);
+        audiencesByCampaign.set(a.campaign_id, list);
+      }
+    }
+    return campaigns.map((c) => ({
+      ...c,
+      campaign_audiences: audiencesByCampaign.get(c.id) || [],
+    }));
   }
 
   async createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {

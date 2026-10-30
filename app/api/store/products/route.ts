@@ -15,8 +15,25 @@ export async function GET(request: Request) {
   const search = searchParams.get('search');
   const featured = searchParams.get('featured');
 
+  // REG-84: bound the feed. Defaults (limit 500) sit far above the
+  // current catalog size, so today's response is byte-identical; the
+  // cap only bites as the catalog grows. Callers may page explicitly
+  // with ?limit=&offset= (limit clamped to 1000).
+  const limitParam = Number(searchParams.get('limit'));
+  const offsetParam = Number(searchParams.get('offset'));
+  const take =
+    Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(Math.floor(limitParam), 1000)
+      : 500;
+  const skip =
+    Number.isFinite(offsetParam) && offsetParam > 0
+      ? Math.floor(offsetParam)
+      : 0;
+
   try {
     const products = await prisma.product.findMany({
+      take,
+      skip,
       where: {
         status: 'ACTIVE',
         deletedAt: null,

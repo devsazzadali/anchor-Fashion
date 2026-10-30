@@ -18,7 +18,14 @@ import Image from "next/image";
 import { usePersonalizationStore } from "@/stores/use-personalization-store";
 import { totalVatAmount, priceWithVat } from "@/lib/utils/vat";
 
-export function CartDrawer() {
+export function CartDrawer({
+  freeShippingThreshold = 0,
+}: {
+  /** REG-81: from Admin → Settings (store_info.free_shipping_threshold),
+   *  passed by the server layouts via getFreeShippingThreshold().
+   *  0 = no free-shipping program — the meter is hidden, never faked. */
+  freeShippingThreshold?: number;
+}) {
   const { cart, isSheetOpen, setSheetOpen, isLoading } = useCartStore();
   const router = useRouter();
 
@@ -55,8 +62,11 @@ export function CartDrawer() {
     }))
   );
 
-  const FREE_SHIPPING_THRESHOLD = 999;
-  const progress = Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
+  const FREE_SHIPPING_THRESHOLD = freeShippingThreshold;
+  const progress =
+    FREE_SHIPPING_THRESHOLD > 0
+      ? Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100)
+      : 0;
   const amountNeeded = FREE_SHIPPING_THRESHOLD - subtotal;
   
   const { recentlyViewed } = usePersonalizationStore();
@@ -121,7 +131,8 @@ export function CartDrawer() {
             </div>
           ) : (
             <div className="flex h-full flex-col">
-              {/* Free Shipping Progress */}
+              {/* Free Shipping Progress (only when a threshold is configured) */}
+              {FREE_SHIPPING_THRESHOLD > 0 && (
               <div className="mb-4 bg-gray-50 p-4 rounded-lg">
                 <div className="mb-2 flex items-center justify-between text-xs font-medium text-[#1A1A1A]">
                   <span>
@@ -137,6 +148,7 @@ export function CartDrawer() {
                   />
                 </div>
               </div>
+              )}
 
               <ScrollArea className="flex-1 pr-4">
                 <div className="space-y-4">

@@ -47,12 +47,27 @@ export default async function AdminPrintInvoicePage(props: { params: Promise<{ i
     const adminDb = await createAdminDbClient();
     const { data: shipments } = await adminDb
       .from("shipments")
-      .select("*, courier_providers(name, logo_url)")
+      .select("*")
       .eq("order_id", order.id)
       .neq("status", "cancelled")
       .order("created_at", { ascending: false })
       .limit(1);
     activeShipment = shipments?.[0] || null;
+    // REG-83: the courier_providers(name, logo_url) embed never attaches
+    // on shipments (unsupported pair; no logo_url column exists), so the
+    // printed courier name always fell back to the raw code. Resolve the
+    // provider name explicitly by code.
+    if (activeShipment?.courier_provider_code) {
+      const { data: provider } = await adminDb
+        .from("courier_providers")
+        .select("name")
+        .eq("code", activeShipment.courier_provider_code)
+        .maybeSingle();
+      activeShipment = {
+        ...activeShipment,
+        courier_providers: provider ? { name: provider.name } : null,
+      };
+    }
   } catch {
     // Non-critical, fallback
   }

@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminDbClient } from "@/lib/db/client";
+import { FALLBACK_DELIVERY_FEES } from "@/lib/constants/shipping";
 import { verifyStaff } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
@@ -35,12 +36,13 @@ export interface ReturnPolicyConfig {
 
 const DEFAULT_SHIPPING_POLICY: ShippingPolicyConfig = {
   inside_dhaka_delivery_time: "24 to 48 hours",
-  // Aligned with the live delivery_zones rates (Inside Dhaka ৳100 /
-  // Outside Dhaka ৳150) — these defaults are what /support/shipping
-  // renders until an admin saves policy settings.
-  inside_dhaka_fee: 100,
+  // REG-63: the fallback pair is the ONE canonical constant
+  // (lib/constants/shipping) — the same pair the order engine falls
+  // back to when delivery zones cannot be loaded. These defaults are
+  // what /support/shipping renders until an admin saves policy settings.
+  inside_dhaka_fee: FALLBACK_DELIVERY_FEES.insideDhaka,
   outside_dhaka_delivery_time: "3 to 5 business days",
-  outside_dhaka_fee: 150,
+  outside_dhaka_fee: FALLBACK_DELIVERY_FEES.outsideDhaka,
   free_shipping_threshold: 999,
   courier_partners: "Pathao, Steadfast, Paperfly",
   processing_time: "Same day dispatch for orders before 2:00 PM",
@@ -80,7 +82,8 @@ const DEFAULT_FAQS: Omit<FAQItem, "id" | "created_at">[] = [
   {
     category: "Orders & Delivery",
     question: "What are the standard shipping charges?",
-    answer: "Standard shipping is ৳60 inside Dhaka and ৳120 outside Dhaka. Enjoy FREE shipping on all orders over ৳999.",
+    // REG-63: was ৳60/৳120 — a pair nothing else in the system charges.
+    answer: `Standard shipping is ৳${FALLBACK_DELIVERY_FEES.insideDhaka} inside Dhaka and ৳${FALLBACK_DELIVERY_FEES.outsideDhaka} outside Dhaka. Enjoy FREE shipping on all orders over ৳999.`,
     display_order: 3,
   },
   {

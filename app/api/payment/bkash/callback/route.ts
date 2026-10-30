@@ -44,16 +44,30 @@ async function handleCallback(req: NextRequest) {
   let order: any = null;
   let paymentSession: any = null;
 
-  // Check payment_sessions by metadata paymentID
+  // Check payment_sessions by metadata paymentID.
+  // REG-83: the DB builder cannot attach orders(*) on payment_sessions
+  // (not a supported relation pair), so sessionData.orders was always
+  // undefined and this resolution silently never happened — the handler
+  // only ever found orders through the payment_intent_id fallback below.
+  // Resolve the order explicitly by the session's order_id.
   const { data: sessionData } = await db
     .from("payment_sessions")
-    .select("*, orders(*)")
+    .select("*")
     .filter("metadata->>paymentID", "eq", paymentID)
     .maybeSingle();
 
   if (sessionData) {
     paymentSession = sessionData;
-    order = sessionData.orders;
+    if (sessionData.order_id) {
+      const { data: sessionOrder } = await db
+        .from("orders")
+        .select("*")
+        .eq("id", sessionData.order_id)
+        .maybeSingle();
+      if (sessionOrder) {
+        order = sessionOrder;
+      }
+    }
   }
 
   // Fallback: lookup order directly by payment_intent_id

@@ -3,6 +3,7 @@
 
 import { ClientBarcode } from "@/components/ui/ClientBarcode";
 import { ClientQRCode } from "@/components/ui/ClientQRCode";
+import { DEFAULT_INVOICE_INFO } from "@/lib/constants/invoice-company";
 
 export interface InvoiceItem {
   id?: string;
@@ -27,16 +28,14 @@ export interface InvoiceCompanyInfo {
   system_by: string;
 }
 
-/** Fallbacks identical to the values printed before settings existed. */
+/**
+ * Fallback company identity — REG-82: single-sourced from
+ * lib/constants/invoice-company (the same defaults the settings layer
+ * uses), so the printed invoice can never carry a stale BIN/address
+ * that Admin already corrected elsewhere.
+ */
 export const DEFAULT_INVOICE_COMPANY: InvoiceCompanyInfo = {
-  company_name: "Anchor Fashion Ltd",
-  central_bin: "001168309-0101",
-  central_address: "Plot No# 01, Section #07, Mirpur - 1216, Dhaka",
-  web_address: "anchorfashion.com",
-  customer_care: "+8801885598889",
-  shop_concern: "+8801885813370",
-  email: "info@anchorfashion.com",
-  system_by: "Anchor Fashion Ltd.",
+  ...DEFAULT_INVOICE_INFO,
 };
 
 /** The store's live public website — the invoice QR points here. */

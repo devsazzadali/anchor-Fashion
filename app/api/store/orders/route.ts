@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { getServerSession } from '@/lib/auth/server';
 import { AlphaSmsService } from '@/lib/services/sms/alpha-sms.service';
 import { InventoryService } from '@/services/inventory.service';
@@ -6,6 +7,8 @@ import { OrderRepository } from '@/lib/repositories/order.repository';
 import { prisma } from '@/lib/prisma';
 import { lineVatAmount, roundMoney } from '@/lib/utils/vat';
 import { resolveShippingCharge } from '@/lib/services/shipping/zone-resolution.service';
+import { CodRiskService } from '@/lib/services/fraud/cod-risk.service';
+import { CodOtpService } from '@/lib/services/fraud/cod-otp.service';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,6 +24,17 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Prices, VAT and totals are now resolved server-side from the catalog
  * and the order is persisted through the same Prisma repository as the
  * main checkout; stock is deducted only for a persisted order.
+ *
+ * REG-73: COD orders go through the same fraud-shield gate as the main
+ * checkout (CodRiskService + CodOtpService): when the risk policy requires
+ * verification, the order is refused until the caller presents a verified
+ * OTP session (otp_session_id + otp_code, or a previously verified
+ * session). Previously this route created COD orders against any
+ * client-supplied phone with no verification at all.
+ * REG-79: quantities are capped by real availability (Σ quantity_available
+ * across the variant's inventory levels — the same basis the cart uses)
+ * before anything is persisted, and a stock-deduction failure fails the
+ * order (rolled back) instead of being logged and forgotten.
  */
 export async function POST(request: Request) {
   try {
@@ -72,6 +86,7 @@ export async function POST(request: Request) {
       unit_price: number;
       line_total: number;
       vat_percent: number;
+      available_stock: number;
     }[] = [];
 
     for (const it of items) {
@@ -92,21 +107,32 @@ export async function POST(request: Request) {
       if (variantId) {
         variant = await prisma.variant.findUnique({
           where: { id: variantId },
-          include: { product: true },
+          include: {
+            product: true,
+            inventoryLevels: { select: { quantityAvailable: true } },
+          },
         });
         product = variant?.product || null;
       }
       if (!variant && sku) {
         variant = await prisma.variant.findUnique({
           where: { sku },
-          include: { product: true },
+          include: {
+            product: true,
+            inventoryLevels: { select: { quantityAvailable: true } },
+          },
         });
         product = variant?.product || null;
       }
       if (!product && productId) {
         product = await prisma.product.findUnique({
           where: { id: productId },
-          include: { variants: { where: { isActive: true } } },
+          include: {
+            variants: {
+              where: { isActive: true },
+              include: { inventoryLevels: { select: { quantityAvailable: true } } },
+            },
+          },
         });
         if (product) {
           // Match the requested size/color against variant attributes when
@@ -147,6 +173,17 @@ export async function POST(request: Request) {
           0
       );
 
+      // REG-79: purchasable truth for a variant is Σ quantity_available
+      // across its inventory levels — the same basis the cart enforces.
+      // No resolved variant (or no levels) means nothing can be deducted
+      // for this item, so its availability is honestly zero.
+      const availableStock = variant
+        ? (variant.inventoryLevels || []).reduce(
+            (sum: number, lvl: any) => sum + Number(lvl.quantityAvailable || 0),
+            0
+          )
+        : 0;
+
       resolvedItems.push({
         product_id: product.id,
         variant_id: variant?.id || null,
@@ -157,7 +194,36 @@ export async function POST(request: Request) {
         unit_price: unitPrice,
         line_total: roundMoney(unitPrice * quantity),
         vat_percent: Number(product.vatPercent ?? 0),
+        available_stock: availableStock,
       });
+    }
+
+    // REG-79: enforce the availability cap BEFORE anything is persisted.
+    // Demand is aggregated per variant — duplicate lines for the same
+    // variant cannot smuggle extra units past the cap one line at a time.
+    const demandByVariant = new Map<string, { quantity: number; available: number; label: string }>();
+    for (const it of resolvedItems) {
+      const key = it.variant_id || `product:${it.product_id}`;
+      const entry = demandByVariant.get(key) || {
+        quantity: 0,
+        available: it.available_stock,
+        label: it.variant_id ? `${it.product_name} (${it.sku})` : it.product_name,
+      };
+      entry.quantity += it.quantity;
+      demandByVariant.set(key, entry);
+    }
+    for (const entry of demandByVariant.values()) {
+      if (entry.quantity > entry.available) {
+        return NextResponse.json(
+          {
+            error:
+              entry.available <= 0
+                ? `${entry.label} is out of stock`
+                : `Only ${entry.available} left in stock for ${entry.label}`,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const subtotal = roundMoney(
@@ -195,6 +261,76 @@ export async function POST(request: Request) {
       delivery_zone_id: deliveryZone.id,
     };
 
+    // ── REG-73: COD fraud-shield gate — the same enforcement the main
+    // checkout applies (processCheckoutAction). When the risk policy
+    // requires verification, no order is created until the OTP session is
+    // verified; a code is dispatched on first refusal so the client can
+    // complete the flow with otp_session_id + otp_code. ──────────────────
+    if (String(payment_method).toUpperCase() === 'COD') {
+      const riskEvaluation = await CodRiskService.evaluateRisk({
+        customerId: effectiveCustomerId,
+        email: customer_email || '',
+        phone: customer_phone,
+        totalAmount,
+        shippingAddress,
+      });
+
+      if (riskEvaluation.requiresVerification) {
+        const otpSessionId =
+          (typeof body.otp_session_id === 'string' && body.otp_session_id) ||
+          randomUUID();
+        const otpCode =
+          typeof body.otp_code === 'string' ? body.otp_code.trim() : '';
+
+        if (otpCode) {
+          const verifyRes = await CodOtpService.verifyOtp(otpSessionId, otpCode);
+          if (!verifyRes.success) {
+            return NextResponse.json(
+              {
+                error: verifyRes.error || 'Invalid verification code.',
+                verificationRequired: true,
+                sessionId: otpSessionId,
+                riskLevel: riskEvaluation.riskLevel,
+                maskedTarget: CodOtpService.maskTarget(
+                  customer_email || customer_phone,
+                  customer_email ? 'email' : 'phone'
+                ),
+              },
+              { status: 403 }
+            );
+          }
+        } else if (!(await CodOtpService.isSessionVerified(otpSessionId))) {
+          const otpInit = await CodOtpService.initiateVerification({
+            sessionId: otpSessionId,
+            email: customer_email || '',
+            phone: customer_phone,
+            customerName: customer_name,
+            orderTotal: totalAmount,
+          });
+          return NextResponse.json(
+            {
+              error:
+                otpInit.error ||
+                'Verification required. A code has been sent to confirm this order.',
+              verificationRequired: true,
+              sessionId: otpSessionId,
+              riskLevel: riskEvaluation.riskLevel,
+              maskedTarget:
+                otpInit.maskedTarget ||
+                CodOtpService.maskTarget(
+                  customer_email || customer_phone,
+                  customer_email ? 'email' : 'phone'
+                ),
+              targetType: otpInit.targetType,
+              remainingCooldownSeconds: otpInit.remainingCooldownSeconds,
+              expirySeconds: otpInit.expirySeconds,
+            },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     // ── Persist through the authoritative Prisma repository ──────────────
     const order = await OrderRepository.createOrder(
       {
@@ -225,6 +361,10 @@ export async function POST(request: Request) {
     );
 
     // ── Deduct stock for the persisted order ─────────────────────────────
+    // REG-79: a deduction failure must FAIL the order, not be logged and
+    // forgotten — the persisted order is rolled back (items cascade) and
+    // the caller gets an error. (Availability was already capped above;
+    // this covers failures between the cap check and the deduction.)
     try {
       const inventoryService = new InventoryService();
       await inventoryService.deductStockForOrderItems(
@@ -238,6 +378,15 @@ export async function POST(request: Request) {
       );
     } catch (invErr) {
       console.error('[Store Orders API] Error deducting inventory stock:', invErr);
+      await prisma.order
+        .delete({ where: { id: order.id } })
+        .catch((delErr) =>
+          console.error('[Store Orders API] Failed to roll back order after deduction failure:', delErr)
+        );
+      return NextResponse.json(
+        { error: 'Could not reserve stock for this order. Please try again.' },
+        { status: 500 }
+      );
     }
 
     // ── Confirmation SMS (best-effort; service degrades without a key) ───

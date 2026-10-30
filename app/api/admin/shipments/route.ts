@@ -2,13 +2,15 @@ import { NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
 import { CourierError } from "@/lib/couriers/errors";
-import { verifyStaff } from "@/lib/security/roles";
+import { verifyManager } from "@/lib/security/roles";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const user = await verifyStaff();
+    // REG-72: creating a shipment commits stock to a courier — requires a
+    // manager-level role, not any staff account.
+    const user = await verifyManager();
 
     const body = await req.json();
     const { orderId, courierId, weight = 0.5, note } = body;
@@ -163,6 +165,20 @@ export async function POST(req: Request) {
     });
   } catch (err: any) {
     console.error("[CreateShipment API Error]:", err);
+    // REG-72: auth failures from the manager gate are 401/403, not 500 —
+    // the same mapping the sibling tracking route gets from authErrorResponse.
+    const authStatus =
+      typeof err?.message === "string" && err.message.startsWith("Unauthorized")
+        ? 401
+        : typeof err?.message === "string" && err.message.includes("Forbidden")
+          ? 403
+          : null;
+    if (authStatus) {
+      return NextResponse.json(
+        { success: false, error: { code: "FORBIDDEN", message: err.message } },
+        { status: authStatus }
+      );
+    }
     return NextResponse.json(
       {
         success: false,

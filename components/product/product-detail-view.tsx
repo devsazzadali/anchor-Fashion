@@ -33,6 +33,8 @@ export interface ProductDetailViewProps {
   flashSale?: FlashSaleInfo | null;
   reviews?: any[];
   relatedProducts?: any[];
+  /** REG-81: Admin free-shipping threshold (BDT) for the PDP claim. */
+  freeShippingThreshold?: number;
 }
 
 export function ProductDetailView({
@@ -40,6 +42,7 @@ export function ProductDetailView({
   flashSale = null,
   reviews = [],
   relatedProducts = [],
+  freeShippingThreshold = 0,
 }: ProductDetailViewProps) {
   // Base gallery images & media items from product_media
   const baseGalleryItems: GalleryImageInput[] = useMemo(() => {
@@ -360,6 +363,7 @@ export function ProductDetailView({
                 productMedia={product.product_media || []}
                 flashSale={flashSale}
                 sizeCharts={product.size_charts || []}
+                freeShippingThreshold={freeShippingThreshold}
                 onVariantChange={handleVariantChange}
               />
             </div>

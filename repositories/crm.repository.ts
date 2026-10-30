@@ -33,11 +33,12 @@ export class CRMRepository {
 
     const { data, error } = await db
       .from("crm_customers")
-      .select("*, customer_profiles(*)")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) throw new Error(error.message);
-    return (data || []).map((c: any) => ({
+    const withProfiles = await this.attachCustomerProfiles(db, data || []);
+    return withProfiles.map((c: any) => ({
       ...c,
       first_name: c.customer_profiles?.first_name || c.first_name,
       last_name: c.customer_profiles?.last_name || c.last_name,
@@ -50,7 +51,7 @@ export class CRMRepository {
     const db = this.getAdminClient();
     const { data, error } = await db
       .from("crm_customers")
-      .select("*, customer_profiles(*)")
+      .select("*")
       .eq("id", id)
       .single();
 
@@ -58,7 +59,41 @@ export class CRMRepository {
       if (error.code === "PGRST116") return null; // not found
       throw new Error(error.message);
     }
-    return data;
+    if (!data) return null;
+    const [withProfile] = await this.attachCustomerProfiles(db, [data]);
+    return withProfile as CRMCustomer;
+  }
+
+  /**
+   * REG-83: the customer_profiles(*) embed on crm_customers never
+   * attaches (unsupported pair), so the linked profile's name/email/phone
+   * were always missing. Fetch profiles explicitly by the profile_id
+   * link column and attach under the same key.
+   */
+  private async attachCustomerProfiles(
+    db: ReturnType<typeof createAdminDbClient>,
+    rows: Record<string, any>[]
+  ): Promise<Record<string, any>[]> {
+    if (rows.length === 0) return rows;
+    const profileIds = [
+      ...new Set(rows.map((r) => r.profile_id).filter(Boolean)),
+    ];
+    const profileById = new Map<string, any>();
+    if (profileIds.length > 0) {
+      const { data: profiles } = await db
+        .from("customer_profiles")
+        .select("*")
+        .in("id", profileIds);
+      for (const p of profiles || []) {
+        if (p?.id) profileById.set(p.id, p);
+      }
+    }
+    return rows.map((r) => ({
+      ...r,
+      customer_profiles: r.profile_id
+        ? profileById.get(r.profile_id) || null
+        : null,
+    }));
   }
 
   async getLeads(): Promise<CRMLead[]> {

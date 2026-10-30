@@ -33,12 +33,20 @@ export class CustomerRepository {
    * while real customers existed.
    */
   private async loadMergedCustomers(): Promise<MergedCustomer[]> {
+    // REG-84: bound the directory load. The cap sits far above the
+    // current customer counts, so merged results are unchanged today;
+    // it only stops unbounded growth of this in-memory merge.
+    const DIRECTORY_LOAD_CAP = 2000;
     const [profiles, customers] = await Promise.all([
       prisma.profile.findMany({
         where: { role: { name: { equals: "CUSTOMER", mode: "insensitive" } } },
         orderBy: { createdAt: "desc" },
+        take: DIRECTORY_LOAD_CAP,
       }),
-      prisma.customer.findMany({ orderBy: { createdAt: "desc" } }),
+      prisma.customer.findMany({
+        orderBy: { createdAt: "desc" },
+        take: DIRECTORY_LOAD_CAP,
+      }),
     ]);
 
     const byKey = new Map<string, MergedCustomer>();

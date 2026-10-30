@@ -8,6 +8,7 @@ import { WarehouseService } from "@/services/warehouse.service";
 import { CouponService } from "@/services/coupon.service";
 import { prisma } from "@/lib/prisma";
 import { totalVatAmount } from "@/lib/utils/vat";
+import { FALLBACK_DELIVERY_FEES } from "@/lib/constants/shipping";
 
 export class OrderService {
   /**
@@ -16,11 +17,12 @@ export class OrderService {
   /**
    * Fallback shipping fees by method slug — used ONLY when the
    * admin-configured delivery zones cannot be loaded. Keys must match
-   * the RadioGroup values in checkout-form.tsx.
+   * the RadioGroup values in checkout-form.tsx. REG-63: values come
+   * from the ONE canonical fallback pair (lib/constants/shipping).
    */
   private static readonly SHIPPING_FEES: Record<string, number> = {
-    home_delivery: 100,          // Inside Dhaka
-    home_delivery_outside: 150,  // Outside Dhaka
+    home_delivery: FALLBACK_DELIVERY_FEES.insideDhaka,
+    home_delivery_outside: FALLBACK_DELIVERY_FEES.outsideDhaka,
   };
 
   /**
@@ -178,7 +180,7 @@ export class OrderService {
       subtotal > 0
         ? addressZone?.rate ??
           zoneFee ??
-          (this.SHIPPING_FEES[shippingMethod ?? "home_delivery"] ?? 100)
+          (this.SHIPPING_FEES[shippingMethod ?? "home_delivery"] ?? FALLBACK_DELIVERY_FEES.insideDhaka)
         : 0;
 
     // Free-shipping threshold (Settings → Store Info, advertised in the
@@ -191,11 +193,12 @@ export class OrderService {
     let shipping_fee = zone_shipping_fee;
     if (zone_shipping_fee > 0) {
       try {
-        const { getStoreInfo } = await import(
+        // REG-81: the threshold rule is single-sourced in settings.actions
+        // (the cart/PDP surfaces read the same helper).
+        const { getFreeShippingThreshold } = await import(
           "@/lib/actions/settings.actions"
         );
-        const info = await getStoreInfo();
-        const threshold = parseFloat(info?.free_shipping_threshold ?? "") || 0;
+        const threshold = await getFreeShippingThreshold();
         if (threshold > 0 && subtotal >= threshold) {
           shipping_fee = 0;
         }

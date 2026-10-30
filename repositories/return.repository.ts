@@ -350,10 +350,22 @@ export class ReturnRepository {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    // Only join orders table when filtering by branchId
-    let query = filters.branchId
-      ? db.from("returns").select("*, orders!inner(branch_id)", { count: "exact" })
-      : db.from("returns").select("*", { count: "exact" });
+    // REG-83: branch scoping used an orders!inner(branch_id) embed plus a
+    // filter on the embedded path — the builder drops the embed and the
+    // !inner semantics with it, so branch filtering silently did not
+    // scope. Resolve the branch's order ids explicitly and filter on the
+    // returns table's own order_id instead.
+    let branchOrderIds: string[] | null = null;
+    if (filters.branchId) {
+      const { data: branchOrders, error: branchError } = await db
+        .from("orders")
+        .select("id")
+        .eq("branch_id", filters.branchId);
+      if (branchError) throw new Error(`List returns failed: ${branchError.message}`);
+      branchOrderIds = (branchOrders || []).map((o: any) => o.id);
+    }
+
+    let query = db.from("returns").select("*", { count: "exact" });
 
     if (filters.status) {
       query = query.or(`status.eq.${filters.status.toLowerCase()},status.eq.${filters.status.toUpperCase()}`);
@@ -363,8 +375,8 @@ export class ReturnRepository {
     if (filters.search) {
       query = query.or(`return_number.ilike.%${filters.search}%`);
     }
-    if (filters.branchId) {
-      query = query.eq("orders.branch_id", filters.branchId);
+    if (branchOrderIds) {
+      query = query.in("order_id", branchOrderIds);
     }
 
     const { data, error, count } = await query

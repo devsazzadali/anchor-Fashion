@@ -62,13 +62,24 @@ export async function POST(req: NextRequest) {
     if (!order && tranId) {
       const { data: sessionData } = await db
         .from("payment_sessions")
-        .select("*, orders(*)")
+        .select("*")
         .filter("metadata->>tran_id", "eq", tranId)
         .maybeSingle();
 
       if (sessionData) {
         paymentSession = sessionData;
-        order = sessionData.orders;
+        // REG-83: orders(*) never attaches on payment_sessions — resolve
+        // the order explicitly by the session's order_id.
+        if (sessionData.order_id) {
+          const { data: sessionOrder } = await db
+            .from("orders")
+            .select("*")
+            .eq("id", sessionData.order_id)
+            .maybeSingle();
+          if (sessionOrder) {
+            order = sessionOrder;
+          }
+        }
       }
     }
 

@@ -13,6 +13,7 @@ import {
   Clock,
 } from "lucide-react";
 import { getFaqsAction, getStorePoliciesAction } from "@/app/actions/cms/faq-policy.actions";
+import { FALLBACK_DELIVERY_FEES } from "@/lib/constants/shipping";
 import { SupportFaqClient } from "@/features/support/components/SupportFaqClient";
 
 export const dynamic = "force-dynamic";
@@ -248,7 +249,7 @@ export default async function SupportTopicPage({
                     <strong>{policies?.shipping?.inside_dhaka_delivery_time || "24 to 48 hours"}</strong>.
                   </p>
                   <p className="text-xs font-semibold text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
-                    Standard Shipping: ৳{policies?.shipping?.inside_dhaka_fee ?? 100} | Free above ৳
+                    Standard Shipping: ৳{policies?.shipping?.inside_dhaka_fee ?? FALLBACK_DELIVERY_FEES.insideDhaka} | Free above ৳
                     {policies?.shipping?.free_shipping_threshold ?? 999}
                   </p>
                 </div>
@@ -263,7 +264,7 @@ export default async function SupportTopicPage({
                     <strong>{policies?.shipping?.outside_dhaka_delivery_time || "3 to 5 business days"}</strong> via courier.
                   </p>
                   <p className="text-xs font-semibold text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
-                    Standard Shipping: ৳{policies?.shipping?.outside_dhaka_fee ?? 150} | Free above ৳
+                    Standard Shipping: ৳{policies?.shipping?.outside_dhaka_fee ?? FALLBACK_DELIVERY_FEES.outsideDhaka} | Free above ৳
                     {policies?.shipping?.free_shipping_threshold ?? 999}
                   </p>
                 </div>

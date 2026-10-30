@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { InventoryRepository } from "@/repositories/inventory.repository";
-import { verifyStaff } from "@/lib/security/roles";
+import { verifyManager } from "@/lib/security/roles";
 
 export async function POST(request: NextRequest) {
   try {
-    await verifyStaff();
+    // REG-72: writing stock out is a shrinkage/fraud surface — requires a
+    // manager-level role, not any staff account.
+    await verifyManager();
     const body = await request.json();
     if (!body.variant_id || !body.warehouse_id || !body.quantity) {
       return NextResponse.json(

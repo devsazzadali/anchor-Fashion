@@ -1,7 +1,10 @@
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
 import { CatalogRepository } from "@/repositories/catalog.repository";
-import { getStoreInfo } from "@/lib/actions/settings.actions";
+import {
+  getStoreInfo,
+  getFreeShippingThreshold,
+} from "@/lib/actions/settings.actions";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 
@@ -16,7 +19,7 @@ export default async function CustomerLayout({
 }) {
   const { user } = await getServerSession();
 
-  const [categories, storeInfo] = await Promise.all([
+  const [categories, storeInfo, freeShippingThreshold] = await Promise.all([
     CatalogRepository.getCategories().catch(() => []),
     getStoreInfo().catch(() => ({
       store_name: "Anchor Fashion Enterprise",
@@ -27,6 +30,7 @@ export default async function CustomerLayout({
       announcement_bar: "🚚 Free Shipping On Orders Over ৳999 | Easy Returns & Exchanges",
       free_shipping_threshold: "999",
     })),
+    getFreeShippingThreshold().catch(() => 0),
   ]);
 
   const safeStoreInfo = storeInfo || {
@@ -54,7 +58,7 @@ export default async function CustomerLayout({
       <main className="w-full flex-1 bg-background">{children}</main>
       <StoreFooter />
       <MobileBottomNav user={safeUser} />
-      <CartDrawer />
+      <CartDrawer freeShippingThreshold={freeShippingThreshold} />
     </div>
   );
 }

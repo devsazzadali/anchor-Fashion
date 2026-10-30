@@ -1,5 +1,14 @@
+import type { Metadata } from "next";
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
+
+// REG-69: this page shipped with no metadata and inherited the generic
+// site default title. Give it its real title.
+export const metadata: Metadata = {
+  title: "Privacy Policy | Anchor Fashion",
+  description:
+    "How Anchor Fashion collects, uses and protects your personal information.",
+};
 
 export default function PrivacyPolicyPage() {
   return (

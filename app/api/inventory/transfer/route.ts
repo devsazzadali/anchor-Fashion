@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { InventoryRepository } from "@/repositories/inventory.repository";
-import { verifyStaff } from "@/lib/security/roles";
+import { verifyManager } from "@/lib/security/roles";
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyStaff();
+    // REG-72: inter-warehouse transfers move sellable stock — requires a
+    // manager-level role, not any staff account.
+    const user = await verifyManager();
     const body = await request.json();
     if (!body.variant_id || !body.from_warehouse_id || !body.to_warehouse_id || !body.quantity) {
       return NextResponse.json(

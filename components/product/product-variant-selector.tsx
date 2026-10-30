@@ -72,6 +72,10 @@ export interface ProductVariantSelectorProps {
   productSalePrice?: number | null;
   /** Per-product VAT % — displayed prices include VAT (added on top). */
   productVatPercent?: number;
+  /** REG-81: Admin-configured free-shipping threshold (BDT); the
+   *  "Free Express Shipping" claim shows only when the effective price
+   *  reaches it. 0/undefined = no program, no claim. */
+  freeShippingThreshold?: number;
   productSku?: string;
   productImages?: string[];
   productMedia?: ProductMediaItem[];
@@ -277,6 +281,7 @@ export function ProductVariantSelector({
   productMedia = [],
   flashSale = null,
   sizeCharts = [],
+  freeShippingThreshold = 0,
   onVariantChange,
 }: ProductVariantSelectorProps) {
   // 1. Process variants with normalized attributes and stock
@@ -642,11 +647,13 @@ export function ProductVariantSelector({
           </span>
         )}
 
-        {effectivePrice >= 999 && !isOutOfStock && (
-          <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-medium">
-            🚚 Free Express Shipping
-          </span>
-        )}
+        {freeShippingThreshold > 0 &&
+          effectivePrice >= freeShippingThreshold &&
+          !isOutOfStock && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-medium">
+              🚚 Free Express Shipping
+            </span>
+          )}
       </div>
 
       {/* Dynamic Attribute Selectors (Color, Size, etc.) */}

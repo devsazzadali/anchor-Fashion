@@ -72,46 +72,29 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
     }
   }
 
-  // Authorization: Order owner, staff/management, or matching customer email can view invoice
+  // REG-85: Authorization — the order's owner, or staff whose role is
+  // resolved from the profiles table. This mirrors the account order-detail
+  // page exactly. The previous check trusted user_metadata/app_metadata
+  // role claims (self-declared — any signed-in user could claim "ADMIN")
+  // and treated an email-address match as ownership (anyone who registered
+  // with the email typed at guest checkout could pull the full invoice —
+  // name, phone and address — of an order that was never linked to them).
+  // Neither is proof of anything; both paths are removed.
   const isOwner =
-    order.customer_id === user.id ||
-    order.profile_id === user.id ||
-    (order as any).profileId === user.id;
+    order.customer_id === user.id || order.profile_id === user.id;
   if (!isOwner) {
-    let role = user.user_metadata?.role || user.app_metadata?.role;
-    if (!role) {
-      const { data: profile } = await adminDb
-        .from("profiles")
-        .select("roles(name)")
-        .eq("id", user.id)
-        .maybeSingle();
-      role = String(
-        Array.isArray(profile?.roles)
-          ? profile?.roles[0]?.name
-          : (profile?.roles as any)?.name || ""
-      );
-    }
-    const roleUpper = String(role || "").toUpperCase();
-    const isStaff = [
-      "SUPERADMIN",
-      "ADMIN",
-      "MANAGER",
-      "WAREHOUSE_MANAGER",
-      "MARKETING_MANAGER",
-      "FINANCE_MANAGER",
-      "STAFF",
-      "SUPPORT",
-    ].includes(roleUpper);
-
-    const isEmailOwner = Boolean(
-      user.email &&
-      (
-        (shippingAddress?.email && user.email.toLowerCase() === shippingAddress.email.toLowerCase()) ||
-        (customer?.email && user.email.toLowerCase() === customer.email.toLowerCase())
-      )
-    );
-
-    if (!isStaff && !isEmailOwner) {
+    const { data: profile } = await adminDb
+      .from("profiles")
+      .select("roles(name)")
+      .eq("id", user.id)
+      .maybeSingle();
+    const roleName = String(
+      Array.isArray(profile?.roles)
+        ? profile?.roles[0]?.name
+        : (profile?.roles as any)?.name || ""
+    ).toUpperCase();
+    const isStaff = ["SUPERADMIN", "ADMIN", "MANAGER", "STAFF", "SUPPORT"].includes(roleName);
+    if (!isStaff) {
       return notFound();
     }
   }
@@ -121,12 +104,29 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   try {
     const { data: shipments } = await adminDb
       .from("shipments")
-      .select("*, courier_providers(name, logo_url)")
+      .select("*")
       .eq("order_id", order.id)
       .neq("status", "cancelled")
       .order("created_at", { ascending: false })
       .limit(1);
     activeShipment = shipments?.[0] || null;
+    // REG-83: shipments has no courier_provider_id FK and courier_providers
+    // has no logo_url column, so the old embedded select could never
+    // attach. The provider is keyed by CODE (shipments.courier_provider_code)
+    // — resolve it with an explicit bound query and attach the same shape.
+    if (activeShipment?.courier_provider_code) {
+      const { data: provider } = await adminDb
+        .from("courier_providers")
+        .select("name")
+        .eq("code", activeShipment.courier_provider_code)
+        .maybeSingle();
+      if (provider) {
+        activeShipment = {
+          ...activeShipment,
+          courier_providers: { name: provider.name },
+        };
+      }
+    }
   } catch {
     // Non-critical, fallback to standard shipping
   }

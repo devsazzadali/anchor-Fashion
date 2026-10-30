@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
+
+// REG-69: real page title instead of the generic site default.
+export const metadata: Metadata = {
+  title: "Terms of Service | Anchor Fashion",
+  description:
+    "The terms and conditions governing your use of Anchor Fashion and purchases from our store.",
+};
 
 export default function TermsOfServicePage() {
   return (

@@ -91,12 +91,40 @@ export default async function OrderDetailsPage({
     .eq("order_id", order.id)
     .order("created_at", { ascending: false });
 
-  // Fetch shipments
-  const { data: shipments } = await adminDb
+  // Fetch shipments.
+  // REG-83: courier_providers(name, logo_url) never attaches on shipments
+  // (unsupported embed pair — and courier_providers has no logo_url
+  // column), so the courier name always degraded to the raw provider
+  // code. Resolve provider names explicitly by code.
+  const { data: rawShipments } = await adminDb
     .from("shipments")
-    .select("*, courier_providers(name, logo_url)")
+    .select("*")
     .eq("order_id", order.id)
     .order("created_at", { ascending: false });
+
+  const shipmentProviderCodes = [
+    ...new Set(
+      (rawShipments || [])
+        .map((s: any) => s.courier_provider_code)
+        .filter(Boolean)
+    ),
+  ];
+  const providerNameByCode = new Map<string, string>();
+  if (shipmentProviderCodes.length > 0) {
+    const { data: providers } = await adminDb
+      .from("courier_providers")
+      .select("code, name")
+      .in("code", shipmentProviderCodes);
+    for (const p of providers || []) {
+      if (p?.code) providerNameByCode.set(p.code, p.name);
+    }
+  }
+  const shipments = (rawShipments || []).map((s: any) => ({
+    ...s,
+    courier_providers: s.courier_provider_code
+      ? { name: providerNameByCode.get(s.courier_provider_code) || null }
+      : null,
+  }));
 
   const activeReturn = orderReturns?.find((r: any) =>
     ["requested", "approved", "pickup_scheduled", "picked_up", "in_transit", "received"].includes(

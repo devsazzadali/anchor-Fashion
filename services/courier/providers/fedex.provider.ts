@@ -27,6 +27,7 @@ export class FedExProvider implements ICourierProvider {
   private readonly clientId: string;
   private readonly clientSecret: string;
   private readonly accountNumber: string;
+  private readonly shipperPhone: string;
   private readonly baseUrl: string;
   private tokenCache: FedExToken | null = null;
 
@@ -34,6 +35,9 @@ export class FedExProvider implements ICourierProvider {
     this.clientId = config.clientId ?? "";
     this.clientSecret = config.clientSecret ?? "";
     this.accountNumber = config.accountNumber ?? "";
+    // REG-87 (sibling of the DHL fix): shipper phone from provider
+    // config, never an invented constant.
+    this.shipperPhone = config.shipperPhone ?? "";
     this.isSandbox = isSandbox;
     this.baseUrl = isSandbox
       ? "https://apis-sandbox.fedex.com"
@@ -79,6 +83,12 @@ export class FedExProvider implements ICourierProvider {
     request: ConsignmentRequest
   ): Promise<ProviderResponse<ConsignmentResponse>> {
     try {
+      if (!this.shipperPhone) {
+        return this.errorResponse(
+          "CONFIGURATION",
+          "FedEx shipper phone is not configured — set shipperPhone in the courier provider settings (Admin → Shipping → Couriers)."
+        );
+      }
       const headers = await this.authHeaders();
 
       const payload = {
@@ -87,7 +97,7 @@ export class FedExProvider implements ICourierProvider {
           shipper: {
             contact: {
               companyName: "Anchor Fashion",
-              phoneNumber: "+8801700000000",
+              phoneNumber: this.shipperPhone,
             },
             address: {
               streetLines: ["House 12, Dhanmondi"],

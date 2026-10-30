@@ -12,7 +12,11 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-import { getSeoSettings } from "@/lib/actions/settings.actions";
+import {
+  getSeoSettings,
+  getStoreInfo,
+  getSocialLinks,
+} from "@/lib/actions/settings.actions";
 
 export async function generateMetadata(): Promise<Metadata> {
   const seo = await getSeoSettings();
@@ -32,10 +36,14 @@ export async function generateMetadata(): Promise<Metadata> {
       ];
 
   return {
-    title: {
-      default: titleDefault,
-      template: `%s | ${titleDefault.split("|")[0].trim() || "Anchor Fashion"}`,
-    },
+    // REG-69: no title template. The codebase convention (200+ pages) is
+    // that each page authors its COMPLETE title including the brand
+    // suffix ("… | Anchor Fashion"); the old `%s | Anchor Fashion`
+    // template appended the brand a second time on all of them
+    // ("Home | Anchor Fashion Enterprise | Anchor Fashion", every
+    // product page, …). Pages without metadata fall back to this
+    // default unchanged.
+    title: titleDefault,
     description: desc,
     metadataBase: new URL("https://anchorfashion.com"),
     icons: {
@@ -93,11 +101,31 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // REG-62: the JSON-LD below takes its contact phone and social links
+  // from the same Admin settings (store_info / social_links) as every
+  // other surface — it previously hardcoded a dummy phone number and
+  // invented social URLs. Settings reads are cached; any failure falls
+  // back to the canonical settings defaults.
+  const [storeInfo, socialLinks] = await Promise.all([
+    getStoreInfo().catch(() => null),
+    getSocialLinks().catch(() => null),
+  ]);
+  const jsonLdPhone = storeInfo?.phone || "+880 1711-223344";
+  const jsonLdSocials = [
+    socialLinks?.facebook,
+    socialLinks?.instagram,
+    socialLinks?.twitter,
+    socialLinks?.youtube,
+    socialLinks?.tiktok,
+  ].filter(
+    (u): u is string => typeof u === "string" && u.startsWith("http")
+  );
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -132,14 +160,10 @@ export default function RootLayout({
                     width: 512,
                     height: 512,
                   },
-                  sameAs: [
-                    "https://www.facebook.com/anchorfashion",
-                    "https://www.instagram.com/anchorfashion",
-                    "https://twitter.com/anchorfashion",
-                  ],
+                  sameAs: jsonLdSocials,
                   contactPoint: {
                     "@type": "ContactPoint",
-                    telephone: "+880-1700-000000",
+                    telephone: jsonLdPhone,
                     contactType: "customer service",
                     areaServed: "BD",
                     availableLanguage: ["en", "bn"],

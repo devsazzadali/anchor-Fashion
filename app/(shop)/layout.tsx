@@ -1,6 +1,9 @@
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
-import { getStoreInfo } from "@/lib/actions/settings.actions";
+import {
+  getStoreInfo,
+  getFreeShippingThreshold,
+} from "@/lib/actions/settings.actions";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { FloatingPromotion } from "@/components/marketing/floating-promotion";
 import { PromotionPopupBanner } from "@/components/marketing/PromotionPopupBanner";
@@ -14,7 +17,8 @@ export default async function ShopLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [categories, storeInfo, activePromotion] = await Promise.all([
+  const [categories, storeInfo, activePromotion, freeShippingThreshold] =
+    await Promise.all([
     getCachedCategories().catch(() => []),
     getStoreInfo().catch(() => ({
       store_name: "Anchor Fashion Enterprise",
@@ -26,6 +30,7 @@ export default async function ShopLayout({
       free_shipping_threshold: "999",
     })),
     PromotionRepository.getBestActivePromotion().catch(() => null),
+    getFreeShippingThreshold().catch(() => 0),
   ]);
 
   const safeStoreInfo = storeInfo || {
@@ -70,7 +75,7 @@ export default async function ShopLayout({
       <MobileBottomNav />
       <FloatingPromotion />
       <PromotionPopupBanner initialPromotion={activePromotion} />
-      <CartDrawer />
+      <CartDrawer freeShippingThreshold={freeShippingThreshold} />
     </div>
   );
 }

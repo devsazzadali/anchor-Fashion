@@ -274,6 +274,16 @@ export class SSLCommerzService {
       throw new Error("SSLCommerz credentials are not configured");
     }
 
+    // REG-86: never invent a customer phone for the gateway. cus_phone
+    // must be the customer's real number from their order — refuse to
+    // initiate without it (this previously fell back to "01700000000",
+    // a number belonging to nobody, on the customer's payment record).
+    if (!params.customerPhone || !params.customerPhone.trim()) {
+      throw new Error(
+        "SSLCommerz payment requires the customer's real phone number"
+      );
+    }
+
     // Strictly format amount to 2 decimal places
     const totalAmount = Number(params.amount).toFixed(2);
     const currency = params.currency || "BDT";
@@ -296,7 +306,7 @@ export class SSLCommerzService {
     formData.append("cus_city", (params.customerCity || "Dhaka").trim());
     formData.append("cus_postcode", (params.customerPostcode || "1200").trim());
     formData.append("cus_country", (params.customerCountry || "Bangladesh").trim());
-    formData.append("cus_phone", (params.customerPhone || "01700000000").trim());
+    formData.append("cus_phone", params.customerPhone.trim());
 
     // Shipment Information
     formData.append("shipping_method", "Courier");

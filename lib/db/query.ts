@@ -46,6 +46,15 @@ function assertIdent(name: string, kind = "identifier"): string {
 /* migrated to a Prisma read.                                          */
 /* ------------------------------------------------------------------ */
 
+/**
+ * REG-84: hard ceiling for SELECTs that specify no limit/range of
+ * their own. Far above every current table (largest ≈ 719 rows), so
+ * no current result set changes; it exists to stop pathological
+ * full-table materialization as tables grow, and it LOGS LOUDLY when
+ * it bites instead of truncating silently.
+ */
+const MAX_UNBOUNDED_ROWS = 10000;
+
 const EMBEDDED_SELECT_SUPPORT: Record<string, ReadonlySet<string>> = {
   profiles: new Set(["roles"]),
   customer_profiles: new Set(["roles"]),
@@ -979,7 +988,16 @@ export class DbQueryBuilder implements PromiseLike<any> {
           return this.finish([], count);
         }
         if (this.postFilters.length > 0) {
-          let rows = await delegate.findMany({ where, orderBy });
+          let rows = await delegate.findMany({
+            where,
+            orderBy,
+            take: MAX_UNBOUNDED_ROWS,
+          });
+          if (rows.length >= MAX_UNBOUNDED_ROWS) {
+            console.error(
+              `[db] REG-84 ceiling hit on ${this.tableName}: post-filtered select reached ${MAX_UNBOUNDED_ROWS} rows; results may be truncated. Add an explicit limit/range at the call site.`
+            );
+          }
           for (const pf of this.postFilters) rows = rows.filter(pf);
           if (this.wantCount) count = rows.length;
           if (this.limitCount) {
@@ -995,8 +1013,20 @@ export class DbQueryBuilder implements PromiseLike<any> {
           } else if (this.rangeStart !== undefined && this.rangeEnd !== undefined) {
             args.skip = this.rangeStart;
             args.take = this.rangeEnd - this.rangeStart + 1;
+          } else {
+            // REG-84: caller asked for "everything" — bound it.
+            args.take = MAX_UNBOUNDED_ROWS;
           }
           const rows = await delegate.findMany(args);
+          if (
+            !this.limitCount &&
+            this.rangeStart === undefined &&
+            rows.length >= MAX_UNBOUNDED_ROWS
+          ) {
+            console.error(
+              `[db] REG-84 ceiling hit on ${this.tableName}: unbounded select reached ${MAX_UNBOUNDED_ROWS} rows; results may be truncated. Add an explicit limit/range at the call site.`
+            );
+          }
           result = rows.map((r: any) => this.toSnakeRow(r));
           if (this.wantCount) {
             count = await delegate.count({ where });

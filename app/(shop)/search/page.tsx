@@ -7,7 +7,9 @@ import Link from "next/link";
 import { jost } from "@/lib/fonts";
 
 export const metadata = {
-  title: "Search Products",
+  // REG-69: full authored title (the root template that used to append
+  // the brand suffix is gone; this page was its one bare-title consumer).
+  title: "Search Products | Anchor Fashion",
   description: "Search luxury apparel, fashion edits and accessories at Anchor Fashion.",
 };
 

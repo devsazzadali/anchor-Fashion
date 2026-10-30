@@ -3,6 +3,7 @@ import { CatalogService } from "@/lib/services/catalog.service";
 import { ReviewRepository } from "@/lib/repositories/catalog/review.repository";
 import { FlashSaleService } from "@/lib/services/marketing/flash-sale.service";
 import { ProductDetailView } from "@/components/product/product-detail-view";
+import { getFreeShippingThreshold } from "@/lib/actions/settings.actions";
 import { notFound } from "next/navigation";
 
 export const revalidate = 60;
@@ -136,6 +137,7 @@ export default async function ProductDetailPage({
         flashSale={flashSale}
         reviews={reviews}
         relatedProducts={relatedProducts}
+        freeShippingThreshold={await getFreeShippingThreshold().catch(() => 0)}
       />
     </>
   );

@@ -21,11 +21,15 @@ export class DHLProvider implements ICourierProvider {
 
   private readonly apiKey: string;
   private readonly accountNumber: string;
+  private readonly shipperPhone: string;
   private readonly baseUrl: string;
 
   constructor(config: Record<string, any>, isSandbox: boolean) {
     this.apiKey = config.apiKey ?? "";
     this.accountNumber = config.accountNumber ?? "";
+    // REG-87: the shipper contact phone comes from the provider config
+    // (Admin → Shipping → Couriers) — never an invented constant.
+    this.shipperPhone = config.shipperPhone ?? "";
     this.isSandbox = isSandbox;
     this.baseUrl = isSandbox
       ? "https://express.api.dhl.com/mydhlapi/test"
@@ -43,6 +47,12 @@ export class DHLProvider implements ICourierProvider {
     request: ConsignmentRequest
   ): Promise<ProviderResponse<ConsignmentResponse>> {
     try {
+      if (!this.shipperPhone) {
+        return this.errorResponse(
+          "CONFIGURATION",
+          "DHL shipper phone is not configured — set shipperPhone in the courier provider settings (Admin → Shipping → Couriers)."
+        );
+      }
       const shipDate = new Date();
       shipDate.setDate(shipDate.getDate() + 1);
 
@@ -63,7 +73,7 @@ export class DHLProvider implements ICourierProvider {
             },
             contactInformation: {
               fullName: "Anchor Fashion",
-              phone: "+8801700000000",
+              phone: this.shipperPhone,
               email: "logistics@anchorfashion.com",
             },
           },

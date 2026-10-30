@@ -16,19 +16,34 @@ export async function GET(
     const { shipmentId } = await params;
     const adminDb = createAdminDbClient();
 
-    // 1. Fetch shipment
-    const { data: shipment, error: shipError } = await adminDb
+    // 1. Fetch shipment.
+    // REG-83: the aliased embed order:order_id(...) never attaches (not a
+    // supported relation pair), so the response's shipment.order was
+    // always missing. Fetch the order explicitly and attach it under the
+    // same key with the same columns the embed used to promise.
+    const { data: shipmentRow, error: shipError } = await adminDb
       .from("shipments")
-      .select("*, order:order_id(order_number, id, grand_total, payment_method)")
+      .select("*")
       .eq("id", shipmentId)
       .maybeSingle();
 
-    if (shipError || !shipment) {
+    if (shipError || !shipmentRow) {
       return NextResponse.json(
         { success: false, error: "Shipment not found" },
         { status: 404 }
       );
     }
+
+    let orderSummary: Record<string, unknown> | null = null;
+    if (shipmentRow.order_id) {
+      const { data: orderRow } = await adminDb
+        .from("orders")
+        .select("order_number, id, grand_total, payment_method")
+        .eq("id", shipmentRow.order_id)
+        .maybeSingle();
+      orderSummary = orderRow || null;
+    }
+    const shipment = { ...shipmentRow, order: orderSummary };
 
     // 2. Fetch existing tracking events
     const { data: events } = await adminDb

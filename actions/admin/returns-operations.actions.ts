@@ -265,9 +265,42 @@ export async function getOrdersForReturnAction(search: string = "") {
   try {
     const db = createAdminDbClient();
 
+    // REG-83: the profiles(first_name, last_name, email) embed on orders
+    // never attaches (unsupported pair), so the customer name/email were
+    // always missing from the operations return picker. Fetch orders
+    // plainly and attach the profile fields with one batched lookup.
+    const attachProfiles = async (rows: any[]) => {
+      const profileIds = [
+        ...new Set(
+          rows
+            .map((o: any) => o.profile_id ?? o.customer_id)
+            .filter(Boolean)
+        ),
+      ];
+      const profileById = new Map<string, any>();
+      if (profileIds.length > 0) {
+        const { data: profiles } = await db
+          .from("profiles")
+          .select("id, first_name, last_name, email")
+          .in("id", profileIds);
+        for (const p of profiles || []) {
+          if (p?.id) profileById.set(p.id, p);
+        }
+      }
+      return rows.map((o: any) => {
+        const p = profileById.get(o.profile_id ?? o.customer_id);
+        return {
+          ...o,
+          profiles: p
+            ? { first_name: p.first_name, last_name: p.last_name, email: p.email }
+            : null,
+        };
+      });
+    };
+
     let query = db
       .from("orders")
-      .select("id, order_number, total_amount, status, customer_id, profiles(first_name, last_name, email)")
+      .select("id, order_number, total_amount, status, customer_id, profile_id")
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -280,13 +313,13 @@ export async function getOrdersForReturnAction(search: string = "") {
       // Fallback
       const { data: fbOrders } = await db
         .from("orders")
-        .select("id, order_number, total_amount, status, customer_id")
+        .select("id, order_number, total_amount, status, customer_id, profile_id")
         .order("created_at", { ascending: false })
         .limit(10);
-      return { success: true, data: fbOrders || [] };
+      return { success: true, data: await attachProfiles(fbOrders || []) };
     }
 
-    return { success: true, data: orders || [] };
+    return { success: true, data: await attachProfiles(orders || []) };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to fetch orders" };
   }

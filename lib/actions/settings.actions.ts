@@ -8,6 +8,7 @@ import {
   recordAuditForSessionUser,
   AUDIT_ACTIONS,
 } from "@/lib/security/audit";
+import { DEFAULT_INVOICE_INFO } from "@/lib/constants/invoice-company";
 
 /** REG-27: every settings write is audited with its settings key. */
 async function auditSettingsChange(key: string) {
@@ -145,16 +146,9 @@ const DEFAULTS: {
     gtm_id: "",
     fb_pixel: "",
   },
-  invoice_info: {
-    company_name: "Anchor Fashion Ltd",
-    central_bin: "001168309-0101",
-    central_address: "Plot No# 01, Section #07, Mirpur - 1216, Dhaka",
-    web_address: "anchorfashion.com",
-    customer_care: "+8801885598889",
-    shop_concern: "+8801885813370",
-    email: "info@anchorfashion.com",
-    system_by: "Anchor Fashion Ltd.",
-  },
+  // REG-82: legal-identity defaults single-sourced from
+  // lib/constants/invoice-company (shared with the print component).
+  invoice_info: { ...DEFAULT_INVOICE_INFO },
 };
 
 const getCachedSetting = unstable_cache(
@@ -180,6 +174,19 @@ const getCachedSetting = unstable_cache(
 
 export async function getStoreInfo(): Promise<StoreInfo> {
   return getCachedSetting("store_info", DEFAULTS.store_info);
+}
+
+/**
+ * REG-81: THE free-shipping threshold rule (BDT), single-sourced.
+ * The order engine waives the delivery fee when subtotal >= threshold
+ * (and threshold > 0); every storefront surface that advertises free
+ * shipping (cart drawer, cart page, PDP claim) must read the threshold
+ * through here so an Admin change cannot make the storefront lie.
+ * Returns 0 when no threshold is configured (no free-shipping program).
+ */
+export async function getFreeShippingThreshold(): Promise<number> {
+  const info = await getStoreInfo().catch(() => null);
+  return parseFloat(info?.free_shipping_threshold ?? "") || 0;
 }
 
 /**

@@ -66,12 +66,24 @@ async function requireBranchAccess(returnId: string) {
     // Only enforce branch filtering if user is not global admin and has a branch assigned
     if (!isGlobalAdmin && profile?.branch_id) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(returnId);
-      let query = adminClient.from("returns").select("orders(branch_id)");
+      let query = adminClient.from("returns").select("id, order_id");
       query = isUuid ? query.eq("id", returnId) : query.eq("return_number", returnId);
       const { data: returnData } = await query.maybeSingle();
 
-      // @ts-ignore
-      const orderBranch = returnData?.orders?.branch_id;
+      // REG-83: this used to read the branch from an orders(branch_id)
+      // embed on returns — an unsupported pair the DB builder silently
+      // drops — so orderBranch was ALWAYS undefined and the branch
+      // restriction never fired (fail-open). Resolve the order's branch
+      // with an explicit query instead.
+      let orderBranch: string | null = null;
+      if (returnData?.order_id) {
+        const { data: orderRow } = await adminClient
+          .from("orders")
+          .select("branch_id")
+          .eq("id", returnData.order_id)
+          .maybeSingle();
+        orderBranch = orderRow?.branch_id ?? null;
+      }
       if (orderBranch && orderBranch !== profile.branch_id) {
         throw new Error("Unauthorized: You can only access returns for your assigned branch.");
       }

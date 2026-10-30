@@ -13,11 +13,17 @@ import { jost } from "@/lib/fonts";
 
 interface CartClientProps {
   initialCart: Cart | null;
+  /** REG-81: Admin-configured free-shipping threshold (BDT) from
+   *  store_info via getFreeShippingThreshold(); 0 = no program, the
+   *  meter is hidden rather than faked against a hardcoded 999. */
+  freeShippingThreshold?: number;
 }
 
-const FREE_SHIPPING_THRESHOLD = 999;
-
-export function CartClient({ initialCart }: CartClientProps) {
+export function CartClient({
+  initialCart,
+  freeShippingThreshold = 0,
+}: CartClientProps) {
+  const FREE_SHIPPING_THRESHOLD = freeShippingThreshold;
   const { cart, fetchCart } = useCartStore();
 
   // Use store cart if available, otherwise use initial server-fetched cart
@@ -58,7 +64,10 @@ export function CartClient({ initialCart }: CartClientProps) {
     }))
   );
 
-  const progress = Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
+  const progress =
+    FREE_SHIPPING_THRESHOLD > 0
+      ? Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100)
+      : 0;
   const amountNeeded = FREE_SHIPPING_THRESHOLD - subtotal;
 
   if (items.length === 0) {
@@ -105,7 +114,8 @@ export function CartClient({ initialCart }: CartClientProps) {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
         {/* Cart Items List */}
         <div className="lg:col-span-8">
-          {/* Free Shipping Meter */}
+          {/* Free Shipping Meter (only when a threshold is configured) */}
+          {FREE_SHIPPING_THRESHOLD > 0 && (
           <div className="mb-6 rounded-xl border border-gray-100 bg-gray-50/80 p-4">
             <div className="mb-2 flex items-center justify-between text-xs font-medium text-gray-900">
               <span className="flex items-center gap-1.5">
@@ -125,6 +135,7 @@ export function CartClient({ initialCart }: CartClientProps) {
               />
             </div>
           </div>
+          )}
 
           <div className="divide-y divide-gray-100 border-t border-b border-gray-100">
             {items.map((item) => (
