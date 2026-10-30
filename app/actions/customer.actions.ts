@@ -587,7 +587,11 @@ export async function createReviewAction(data: {
       user?.name ||
       "Customer";
 
-    // Insert the review into the real table.
+    // Insert the review into the real table. REG-39: new reviews land as
+    // PENDING moderation (is_approved=false). The PDP read path and the
+    // rating aggregates only count approved reviews, so nothing a customer
+    // writes is public until an admin approves it in
+    // Admin → Products → Reviews.
     const { data: review, error: insertError } = await adminClient
       .from("reviews")
       .insert({
@@ -598,7 +602,7 @@ export async function createReviewAction(data: {
         title: data.title || null,
         comment: reviewContent,
         images: data.images || [],
-        is_approved: true,
+        is_approved: false,
       })
       .select()
       .single();
@@ -608,7 +612,8 @@ export async function createReviewAction(data: {
     // Keep products.rating / review_count truthful (real aggregates).
     await ReviewRepository.recalculateProductRating(data.productId);
 
-    // Revalidate paths so reviews appear immediately
+    // Revalidate storefront paths (the pending review itself stays hidden
+    // until approval; this keeps the PDP's approved list/ratings fresh).
     const { data: prod } = await adminClient
       .from("products")
       .select("slug")

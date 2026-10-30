@@ -4,6 +4,7 @@ import {
   createCRMLeadSchema,
   updateCRMLeadSchema,
   createCRMNoteSchema,
+  contactMessageSchema,
 } from "@/schemas/crm.schema";
 import { CRMLead, CRMNote, CommunicationLog } from "@/types/crm.types";
 
@@ -73,6 +74,58 @@ export class CRMService {
       } catch (noteErr) {
         console.warn("Failed to create initial lead note:", noteErr);
       }
+    }
+
+    return lead;
+  }
+
+  /**
+   * Public storefront "Contact Us" submission (REG-38).
+   *
+   * Destination is `crm_leads` — the store the admin CRM → Leads surface
+   * reads — with the subject + message preserved as a lead note, exactly
+   * how the contact form always intended to file it (source
+   * "Contact Us Form"). A returning sender whose email already has a lead
+   * gets the message appended as a new note on that lead instead of a
+   * "lead already exists" error: a contact form must never refuse a
+   * second message from the same customer.
+   */
+  async submitContactMessage(data: unknown): Promise<CRMLead> {
+    const valid = contactMessageSchema.parse(data);
+    const email = valid.email.trim().toLowerCase();
+    const noteContent = `[Subject: ${valid.subject}]\n\n${valid.message}`;
+
+    const existing = await crmRepository.getLeadByEmail(email);
+    if (existing) {
+      await crmRepository.createNote({
+        lead_id: existing.id,
+        content: noteContent,
+      });
+      return existing;
+    }
+
+    const nameParts = valid.name.trim().split(/\s+/);
+    const firstName = nameParts.shift() || valid.name.trim();
+    const lastName = nameParts.length > 0 ? nameParts.join(" ") : null;
+
+    const leadFields: Record<string, any> = {
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      phone: null,
+      company_name: null,
+      source: "Contact Us Form",
+      status: "new",
+      score: 0,
+      assigned_to: null,
+    };
+    const lead = await crmRepository.createLead(leadFields);
+
+    if (lead?.id) {
+      await crmRepository.createNote({
+        lead_id: lead.id,
+        content: noteContent,
+      });
     }
 
     return lead;

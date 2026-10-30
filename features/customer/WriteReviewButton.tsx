@@ -175,7 +175,7 @@ export function WriteReviewButton({
       if (res.error) {
         toast.error(res.error || "Failed to submit review");
       } else {
-        toast.success("Thank you! Your review has been published.");
+        toast.success("Thank you! Your review has been submitted and will appear once approved.");
         setOpen(false);
         form.reset({
           productId: productId || "",

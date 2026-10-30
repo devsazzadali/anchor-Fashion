@@ -55,21 +55,24 @@ interface ReviewsTableProps {
 export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
   const [reviews, setReviews] = useState<Review[]>(initialReviews);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "cancelled">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "pending">("all");
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [activeReview, setActiveReview] = useState<Review | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [hideTarget, setHideTarget] = useState<Review | null>(null);
   const [loadingRowId, setLoadingRowId] = useState<string | null>(null);
 
-  // Summary Metrics
+  // Summary Metrics. REG-39: unapproved reviews are the moderation queue —
+  // new storefront submissions land here as Pending (plus any review an
+  // admin has hidden), so the bucket is labelled "Pending / Hidden",
+  // not "Cancelled".
   const metrics = useMemo(() => {
     const total = reviews.length;
     const approved = reviews.filter((r) => r.is_approved).length;
-    const cancelled = total - approved;
+    const pending = total - approved;
     const totalRating = reviews.reduce((sum, r) => sum + (r.rating || 0), 0);
     const avgRating = total > 0 ? (totalRating / total).toFixed(1) : "0.0";
-    return { total, approved, cancelled, avgRating };
+    return { total, approved, pending, avgRating };
   }, [reviews]);
 
   // Filtered reviews
@@ -77,7 +80,7 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
     return reviews.filter((review) => {
       // Status Filter
       if (statusFilter === "approved" && !review.is_approved) return false;
-      if (statusFilter === "cancelled" && review.is_approved) return false;
+      if (statusFilter === "pending" && review.is_approved) return false;
 
       // Rating Filter
       if (ratingFilter !== "all") {
@@ -203,16 +206,16 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
         <Card className="bg-card shadow-sm border">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Cancelled / Hidden
+              Pending / Hidden
             </CardTitle>
-            <XCircle className="h-4 w-4 text-rose-500" />
+            <XCircle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
-              {metrics.cancelled}
+            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+              {metrics.pending}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">
-              Hidden from public product pages
+              Awaiting moderation or hidden from store
             </p>
           </CardContent>
         </Card>
@@ -264,8 +267,8 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
               <SelectItem value="approved" className="text-xs">
                 Approved Only ({metrics.approved})
               </SelectItem>
-              <SelectItem value="cancelled" className="text-xs">
-                Cancelled Only ({metrics.cancelled})
+              <SelectItem value="pending" className="text-xs">
+                Pending / Hidden Only ({metrics.pending})
               </SelectItem>
             </SelectContent>
           </Select>
@@ -464,11 +467,11 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
                         </Badge>
                       ) : (
                         <Badge
-                          variant="destructive"
-                          className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-300 hover:bg-rose-500/25 font-medium text-[11px] gap-1 px-2 py-0.5"
+                          variant="outline"
+                          className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-300 hover:bg-amber-500/25 font-medium text-[11px] gap-1 px-2 py-0.5"
                         >
-                          <XCircle className="w-3 h-3 text-rose-600" />
-                          Cancelled (Hidden)
+                          <XCircle className="w-3 h-3 text-amber-600" />
+                          Pending / Hidden
                         </Badge>
                       )}
                     </TableCell>

@@ -55,6 +55,36 @@ export const createCRMLeadSchema = z.object({
 
 export const updateCRMLeadSchema = createCRMLeadSchema.partial();
 
+/**
+ * Public storefront "Contact Us" form payload. The form is submitted by
+ * guests, so this schema is the ONLY gate on that endpoint: strict field
+ * bounds, a real email, and no way to smuggle lead fields (status,
+ * assigned agent, score) through it.
+ */
+export const contactMessageSchema = z.object({
+  name: z
+    .string({ required_error: "Full name is required" })
+    .trim()
+    .min(2, "Full name must be at least 2 characters")
+    .max(120, "Full name is too long"),
+  email: z
+    .string({ required_error: "Email address is required" })
+    .trim()
+    .min(1, "Email address is required")
+    .max(255, "Email address is too long")
+    .email("Please enter a valid email address"),
+  subject: z
+    .string({ required_error: "Subject is required" })
+    .trim()
+    .min(3, "Subject must be at least 3 characters")
+    .max(200, "Subject is too long"),
+  message: z
+    .string({ required_error: "Message is required" })
+    .trim()
+    .min(10, "Message must be at least 10 characters")
+    .max(5000, "Message is too long"),
+});
+
 export const createCRMNoteSchema = z
   .object({
     profile_id: z.string().uuid().optional(),

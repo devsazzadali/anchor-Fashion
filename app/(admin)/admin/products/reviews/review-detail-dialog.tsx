@@ -142,11 +142,11 @@ export function ReviewDetailDialog({
                 </Badge>
               ) : (
                 <Badge
-                  variant="destructive"
-                  className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-300 font-medium text-xs px-2.5 py-0.5"
+                  variant="outline"
+                  className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-300 font-medium text-xs px-2.5 py-0.5"
                 >
                   <XCircle className="w-3.5 h-3.5 mr-1" />
-                  Cancelled (Hidden from Store)
+                  Pending / Hidden (Not on Store)
                 </Badge>
               )}
             </div>

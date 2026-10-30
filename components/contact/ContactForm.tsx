@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send } from "lucide-react";
-import { createLeadAction } from "@/actions/crm.actions";
+import { submitContactMessageAction } from "@/actions/crm.actions";
 
 const contactSchema = z.object({
   name: z.string().trim().min(2, "Full name must be at least 2 characters"),
@@ -43,11 +43,11 @@ export function ContactForm() {
   const onSubmit = async (data: ContactFormValues) => {
     setIsSubmitting(true);
     try {
-      const res = await createLeadAction({
-        first_name: data.name,
+      const res = await submitContactMessageAction({
+        name: data.name,
         email: data.email,
-        source: "Contact Us Form",
-        notes: `[Subject: ${data.subject}]\n\n${data.message}`,
+        subject: data.subject,
+        message: data.message,
       });
 
       if (res?.error) {

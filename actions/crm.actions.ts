@@ -76,6 +76,33 @@ export async function createLeadAction(data: unknown) {
   }
 }
 
+/**
+ * PUBLIC endpoint for the storefront "Contact Us" form (REG-38).
+ *
+ * This action intentionally does NOT call verifyStaff: it exists for
+ * guests. The staff-only createLeadAction above was previously (mis)used
+ * by the public form, and its verifyStaff() — invoked OUTSIDE the
+ * try/catch — threw "Unauthorized" for every guest, which escaped the
+ * action as an unhandled server error (the client-visible "Server
+ * Components render" crash) and lost every message. Safety here comes
+ * from the strict contactMessageSchema in the service (bounded fields,
+ * valid email, no lead-field smuggling) and a write surface limited to
+ * crm_leads + crm_notes.
+ */
+export async function submitContactMessageAction(data: unknown) {
+  try {
+    const lead = await crmService.submitContactMessage(data);
+    revalidatePath("/admin/crm/leads");
+    return { data: lead };
+  } catch (error: any) {
+    const issues = error?.errors || error?.issues;
+    if (issues && Array.isArray(issues) && issues.length > 0) {
+      return { error: issues[0]?.message || "Validation failed" };
+    }
+    return { error: error.message || "Failed to send message" };
+  }
+}
+
 export async function updateLeadAction(id: string, data: unknown) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
