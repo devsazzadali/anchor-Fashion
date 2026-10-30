@@ -89,6 +89,7 @@ export function CheckoutForm({
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(60);
+  const [otpExpirySeconds, setOtpExpirySeconds] = useState(600);
 
 
 
@@ -301,6 +302,8 @@ export function CheckoutForm({
         setOtpTarget(res.maskedTarget || data.information.email);
         setOtpTargetType(res.targetType || "email");
         setOtpCooldown(res.remainingCooldownSeconds || 60);
+        // REG-45: arm the dialog countdown from the server's code lifetime.
+        if (res.expirySeconds) setOtpExpirySeconds(res.expirySeconds);
         setOtpError(null);
         setShowOtpDialog(true);
         setIsSubmitting(false);
@@ -358,7 +361,7 @@ export function CheckoutForm({
     }
   };
 
-  const handleResendOtp = async () => {
+  const handleResendOtp = async (): Promise<{ expirySeconds?: number } | undefined> => {
     setIsResendingOtp(true);
     try {
       const currentData = form.getValues();
@@ -366,6 +369,10 @@ export function CheckoutForm({
       if (res.success) {
         toast.success("A new verification code has been dispatched.");
         setOtpError(null);
+        // REG-45: hand the fresh code's lifetime back so the dialog can
+        // genuinely re-arm its countdown and re-enable Verify.
+        if (res.expirySeconds) setOtpExpirySeconds(res.expirySeconds);
+        return { expirySeconds: res.expirySeconds };
       } else {
         setOtpError(res.error || "Failed to resend verification code.");
       }
@@ -374,6 +381,7 @@ export function CheckoutForm({
     } finally {
       setIsResendingOtp(false);
     }
+    return undefined;
   };
 
   return (
@@ -878,6 +886,7 @@ export function CheckoutForm({
         isVerifying={isVerifyingOtp}
         isResending={isResendingOtp}
         initialCooldown={otpCooldown}
+        initialExpirySeconds={otpExpirySeconds}
         errorMessage={otpError}
       />
     </Form>

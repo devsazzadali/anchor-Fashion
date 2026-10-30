@@ -8,6 +8,7 @@ import { CartItem as CartItemType } from "@/types/checkout.types";
 import { useCartStore } from "@/stores/use-cart-store";
 import { useWishlistStore } from "@/stores/use-wishlist-store";
 import { formatCurrency } from "@/lib/utils";
+import { priceWithVat } from "@/lib/utils/vat";
 
 interface CartItemProps {
   item: CartItemType;
@@ -27,6 +28,13 @@ export function CartItem({ item, isReadOnly = false }: CartItemProps) {
     product?.base_price ||
     product?.price ||
     0;
+  // REG-50: one VAT rule everywhere a price is shown — the figure next
+  // to a product is the VAT-INCLUSIVE price (the PDP/card wording),
+  // labelled "incl. VAT" when the product carries VAT. The cart totals
+  // blocks break the VAT portion out separately; the amount payable
+  // does not change.
+  const vatPercent = Number(product?.vat_percent ?? product?.vatPercent ?? 0);
+  const displayLineTotal = priceWithVat(price, vatPercent) * item.quantity;
   const image =
     product?.product_media?.find((m: any) => m.is_primary)?.url ||
     product?.product_media?.[0]?.url ||
@@ -73,7 +81,14 @@ export function CartItem({ item, isReadOnly = false }: CartItemProps) {
             <h3>
               <Link href={`/product/${slug}`}>{title}</Link>
             </h3>
-            <p className="ml-4">{formatCurrency(price * item.quantity)}</p>
+            <p className="ml-4 text-right">
+              {formatCurrency(displayLineTotal)}
+              {vatPercent > 0 && (
+                <span className="block text-[10px] font-normal text-slate-400">
+                  incl. VAT
+                </span>
+              )}
+            </p>
           </div>
           {item.variant && (
             <p className="mt-1 text-sm text-slate-500">

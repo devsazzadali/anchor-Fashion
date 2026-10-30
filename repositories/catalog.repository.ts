@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PromotionRepository } from "@/lib/repositories/marketing/promotion.repository";
 import { priceWithVat } from "@/lib/utils/vat";
+import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 
 /**
  * The unit price a product card actually displays: the effective selling
@@ -371,7 +372,11 @@ export const CatalogRepository = {
         });
       }
       if (params.search && params.search.trim()) {
-        const term = params.search.trim();
+        // REG-43: escape LIKE wildcards in the shopper's term — Prisma
+        // `contains` becomes a Postgres LIKE pattern and an unescaped
+        // "%" or "_" in the term acted as a wildcard (searching "%"
+        // returned the whole catalog).
+        const term = escapeLikeWildcards(params.search.trim());
         andClauses.push({
           OR: [
             { name: { contains: term, mode: "insensitive" } },

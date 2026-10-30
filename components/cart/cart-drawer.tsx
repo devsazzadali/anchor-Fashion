@@ -16,7 +16,7 @@ import { ShoppingBag, Loader2, ArrowRight, Heart } from "lucide-react";
 import Image from "next/image";
 
 import { usePersonalizationStore } from "@/stores/use-personalization-store";
-import { totalVatAmount } from "@/lib/utils/vat";
+import { totalVatAmount, priceWithVat } from "@/lib/utils/vat";
 
 export function CartDrawer() {
   const { cart, isSheetOpen, setSheetOpen, isLoading } = useCartStore();
@@ -158,7 +158,7 @@ export function CartDrawer() {
                              <Image src={upsell.product_media?.[0]?.url || "/images/placeholder.webp"} alt={upsell.name} fill sizes="(max-width: 768px) 50vw, 200px" className="object-cover" />
                            </div>
                            <p className="truncate text-xs font-medium">{upsell.name}</p>
-                           <p className="text-[10px] text-gray-500">৳{upsell.base_price}</p>
+                           <p className="text-[10px] text-gray-500">৳{priceWithVat(Number(upsell.base_price) || 0, (upsell as any).vat_percent ?? 0).toLocaleString()}{Number((upsell as any).vat_percent ?? 0) > 0 ? " incl. VAT" : ""}</p>
                         </div>
                       ))}
                     </div>
@@ -171,12 +171,16 @@ export function CartDrawer() {
 
         {cart && cart.items && cart.items.length > 0 && (
           <div className="mt-auto space-y-4 border-t pt-4 bg-background z-10 relative">
+            {/* REG-50: totals follow the same VAT rule as the product
+                prices — the subtotal is the VAT-inclusive merchandise
+                total and the VAT row states how much of it is VAT
+                (informational, never added twice). */}
             <div className="flex items-center justify-between font-medium text-foreground">
-              <span>Subtotal</span>
-              <span>৳{subtotal.toLocaleString()}</span>
+              <span>Subtotal (incl. VAT)</span>
+              <span>৳{(subtotal + vatAmount).toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-foreground">
-              <span>VAT</span>
+              <span>VAT included</span>
               <span>৳{vatAmount.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between font-semibold text-foreground">

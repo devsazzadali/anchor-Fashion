@@ -22,6 +22,7 @@
 import prisma from "@/lib/prisma";
 import { randomUUID } from "crypto";
 import { DB_TABLES, type DbFieldMeta, type DbTableMeta } from "./field-map";
+import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 
 const SAFE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function assertIdent(name: string, kind = "identifier"): string {
@@ -416,17 +417,25 @@ export class DbQueryBuilder implements PromiseLike<any> {
     const hasLead = pattern.startsWith("%");
     const hasTrail = pattern.endsWith("%") && pattern.length > 1;
     const core = pattern.replace(/^%/, "").replace(/%$/, "");
+    // REG-43: the leading/trailing % are the caller's contains markers;
+    // the core is literal text. Prisma turns contains/startsWith/
+    // endsWith into a Postgres LIKE pattern without escaping, so any
+    // %/_/\ inside the core must be escaped or it acts as a wildcard
+    // (a search for "%" matched every row). The equals branch is an
+    // exact match (no LIKE) and stays untouched.
     if (!pattern.includes("%") && !pattern.includes("_")) {
       frag = { [r.meta.field]: { equals: pattern, ...mode } };
-    } else if (hasLead && hasTrail && !core.includes("%") && !core.includes("_")) {
-      frag = { [r.meta.field]: { contains: core, ...mode } };
-    } else if (hasTrail && !hasLead && !core.includes("%") && !core.includes("_")) {
-      frag = { [r.meta.field]: { startsWith: core, ...mode } };
-    } else if (hasLead && !hasTrail && !core.includes("%") && !core.includes("_")) {
-      frag = { [r.meta.field]: { endsWith: core, ...mode } };
+    } else if (hasLead && hasTrail) {
+      frag = { [r.meta.field]: { contains: escapeLikeWildcards(core), ...mode } };
+    } else if (hasTrail && !hasLead) {
+      frag = { [r.meta.field]: { startsWith: escapeLikeWildcards(core), ...mode } };
+    } else if (hasLead && !hasTrail) {
+      frag = { [r.meta.field]: { endsWith: escapeLikeWildcards(core), ...mode } };
     } else {
-      // Complex pattern: best-effort contains on the literal core.
-      frag = { [r.meta.field]: { contains: core.replace(/[%_]/g, ""), ...mode } };
+      // Pattern with wildcards in the middle (e.g. "a%b" with no edge
+      // markers): match the literal core — escaping keeps %/_ literal
+      // instead of the previous behaviour of silently deleting them.
+      frag = { [r.meta.field]: { contains: escapeLikeWildcards(core), ...mode } };
     }
     this.andFragments.push(frag);
     return this;
@@ -566,8 +575,9 @@ export class DbQueryBuilder implements PromiseLike<any> {
         if (r.meta.type !== "String") { this.poisoned = true; return this; }
         const mode = op === "ilike" ? { mode: "insensitive" as const } : {};
         const core = val.replace(/^%/, "").replace(/%$/, "");
+        // REG-43: escape the literal core — see likeImpl.
         orFrags.push(val.includes("%")
-          ? { [field]: { contains: core, ...mode } }
+          ? { [field]: { contains: escapeLikeWildcards(core), ...mode } }
           : { [field]: { equals: val, ...mode } });
         continue;
       }
@@ -608,7 +618,7 @@ export class DbQueryBuilder implements PromiseLike<any> {
     const r = this.resolve(col);
     if (!r) { this.poisoned = true; return this; }
     this.andFragments.push({
-      [r.meta.field]: { contains: query, mode: "insensitive" },
+      [r.meta.field]: { contains: escapeLikeWildcards(query), mode: "insensitive" },
     });
     return this;
   }

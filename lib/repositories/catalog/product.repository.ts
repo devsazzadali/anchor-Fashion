@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { CreateProductInput, Product } from "@/types/catalog.types";
+import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { cache } from "react";
 import { generateUniqueProductCode } from "@/lib/utils/product-code";
 import { generateEAN13Sync } from "@/lib/utils/barcode";
@@ -212,7 +213,7 @@ export class ProductRepository {
       };
 
       if (search && search.trim()) {
-        const term = search.trim();
+        const term = escapeLikeWildcards(search.trim()); // REG-43: literal LIKE match
         where.OR = [
           { name: { contains: term, mode: "insensitive" } },
           { sku: { contains: term, mode: "insensitive" } },
@@ -898,7 +899,7 @@ export class ProductRepository {
     const limit = Math.min(100, Math.max(1, params?.limit || 20));
     const where: any = { deletedAt: { not: null } };
     if (params?.search?.trim()) {
-      const term = params.search.trim();
+      const term = escapeLikeWildcards(params.search.trim()); // REG-43
       where.OR = [
         { name: { contains: term, mode: "insensitive" } },
         { sku: { contains: term, mode: "insensitive" } },
@@ -1054,7 +1055,7 @@ export class ProductRepository {
       where.status = filters.status;
     }
     if (filters?.search && filters.search.trim()) {
-      const term = filters.search.trim();
+      const term = escapeLikeWildcards(filters.search.trim()); // REG-43
       where.OR = [
         { name: { contains: term, mode: "insensitive" } },
         { sku: { contains: term, mode: "insensitive" } },

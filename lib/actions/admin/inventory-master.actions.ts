@@ -6,6 +6,7 @@ import { invalidateProductCache } from "@/lib/cache/invalidate-catalog";
 
 import { generateEAN13Sync } from "@/lib/utils/barcode";
 import { verifyStaff } from "@/lib/security/roles";
+import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { generateUniqueProductCode, formatVariantSku } from "@/lib/utils/product-code";
 
 export async function generateEAN13BarcodeAction(prefix = "89420"): Promise<string> {
@@ -301,7 +302,7 @@ export async function getInventoryMasterListAction(params?: {
   page?: number;
 }) {
   try {
-    const search = params?.search?.trim() || "";  // SECURITY: server actions are public endpoints; authorize every call.
+    const search = escapeLikeWildcards(params?.search?.trim() || ""); // REG-43: literal LIKE match ("" stays "")  // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
 
     const status = params?.status || "ALL";

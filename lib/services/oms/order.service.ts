@@ -144,12 +144,35 @@ export class OrderService {
           .eq("id", order.customer_id)
           .maybeSingle();
 
-        // 2. Fetch from profiles (fallback)
-        const { data: profile } = await db
-          .from("profiles")
-          .select("id, first_name, last_name, phone, avatar_url")
-          .eq("id", order.customer_id)
-          .maybeSingle();
+        // 2. Fetch from profiles (fallback) — via Prisma, not the fluent
+        // builder: the builder's reads against profile-shaped tables have
+        // silently dropped data before (REG-42 disease), and this row is
+        // the canonical source for the customer's name/phone.
+        let profile: any = null;
+        try {
+          const { prisma } = await import("@/lib/prisma");
+          const p = await prisma.profile.findUnique({
+            where: { id: order.customer_id },
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              avatarUrl: true,
+            },
+          });
+          if (p) {
+            profile = {
+              id: p.id,
+              first_name: p.firstName,
+              last_name: p.lastName,
+              phone: p.phone,
+              avatar_url: p.avatarUrl,
+            };
+          }
+        } catch {
+          profile = null;
+        }
 
         // 3. Fetch tier from crm_customer_profiles
         const { data: crmProfile } = await db
@@ -176,7 +199,18 @@ export class OrderService {
         const firstName = cProfile?.first_name || profile?.first_name || null;
         const lastName = cProfile?.last_name || profile?.last_name || null;
         const fullName = [firstName, lastName].filter(Boolean).join(" ") || (customerEmail ? customerEmail.split("@")[0] : "Registered Customer");
-        const phone = cProfile?.phone || profile?.phone || null;
+        // REG-32-phone: the profile rows frequently carry NO phone (the
+        // checkout-collected phone — the number the customer actually
+        // verified and the business's identity key — is stored on the
+        // order itself, inside the persisted shipping/billing address
+        // JSON). Fall back to the order's stored phone so the manager /
+        // admin Customer Details card can always show a callable number
+        // when one exists anywhere on the order.
+        const storedPhone =
+          (order as any).shipping_address?.phone ||
+          (order as any).billing_address?.phone ||
+          null;
+        const phone = cProfile?.phone || profile?.phone || storedPhone;
 
         if (cProfile || profile || customerEmail) {
           customer = {

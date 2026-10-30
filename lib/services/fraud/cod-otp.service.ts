@@ -103,6 +103,9 @@ export class CodOtpService {
     maskedTarget: string;
     targetType: "email" | "phone";
     remainingCooldownSeconds?: number;
+    /** REG-45: the fresh code's lifetime, so the client countdown can be
+     * armed from the server's actual config instead of a hardcoded guess. */
+    expirySeconds?: number;
     error?: string;
   }> {
     const config = await CodRiskService.getConfig();
@@ -124,6 +127,7 @@ export class CodOtpService {
           sessionId: params.sessionId,
           maskedTarget: this.maskTarget(targetValue, targetType),
           targetType,
+          expirySeconds: config.otp_expiry_minutes * 60,
         };
       }
 
@@ -264,6 +268,7 @@ export class CodOtpService {
       sessionId: params.sessionId,
       maskedTarget: this.maskTarget(targetValue, targetType),
       targetType,
+      expirySeconds: config.otp_expiry_minutes * 60,
     };
   }
 

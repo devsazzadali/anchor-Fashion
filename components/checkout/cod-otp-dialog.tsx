@@ -19,10 +19,12 @@ interface CodOtpDialogProps {
   maskedTarget: string;
   targetType?: "email" | "phone";
   onVerify: (otp: string) => Promise<void>;
-  onResend: () => Promise<void>;
+  /** Resolves with the fresh code's lifetime on success (REG-45). */
+  onResend: () => Promise<{ expirySeconds?: number } | void>;
   isVerifying: boolean;
   isResending: boolean;
   initialCooldown?: number;
+  initialExpirySeconds?: number;
   errorMessage?: string | null;
 }
 
@@ -36,11 +38,25 @@ export function CodOtpDialog({
   isVerifying,
   isResending,
   initialCooldown = 60,
+  initialExpirySeconds = 600,
   errorMessage,
 }: CodOtpDialogProps) {
   const [otp, setOtp] = useState("");
   const [cooldown, setCooldown] = useState(initialCooldown);
-  const [expirySeconds, setExpirySeconds] = useState(600); // 10 minutes
+  const [expirySeconds, setExpirySeconds] = useState(initialExpirySeconds);
+
+  // REG-45: every (re)open starts from a freshly dispatched code — reset
+  // the countdown, the cooldown, and any stale input. Without this the
+  // dialog (mounted once by the checkout form) kept a previous session's
+  // exhausted 0:00 countdown and the customer could never verify.
+  useEffect(() => {
+    if (open) {
+      setExpirySeconds(initialExpirySeconds);
+      setCooldown(initialCooldown);
+      setOtp("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open ]);
 
   // Handle resend cooldown countdown
   useEffect(() => {
@@ -87,8 +103,20 @@ export function CodOtpDialog({
 
   const handleResendClick = async () => {
     if (cooldown > 0 || isResending) return;
-    await onResend();
-    setCooldown(60);
+    const res = await onResend();
+    // REG-45 (the customer trap): a resend dispatches a brand-new code
+    // server-side (new hash, new expiry in cod_verifications) but the
+    // dialog previously reset ONLY the cooldown — the expiry countdown
+    // stayed at 0:00 and Verify stayed disabled forever. On a confirmed
+    // dispatch, re-arm the countdown from the server's code lifetime,
+    // clear the now-invalid old code, and restart the resend cooldown.
+    // On failure (no result), leave the timers untouched — no new code
+    // exists to verify against.
+    if (res && typeof res.expirySeconds === "number") {
+      setExpirySeconds(res.expirySeconds);
+      setOtp("");
+      setCooldown(60);
+    }
   };
 
   return (

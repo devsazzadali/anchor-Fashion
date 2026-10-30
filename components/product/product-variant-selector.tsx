@@ -812,6 +812,7 @@ export function ProductVariantSelector({
           quantity={quantity}
           onQuantityChange={setQuantity}
           maxQuantity={maxAllowedQuantity}
+          stockQuantity={currentStock}
           isOutOfStock={isOutOfStock}
           validationError={validationError}
         />

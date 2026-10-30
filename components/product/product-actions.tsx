@@ -23,6 +23,10 @@ export interface ProductActionsProps {
   quantity?: number;
   onQuantityChange?: (quantity: number) => void;
   maxQuantity?: number;
+  /** REG-47: units actually in stock for the selected variant — lets the
+   * stepper explain itself when the stock (not the flat 10 cap) is the
+   * binding limit. */
+  stockQuantity?: number;
   isOutOfStock?: boolean;
   validationError?: string | null;
 }
@@ -37,6 +41,7 @@ export function ProductActions({
   quantity = 1,
   onQuantityChange,
   maxQuantity = 10,
+  stockQuantity,
   isOutOfStock = false,
   validationError = null,
 }: ProductActionsProps) {
@@ -171,6 +176,16 @@ export function ProductActions({
 
   const effectiveDisabled = isOutOfStock || disabled;
 
+  // REG-47: the stepper silently stopped at the stock cap. When the
+  // chosen quantity has reached the cap AND stock is the binding limit
+  // (not the flat per-order limit), say so — "Only N available".
+  const stockCapHit =
+    !isOutOfStock &&
+    typeof stockQuantity === "number" &&
+    stockQuantity > 0 &&
+    quantity >= maxQuantity &&
+    quantity >= stockQuantity;
+
   return (
     <>
       <div ref={actionsRef} className="space-y-3.5">
@@ -251,6 +266,13 @@ export function ProductActions({
             />
           </button>
         </div>
+
+        {/* REG-47: explain the stock cap instead of silently stopping. */}
+        {stockCapHit && (
+          <p className="text-xs font-medium text-amber-600" role="status">
+            Only {stockQuantity} available
+          </p>
+        )}
 
         {/* Row 2: Prominent Buy Now Button */}
         <button

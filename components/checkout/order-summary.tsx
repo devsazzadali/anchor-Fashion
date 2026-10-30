@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, ShieldCheck } from "lucide-react";
 import { applyCouponAction, removeCouponAction } from "@/actions/checkout.actions";
 import { toast } from "sonner";
-import { totalVatAmount } from "@/lib/utils/vat";
+import { totalVatAmount, priceWithVat } from "@/lib/utils/vat";
 import { getPublicZonesAction } from "@/lib/actions/shipping.actions";
 import { getStoreInfo } from "@/lib/actions/settings.actions";
 import {
@@ -221,7 +221,19 @@ export function OrderSummary({
                 )}
               </div>
               <div className="flex items-center text-sm font-medium">
-                {formatCurrency(price * item.quantity)}
+                {/* REG-50: line prices follow the PDP rule — VAT-inclusive,
+                    labelled when the product carries VAT. */}
+                <span className="text-right">
+                  {formatCurrency(
+                    priceWithVat(price, (item.product as any)?.vat_percent ?? 0) *
+                      item.quantity
+                  )}
+                  {Number((item.product as any)?.vat_percent ?? 0) > 0 && (
+                    <span className="block text-[10px] font-normal text-slate-400">
+                      incl. VAT
+                    </span>
+                  )}
+                </span>
               </div>
             </div>
           );
@@ -268,9 +280,13 @@ export function OrderSummary({
       </div>
 
       <div className="space-y-3 border-t pt-6 text-sm">
+        {/* REG-50: same VAT rule as cards/PDP/cart — merchandise subtotal
+            is VAT-inclusive; the VAT row states the included portion
+            (informational). The payable total is unchanged: it is still
+            computed once as pre-VAT subtotal + shipping + tax − discount. */}
         <div className="flex justify-between">
-          <span className="text-slate-500">Subtotal</span>
-          <span className="font-medium">{formatCurrency(subtotal)}</span>
+          <span className="text-slate-500">Subtotal (incl. VAT)</span>
+          <span className="font-medium">{formatCurrency(subtotal + tax)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-500">Shipping</span>
@@ -279,7 +295,7 @@ export function OrderSummary({
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">VAT</span>
+          <span className="text-slate-500">VAT included</span>
           <span className="font-medium">{formatCurrency(tax)}</span>
         </div>
         {discount > 0 && (
@@ -291,7 +307,7 @@ export function OrderSummary({
       </div>
 
       <div className="mt-6 flex items-center justify-between border-t border-gray-200 pt-6">
-        <span className="text-lg font-medium text-[#1A1A1A]">Total</span>
+        <span className="text-lg font-medium text-[#1A1A1A]">Total (incl. VAT)</span>
         <span className="text-2xl font-semibold text-[#1A1A1A]">{formatCurrency(total)}</span>
       </div>
 

@@ -102,7 +102,15 @@ export async function evaluateCodRiskAction(
 export async function sendCodOtpAction(
   checkoutSessionId: string,
   formData: CheckoutFormValues
-) {
+): Promise<{
+  success: boolean;
+  sessionId?: string;
+  maskedTarget?: string;
+  targetType?: "email" | "phone";
+  remainingCooldownSeconds?: number;
+  expirySeconds?: number;
+  error?: string;
+}> {
   try {
     const parsedData = checkoutFormSchema.parse(formData);
     const { userId } = await getSessionIdentifiers();
@@ -282,6 +290,7 @@ export async function processCheckoutAction(
             maskedTarget: otpInit.maskedTarget || CodOtpService.maskTarget(parsedData.information.email, "email"),
             targetType: otpInit.targetType || "email",
             remainingCooldownSeconds: otpInit.remainingCooldownSeconds,
+            expirySeconds: otpInit.expirySeconds,
             error: otpInit.error,
           };
         }

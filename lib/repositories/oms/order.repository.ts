@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Order, OrderStatus } from "@/types/oms";
+import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { parseVariantAttributes } from "@/lib/utils/variant-attributes";
 import {
   recordOrderPayment,
@@ -129,18 +130,22 @@ export class OrderRepository {
     }
 
     if (options?.search) {
+      // REG-43: escape LIKE wildcards in the staff-typed term (both the
+      // orderNumber contains and the JSON string_contains compile to
+      // Postgres LIKE patterns).
+      const searchTerm = escapeLikeWildcards(options.search);
       where.OR = [
-        { orderNumber: { contains: options.search, mode: "insensitive" } },
+        { orderNumber: { contains: searchTerm, mode: "insensitive" } },
         {
           shippingAddress: {
             path: ["firstName"],
-            string_contains: options.search,
+            string_contains: searchTerm,
           }
         },
         {
           shippingAddress: {
             path: ["phone"],
-            string_contains: options.search,
+            string_contains: searchTerm,
           }
         }
       ];
@@ -406,6 +411,67 @@ export class OrderRepository {
         console.error(
           `[OrderRepository] Failed to create shipment for shipped order ${id}:`,
           shipErr
+        );
+      }
+    }
+
+    // REG-53: the shipment born on SHIPPED was never advanced again —
+    // orders reached DELIVERED while their shipment sat at "created"
+    // forever (live: both SHP rows for DELIVERED orders 2FOZ/JEH0,
+    // delivered_at NULL, zero tracking events). Close the shipment at
+    // the same single status write point: on DELIVERED / COMPLETED move
+    // it to the shipping module's terminal "delivered" state, stamp
+    // delivered_at, and append a timeline event — written via Prisma
+    // with the events table's REAL columns (shipment_id, status,
+    // timestamp, notes); the older fluent-builder writers pass phantom
+    // columns (status_description, event_time, …) that the real table
+    // does not have, which is why the timeline has always been empty.
+    // CANCELLED closes a non-terminal shipment the same way.
+    if (target === "DELIVERED" || target === "COMPLETED" || target === "CANCELLED") {
+      try {
+        const shipment = await prisma.shipment.findFirst({
+          where: { orderId: id },
+          select: { id: true, status: true },
+        });
+        if (shipment) {
+          const terminalStates = ["delivered", "cancelled", "returned_to_origin"];
+          const currentShipmentStatus = String(shipment.status || "").toLowerCase();
+          if (!terminalStates.includes(currentShipmentStatus)) {
+            if (target === "CANCELLED") {
+              await prisma.shipment.update({
+                where: { id: shipment.id },
+                data: { status: "cancelled" },
+              });
+              await prisma.shipment_tracking_events.create({
+                data: {
+                  shipment_id: shipment.id,
+                  status: "cancelled",
+                  timestamp: now,
+                  notes: "Order cancelled — shipment closed.",
+                },
+              });
+            } else {
+              await prisma.shipment.update({
+                where: { id: shipment.id },
+                data: { status: "delivered", deliveredAt: now },
+              });
+              await prisma.shipment_tracking_events.create({
+                data: {
+                  shipment_id: shipment.id,
+                  status: "delivered",
+                  timestamp: now,
+                  notes: "Order delivered — shipment closed.",
+                },
+              });
+            }
+          }
+        }
+      } catch (shipSyncErr) {
+        // Same rule as the SHIPPED block: the order transition has
+        // committed; a shipment-sync failure must be loud, not fatal.
+        console.error(
+          `[OrderRepository] Failed to sync shipment for order ${id} on ${target}:`,
+          shipSyncErr
         );
       }
     }

@@ -2,6 +2,8 @@
 
 import { createAdminDbClient } from "@/lib/db/client";
 import { prisma } from "@/lib/prisma";
+import { escapeLikeWildcards } from "@/lib/utils/like-escape";
+import { parseVariantAttributes } from "@/lib/utils/variant-attributes";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -14,10 +16,16 @@ import { verifyStaff } from "@/lib/security/roles";
 function mapScannedVariant(v: any) {
   if (!v) return null;
   const product = v.product ?? null;
+  // REG-48: surface size/colour as first-class fields (parsed with the
+  // shared attribute parser) so the scan result card can show them as
+  // their own labelled lines instead of leaving staff to decode the SKU.
+  const parsedAttrs = parseVariantAttributes(v.attributes ?? {});
   return {
     id: v.id,
     sku: v.sku,
     barcode: v.barcode ?? null,
+    size: parsedAttrs.size,
+    color: parsedAttrs.color,
     price_override:
       v.priceOverride !== null && v.priceOverride !== undefined
         ? Number(v.priceOverride)
@@ -70,7 +78,7 @@ export async function lookupBarcodeAction(query: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const trimmed = query.trim();
+    const trimmed = escapeLikeWildcards(query.trim()); // REG-43: staff-typed codes match literally
     if (!trimmed) {
       return { success: false, error: "Please enter a barcode or SKU to search." };
     }
@@ -111,7 +119,7 @@ export async function lookupBarcodeAction(query: string) {
     if (!variant) {
       return {
         success: false,
-        error: `No product or variant found matching "${trimmed}".`,
+        error: `No product or variant found matching "${query.trim()}".`,
       };
     }
 

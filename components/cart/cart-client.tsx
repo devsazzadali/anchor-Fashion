@@ -141,10 +141,13 @@ export function CartClient({ initialCart }: CartClientProps) {
             </h2>
 
             <div className="mt-4 space-y-3 text-xs sm:text-sm">
+              {/* REG-50: same VAT rule as the product prices — subtotal
+                  is VAT-inclusive; the VAT row states the included
+                  portion (informational, not added twice). */}
               <div className="flex justify-between text-gray-600">
-                <span>Subtotal ({totalQuantity} items)</span>
+                <span>Subtotal (incl. VAT) ({totalQuantity} items)</span>
                 <span className="font-semibold text-gray-900">
-                  {formatCurrency(subtotal)}
+                  {formatCurrency(subtotal + vatAmount)}
                 </span>
               </div>
               <div className="flex justify-between text-gray-600">
@@ -158,7 +161,7 @@ export function CartClient({ initialCart }: CartClientProps) {
                 </span>
               </div>
               <div className="flex justify-between text-gray-600">
-                <span>VAT</span>
+                <span>VAT included</span>
                 <span className="font-semibold text-gray-900">
                   {formatCurrency(vatAmount)}
                 </span>
@@ -166,7 +169,7 @@ export function CartClient({ initialCart }: CartClientProps) {
             </div>
 
             <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4 text-sm sm:text-base font-bold text-gray-900">
-              <span>Estimated Total</span>
+              <span>Estimated Total (incl. VAT)</span>
               <span className="text-lg">{formatCurrency(subtotal + vatAmount)}</span>
             </div>
 
