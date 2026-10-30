@@ -3,7 +3,7 @@ import { Order, OrderStatus } from "@/types/oms";
 import { parseVariantAttributes } from "@/lib/utils/variant-attributes";
 import {
   recordOrderPayment,
-  markOrderPaymentSuccess,
+  ensureOrderPaymentSuccess,
 } from "@/lib/payments/order-payment-record";
 
 export class OrderRepository {
@@ -30,7 +30,43 @@ export class OrderRepository {
     }
 
     if (!order) return null;
-    return mapPrismaOrderToOms(order);
+    const mapped = mapPrismaOrderToOms(order);
+
+    // REG-17: surface the order's shipment on the detail payload. The
+    // shipment row is born on the SHIPPED transition (S5-8) but nothing
+    // ever read it back for the admin detail — the page showed no
+    // shipment reference even though the record existed. Attach the
+    // latest shipment (snake_case, the shape the detail page renders).
+    try {
+      const shipment = await prisma.shipment.findFirst({
+        where: { orderId: order.id },
+        orderBy: { createdAt: "desc" },
+      });
+      if (shipment) {
+        (mapped as any).shipment = {
+          id: shipment.id,
+          shipment_number: shipment.shipmentNumber,
+          status: shipment.status,
+          tracking_number: shipment.trackingNumber,
+          courier_provider_code: shipment.courierProviderCode,
+          courier: shipment.courier,
+          recipient_name: shipment.recipientName,
+          recipient_city: shipment.recipientCity,
+          is_cod: shipment.isCod ?? false,
+          cod_amount:
+            shipment.codAmount != null ? Number(shipment.codAmount) : null,
+          created_at: shipment.createdAt?.toISOString() ?? null,
+          shipped_at: shipment.shippedAt?.toISOString() ?? null,
+          delivered_at: shipment.deliveredAt?.toISOString() ?? null,
+        };
+      }
+    } catch (shipErr) {
+      console.error(
+        `[OrderRepository] Failed to attach shipment for order ${order.id}:`,
+        shipErr
+      );
+    }
+    return mapped;
   }
 
   async getOrderByNumber(orderNumber: string, _?: any): Promise<Order | null> {
@@ -374,15 +410,22 @@ export class OrderRepository {
       }
     }
 
-    // S6-7: when this transition marked the order PAID (the round-5 COD
-    // hook above), flip its payment ledger row to SUCCESS so Finance →
-    // Transactions reflects the cash actually collected.
+    // S6-7 + REG-18: when this transition marked the order PAID (the
+    // round-5 COD hook above), ENSURE its payment ledger row exists and
+    // is SUCCESS so Finance → Transactions reflects the cash actually
+    // collected. Flipping alone was not enough: orders placed before
+    // the round-8 placement writer existed have no row to flip and
+    // reached PAID with an empty ledger (AF-20261029-2FOZ).
     if (lifecycle.paymentStatus === "PAID") {
       try {
-        await markOrderPaymentSuccess(id);
+        await ensureOrderPaymentSuccess({
+          orderId: id,
+          amount: Number(current?.totalAmount ?? 0),
+          method: current?.paymentMethod,
+        });
       } catch (payErr) {
         console.error(
-          `[OrderRepository] Failed to mark payment SUCCESS for order ${id}:`,
+          `[OrderRepository] Failed to ensure payment SUCCESS for order ${id}:`,
           payErr
         );
       }

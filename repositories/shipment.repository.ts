@@ -1,4 +1,5 @@
 import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 import {
   Shipment,
   ShipmentItem,
@@ -9,6 +10,43 @@ import {
   PaginatedResult,
   ShippingEventType,
 } from "@/types/shipping.types";
+
+/**
+ * Map a Prisma Shipment row (camelCase, Decimal/Date objects) to the
+ * snake_case plain shape the shipping UI renders. Shared by
+ * listShipments + getShipmentWithDetails so the queue and the detail
+ * can never disagree about the same shipment again.
+ */
+function mapShipmentRow(s: any): Record<string, any> {
+  return {
+    id: s.id,
+    order_id: s.orderId,
+    order_number: s.order?.orderNumber ?? s.order_number ?? null,
+    shipment_number: s.shipmentNumber,
+    tracking_number: s.trackingNumber,
+    courier: s.courier,
+    courier_provider_code: s.courierProviderCode,
+    status: s.status,
+    recipient_name: s.recipientName,
+    recipient_phone: s.recipientPhone,
+    recipient_address: s.recipientAddress,
+    recipient_city: s.recipientCity,
+    recipient_district: s.recipientDistrict,
+    is_cod: s.isCod ?? false,
+    cod_amount: s.codAmount != null ? Number(s.codAmount) : 0,
+    shipping_charge: s.shippingCharge != null ? Number(s.shippingCharge) : 0,
+    shipping_cost: s.shippingCost != null ? Number(s.shippingCost) : 0,
+    weight_kg: s.weightKg != null ? Number(s.weightKg) : null,
+    delivery_zone_id: s.deliveryZoneId,
+    special_instructions: s.specialInstructions,
+    estimated_delivery: s.estimatedDelivery?.toISOString() ?? null,
+    shipped_at: s.shippedAt?.toISOString() ?? null,
+    delivered_at: s.deliveredAt?.toISOString() ?? null,
+    created_at: s.createdAt?.toISOString() ?? null,
+    updated_at: s.updatedAt?.toISOString() ?? null,
+    created_by: s.createdBy,
+  };
+}
 
 export class ShipmentRepository {
   private getAdminClient() {
@@ -148,78 +186,135 @@ export class ShipmentRepository {
   }
 
   /**
-   * Get full shipment details with related data (uses DB view / joins).
+   * Get full shipment details with related data.
+   *
+   * REG-17: this used a PostgREST-style embed select (items / events /
+   * courier / zone / order joins). The row builder never resolves
+   * embeds, so every joined field came back missing — the detail page
+   * showed no order number and no items for a shipment that exists.
+   * Composed on Prisma instead: the shipment row plus its items,
+   * labels, tracking events, audit events and the order's number,
+   * mapped to the snake_case shape the page renders.
    */
   async getShipmentWithDetails(
     id: string
   ): Promise<ShipmentWithDetails | null> {
-    const db = this.getAdminClient();
+    const row = await prisma.shipment.findUnique({
+      where: { id },
+      include: {
+        order: { select: { orderNumber: true } },
+        items: true,
+        labels: { orderBy: { createdAt: "desc" } },
+      },
+    });
+    if (!row) return null;
 
-    const { data, error } = await db
-      .from("shipments")
-      .select(
-        `
-        *,
-        items:shipment_items(*),
-        tracking_events:shipment_tracking_events(* ORDER BY event_time DESC),
-        labels:shipment_labels(* ORDER BY created_at DESC),
-        events:shipment_events(* ORDER BY created_at DESC),
-        courier:courier_providers(id, code, display_name, logo_url),
-        zone:delivery_zones(id, name, code, estimated_days_min, estimated_days_max),
-        order:orders(order_number)
-      `
-      )
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) throw new Error(`Get shipment details failed: ${error.message}`);
-    if (!data) return null;
+    const [trackingEvents, events] = await Promise.all([
+      prisma.shipment_tracking_events
+        .findMany({
+          where: { shipment_id: id },
+          orderBy: { timestamp: "desc" },
+        })
+        .catch(() => [] as any[]),
+      prisma.shipment_events
+        .findMany({
+          where: { shipment_id: id },
+          orderBy: { created_at: "desc" },
+        })
+        .catch(() => [] as any[]),
+    ]);
 
     return {
-      ...(data as any),
-      order_number: (data as any).order?.order_number ?? null,
-    } as ShipmentWithDetails;
+      ...mapShipmentRow(row),
+      items: (row.items ?? []).map((it: any) => ({
+        id: it.id,
+        shipment_id: it.shipmentId,
+        order_item_id: it.orderItemId,
+        quantity: it.quantity,
+        created_at: it.createdAt?.toISOString() ?? null,
+      })),
+      labels: (row.labels ?? []).map((l: any) => ({
+        id: l.id,
+        shipment_id: l.shipmentId,
+        label_url: l.labelUrl,
+        tracking_number: l.trackingNumber,
+        courier: l.courier,
+        print_count: l.printCount,
+        created_at: l.createdAt?.toISOString() ?? null,
+      })),
+      tracking_events: trackingEvents.map((e: any) => ({
+        id: e.id,
+        shipment_id: e.shipment_id,
+        status: e.status,
+        event_time: e.timestamp?.toISOString() ?? null,
+        location: e.location,
+        notes: e.notes,
+      })),
+      events: events.map((e: any) => ({
+        id: e.id,
+        shipment_id: e.shipment_id,
+        status: e.status,
+        location: e.location,
+        notes: e.notes,
+        created_at: e.created_at?.toISOString() ?? null,
+      })),
+      order_number: row.order?.orderNumber ?? null,
+    } as unknown as ShipmentWithDetails;
   }
 
   /**
    * List shipments with filters and pagination.
+   *
+   * REG-17: this read from `v_shipments_summary` — a relation that
+   * does not exist in the database (verified against
+   * information_schema: no such view or table). The fluent DB layer
+   * silently resolves unknown relations to an empty result, so the
+   * Shipment Queue permanently showed "No shipments found" while the
+   * analytics counter — which counts the real `shipments` table —
+   * said Total 1. Now read from the same real table the counter
+   * counts, via Prisma, with the order's number joined in.
    */
   async listShipments(
     filters: ShipmentFilters
   ): Promise<PaginatedResult<Shipment>> {
-    const db = this.getAdminClient();
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
 
-    let query = db
-      .from("v_shipments_summary")
-      .select("*", { count: "exact" });
-
-    if (filters.status) query = query.eq("status", filters.status);
-    if (filters.courierCode)
-      query = query.eq("courier_provider_code", filters.courierCode);
-    if (filters.dateFrom) query = query.gte("created_at", filters.dateFrom);
-    if (filters.dateTo) query = query.lte("created_at", filters.dateTo);
+    const where: Record<string, any> = {};
+    if (filters.status) where.status = filters.status;
+    if (filters.courierCode) where.courierProviderCode = filters.courierCode;
+    if (filters.dateFrom || filters.dateTo) {
+      where.createdAt = {
+        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+        ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+      };
+    }
     if (filters.search) {
-      query = query.or(
-        `shipment_number.ilike.%${filters.search}%,tracking_number.ilike.%${filters.search}%,recipient_name.ilike.%${filters.search}%`
-      );
+      const q = filters.search;
+      where.OR = [
+        { shipmentNumber: { contains: q, mode: "insensitive" } },
+        { trackingNumber: { contains: q, mode: "insensitive" } },
+        { recipientName: { contains: q, mode: "insensitive" } },
+      ];
     }
 
-    const { data, error, count } = await query
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) throw new Error(`List shipments failed: ${error.message}`);
+    const [total, rows] = await Promise.all([
+      prisma.shipment.count({ where }),
+      prisma.shipment.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { order: { select: { orderNumber: true } } },
+      }),
+    ]);
 
     return {
-      data: (data ?? []) as Shipment[],
-      total: count ?? 0,
+      data: rows.map(mapShipmentRow) as unknown as Shipment[],
+      total,
       page,
       limit,
-      totalPages: Math.ceil((count ?? 0) / limit),
+      totalPages: Math.ceil(total / limit),
     };
   }
 

@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { OrderStatus, OrderWithDetails } from "@/types/oms";
+import { orderStatusLabel } from "@/lib/orders/status-labels";
 import {
   approveManualPaymentAction,
   rejectManualPaymentAction,
@@ -43,6 +44,7 @@ import {
   Loader2,
   CreditCard,
   AlertTriangle,
+  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -192,7 +194,7 @@ export default function AdminOrderDetailsPage() {
             <h1 className="text-3xl font-bold tracking-tight">
               Order #{order.order_number}
             </h1>
-            <Badge className="capitalize text-sm">{order.status.replace(/_/g, " ")}</Badge>
+            <Badge className="text-sm">{orderStatusLabel(order.status)}</Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             Placed on {new Date(order.created_at).toLocaleString()}
@@ -369,6 +371,113 @@ export default function AdminOrderDetailsPage() {
 
         {/* Right Column: Status & Customer Details */}
         <div className="space-y-6">
+          {/* Payment Card (REG-19: the detail showed no payment method
+              or status anywhere — the list's "COD · Paid" had no
+              counterpart here. All values are the order's real fields.) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                Payment
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Method</span>
+                <span className="font-semibold text-foreground">
+                  {(order.payment_method || "COD").replace(/_/g, " ")}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Status</span>
+                {(order.payment_status || "").toUpperCase() === "PAID" ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    Paid
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 capitalize">
+                    {(order.payment_status || "UNPAID").toLowerCase().replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Amount</span>
+                <span className="font-semibold text-foreground">
+                  ৳{Number(order.grand_total || 0).toLocaleString()}
+                </span>
+              </div>
+              {(order as any).paid_at ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Paid at</span>
+                  <span className="text-foreground">
+                    {new Date((order as any).paid_at).toLocaleString()}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Last updated</span>
+                  <span className="text-foreground">
+                    {order.updated_at
+                      ? new Date(order.updated_at).toLocaleString()
+                      : "—"}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Shipment Card (REG-17: once a shipment exists for the
+              order, surface it here — number, status, tracking.) */}
+          {typedOrder.shipment && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                  <Truck className="h-4 w-4 text-muted-foreground" />
+                  Shipment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Shipment #</span>
+                  <Link
+                    href={`/admin/shipping/${typedOrder.shipment.id}`}
+                    className="font-semibold text-blue-600 hover:underline"
+                  >
+                    {typedOrder.shipment.shipment_number || "—"}
+                  </Link>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className="font-semibold text-foreground capitalize">
+                    {(typedOrder.shipment.status || "").replace(/_/g, " ")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Courier</span>
+                  <span className="text-foreground">
+                    {typedOrder.shipment.courier_provider_code ||
+                      typedOrder.shipment.courier ||
+                      "Not assigned yet"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Tracking #</span>
+                  <span className="font-mono text-foreground">
+                    {typedOrder.shipment.tracking_number || "—"}
+                  </span>
+                </div>
+                {typedOrder.shipment.is_cod && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">COD amount</span>
+                    <span className="font-semibold text-foreground">
+                      ৳{Number(typedOrder.shipment.cod_amount || 0).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Manual Payment Verification Card */}
           {isManualPayment && (
             <Card className="border-2 border-primary/20 shadow-sm overflow-hidden">

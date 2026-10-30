@@ -38,6 +38,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OrderStatus } from "@/types/oms";
 import { exportToCsv } from "@/lib/utils/export";
+import {
+  orderStatusLabel,
+  ORDER_DELIVERED_LABEL,
+} from "@/lib/orders/status-labels";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -202,35 +206,40 @@ function AdminOrdersContent({ defaultTab = "all" }: { defaultTab?: TabKey }) {
     setPage(1);
   };
 
+  // REG-22: badge COLOURS stay grouped by lifecycle stage, but the
+  // TEXT is the fine-grained label from the one shared source
+  // (lib/orders/status-labels) — a PREPARING order reads "Preparing"
+  // here exactly as it does on the detail page, not "Processing".
   const getStatusBadge = (status: string) => {
     const s = (status || "").toLowerCase();
+    const label = orderStatusLabel(status);
     switch (s) {
       case "confirmed":
-        return <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25">Confirmed</Badge>;
+        return <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25">{label}</Badge>;
       case "preparing":
       case "processing":
       case "picking":
       case "packing":
-        return <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/25">Processing</Badge>;
+        return <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/25">{label}</Badge>;
       case "ready_for_shipment":
       case "shipped":
       case "out_for_delivery":
-        return <Badge className="bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/25">In Transit</Badge>;
+        return <Badge className="bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/25">{label}</Badge>;
       case "completed":
       case "delivered":
-        return <Badge className="bg-green-600 text-white hover:bg-green-700">Delivered</Badge>;
+        return <Badge className="bg-green-600 text-white hover:bg-green-700">{label}</Badge>;
       case "cancelled":
-        return <Badge variant="destructive">Cancelled</Badge>;
+        return <Badge variant="destructive">{label}</Badge>;
       case "pending_payment":
       case "draft":
       case "pending":
-        return <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25">Pending</Badge>;
+        return <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25">{label}</Badge>;
       case "returned":
       case "refund_requested":
       case "refunded":
-        return <Badge className="bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30 hover:bg-purple-500/25">Returned</Badge>;
+        return <Badge className="bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30 hover:bg-purple-500/25">{label}</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary">{label}</Badge>;
     }
   };
 
@@ -363,7 +372,7 @@ function AdminOrdersContent({ defaultTab = "all" }: { defaultTab?: TabKey }) {
           </CardContent>
         </Card>
 
-        {/* Completed / Delivered */}
+        {/* Delivered bucket (stored COMPLETED + DELIVERED) */}
         <Card
           onClick={() => { setActiveTab("completed"); setPage(1); }}
           className={`cursor-pointer transition-all hover:shadow-md ${
@@ -372,7 +381,7 @@ function AdminOrdersContent({ defaultTab = "all" }: { defaultTab?: TabKey }) {
         >
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Delivered</span>
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{ORDER_DELIVERED_LABEL}</span>
               <div className="h-7 w-7 rounded-lg bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
@@ -420,7 +429,7 @@ function AdminOrdersContent({ defaultTab = "all" }: { defaultTab?: TabKey }) {
                 { key: "all", label: "All Orders", count: metrics?.totalOrders },
                 { key: "pending", label: "Pending", count: metrics?.pendingOrders },
                 { key: "processing", label: "Processing", count: metrics?.processingOrders },
-                { key: "completed", label: "Completed", count: metrics?.completedOrders },
+                { key: "completed", label: ORDER_DELIVERED_LABEL, count: metrics?.completedOrders },
                 { key: "cancelled", label: "Cancelled", count: metrics?.cancelledOrders },
               ].map((tab) => (
                 <button

@@ -12,6 +12,35 @@ import {
   PaginatedResult,
 } from "@/types/shipping.types";
 
+/**
+ * Derive a return's refund status from its lifecycle status. The
+ * returns table has NO refund_status column (the write sanitizer drops
+ * it), so the settled state is derived: a return whose status reached
+ * "completed" has its refund PROCESSED; any in-flight status is
+ * PENDING. Shared by the detail (attachItemsAndRefundState) and the
+ * admin list (listReturns) — REG-21: the list returned raw rows, so
+ * its Refund Status column showed "−" for a return the detail page
+ * correctly showed as PROCESSED.
+ */
+function deriveRefundStatus(ret: Record<string, any>): string | null {
+  const status = String(ret.status || "").toLowerCase();
+  if (status === "completed") return "PROCESSED";
+  if (
+    [
+      "requested",
+      "approved",
+      "pickup_scheduled",
+      "picked_up",
+      "in_transit",
+      "received",
+      "inventory_synced",
+    ].includes(status)
+  ) {
+    return "PENDING";
+  }
+  return null;
+}
+
 export class ReturnRepository {
   private getClient() {
     return createAdminDbClient();
@@ -256,14 +285,7 @@ export class ReturnRepository {
     });
 
     // ── Refund state derivation (see docstring) ──────────────────────
-    const status = String(ret.status || "").toLowerCase();
-    let refundStatus: string | null = null;
-    if (status === "completed") refundStatus = "PROCESSED";
-    else if (
-      ["requested", "approved", "pickup_scheduled", "picked_up", "in_transit", "received", "inventory_synced"].includes(status)
-    ) {
-      refundStatus = "PENDING";
-    }
+    const refundStatus = deriveRefundStatus(ret);
 
     let refundMethod: string | null =
       typeof ret.refund_method === "string" ? ret.refund_method : null;
@@ -351,8 +373,15 @@ export class ReturnRepository {
 
     if (error) throw new Error(`List returns failed: ${error.message}`);
 
+    // REG-21: attach the derived refund status (see deriveRefundStatus)
+    // so the list's Refund Status column agrees with the detail page.
+    const rows = ((data ?? []) as Record<string, any>[]).map((r) => ({
+      ...r,
+      refund_status: r.refund_status ?? deriveRefundStatus(r),
+    }));
+
     return {
-      data: ((data ?? []) as unknown) as ReturnRequest[],
+      data: (rows as unknown) as ReturnRequest[],
       total: count ?? 0,
       page,
       limit,

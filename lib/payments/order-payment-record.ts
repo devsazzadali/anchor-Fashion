@@ -45,3 +45,46 @@ export async function markOrderPaymentSuccess(orderId: string): Promise<void> {
     data: { status: "SUCCESS" },
   });
 }
+
+/**
+ * REG-18: guarantee a SUCCESS payment row exists for an order that has
+ * just become PAID. markOrderPaymentSuccess alone only flips rows that
+ * already exist — orders placed before the round-8 writer existed (or
+ * through any path that never recorded a placement row) reached PAID
+ * with NO ledger row at all, so Finance → Transactions silently omitted
+ * money that was actually collected (proven live: AF-20261029-2FOZ
+ * delivered + PAID with 0 payment rows). Idempotent: an existing row is
+ * flipped PENDING → SUCCESS and otherwise left untouched; a missing row
+ * is created with the order's total + method and a null transaction id.
+ * Status vocabulary matches the Transactions page (SUCCESS renders as
+ * paid alongside the legacy POS COMPLETED rows).
+ */
+export async function ensureOrderPaymentSuccess(args: {
+  orderId: string;
+  amount: number;
+  method?: string | null;
+}): Promise<void> {
+  const existing = await prisma.payment.findFirst({
+    where: { orderId: args.orderId },
+    select: { id: true, status: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!existing) {
+    await prisma.payment.create({
+      data: {
+        orderId: args.orderId,
+        amount: args.amount,
+        method: (args.method || "COD").toUpperCase(),
+        status: "SUCCESS",
+        transactionId: null,
+      },
+    });
+    return;
+  }
+  if (String(existing.status || "").toUpperCase() === "PENDING") {
+    await prisma.payment.update({
+      where: { id: existing.id },
+      data: { status: "SUCCESS" },
+    });
+  }
+}

@@ -4,6 +4,8 @@ import { createDbClient } from "@/lib/db/client";
 import { createAdminDbClient } from "@/lib/db/client";
 import { verifyAdmin, verifyManager, verifyStaff } from "../security/roles";
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { ensureOrderPaymentSuccess } from "@/lib/payments/order-payment-record";
 
 const SECRET_CONFIG_KEYS = ["store_id", "store_password", "store_pass", "store_passwd"] as const;
 
@@ -484,6 +486,31 @@ export async function approveManualPaymentAction(
       .eq("id", orderId);
 
     if (orderErr) throw orderErr;
+
+    // 2b. REG-18: this approval just marked the order PAID outside the
+    // OMS status transition, and its ledger writes above target the
+    // phantom payment_transactions table (dropped by the row builder) —
+    // ensure the REAL payments ledger carries the collection, the same
+    // guarantee the COD delivery path now makes. Never fail the
+    // approval on a ledger error.
+    try {
+      const ord = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { totalAmount: true, paymentMethod: true },
+      });
+      if (ord) {
+        await ensureOrderPaymentSuccess({
+          orderId,
+          amount: Number(ord.totalAmount ?? 0),
+          method: ord.paymentMethod,
+        });
+      }
+    } catch (payErr) {
+      console.error(
+        `[approveManualPaymentAction] Failed to ensure payment SUCCESS for order ${orderId}:`,
+        payErr
+      );
+    }
 
     // 3. Log to order_status_history
     await db.from("order_status_history").insert({

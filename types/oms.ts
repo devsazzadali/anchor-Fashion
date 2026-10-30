@@ -199,11 +199,29 @@ export interface OrderAddressDetails {
   address_type?: string | null;
 }
 
+/** REG-17: the order's latest shipment, attached by the OMS repository. */
+export interface OrderShipmentSummary {
+  id: string;
+  shipment_number: string | null;
+  status: string | null;
+  tracking_number: string | null;
+  courier_provider_code: string | null;
+  courier: string | null;
+  recipient_name: string | null;
+  recipient_city: string | null;
+  is_cod: boolean;
+  cod_amount: number | null;
+  created_at: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+}
+
 export interface OrderWithDetails extends Order {
   items: OrderItem[];
   customer?: OrderCustomerDetails | null;
   shippingAddress?: OrderAddressDetails | null;
   billingAddress?: OrderAddressDetails | null;
   manualPayment?: any | null;
+  shipment?: OrderShipmentSummary | null;
 }
 

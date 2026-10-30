@@ -396,13 +396,23 @@ export class CustomerRepository {
     const orders = await prisma.order.findMany({
       where: {
         OR: [{ customerId: { in: ids } }, { profileId: { in: ids } }],
-        NOT: { status: { equals: "CANCELLED", mode: "insensitive" } },
       },
-      select: { totalAmount: true },
+      select: { totalAmount: true, status: true },
     });
 
+    // REG-20: the header's "Total Orders" excluded cancelled orders
+    // (the CANCELLED filter belonged to the LTV definition, not the
+    // count), so the header said 5 while the same page's Purchase
+    // History listed all 7. Total Orders now counts every real order
+    // — identical to getCustomerOrders below — while LTV keeps
+    // excluding cancelled orders (money never collected is not
+    // lifetime value).
     const totalOrders = orders.length;
-    const ltv = orders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+    const ltv = orders
+      .filter(
+        (order) => String(order.status || "").toUpperCase() !== "CANCELLED"
+      )
+      .reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
     return { totalOrders, ltv };
   }
 

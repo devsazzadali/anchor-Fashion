@@ -33,6 +33,15 @@ const ACTIVE_STATUSES = [
   "out_for_delivery",
 ];
 
+// REG-17: shipments are BORN in "created" (awaiting courier assignment)
+// on the SHIPPED transition. The tracking dashboard only knew the
+// courier-active statuses, so a freshly shipped order was invisible
+// here ("No active shipments") even though it existed. "created" is
+// displayed in the Pickup Pending bucket — but it stays OUT of
+// ACTIVE_STATUSES, so Sync All never tries to sync tracking for a
+// shipment that has no courier/tracking number yet.
+const DISPLAY_STATUSES = [...ACTIVE_STATUSES, "created"];
+
 export default function AdminTrackingDashboard() {
   const syncTracking = useSyncTracking();
   const [search, setSearch] = useState("");
@@ -42,8 +51,11 @@ export default function AdminTrackingDashboard() {
   const active = allShipments.filter((s: any) =>
     ACTIVE_STATUSES.includes(s.status)
   );
+  const listed = allShipments.filter((s: any) =>
+    DISPLAY_STATUSES.includes(s.status)
+  );
 
-  const filtered = (search.trim() ? allShipments : active).filter((s: any) => {
+  const filtered = (search.trim() ? allShipments : listed).filter((s: any) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -96,7 +108,13 @@ export default function AdminTrackingDashboard() {
     },
     {
       label: "Pickup Pending",
-      value: active.filter((s: any) => s.status === "pickup_requested").length,
+      // REG-17: "created" (born, courier not yet assigned) is the
+      // truest pickup-pending state; pickup_requested joins it once a
+      // courier has been asked. Counted from allShipments, not the
+      // courier-active subset.
+      value: allShipments.filter((s: any) =>
+        ["created", "pickup_requested"].includes(s.status)
+      ).length,
       icon: AlertTriangle,
       bgClass: "bg-orange-100 text-orange-600 dark:bg-orange-950 dark:text-orange-400",
     },
@@ -155,7 +173,7 @@ export default function AdminTrackingDashboard() {
           <div>
             <CardTitle>{search ? "Matching Shipments" : "In-Transit Shipments"}</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {search ? `Showing results matching "${search}"` : "Showing active in-transit shipments"}
+              {search ? `Showing results matching "${search}"` : "Showing in-transit and pickup-pending shipments"}
             </p>
           </div>
           <div className="w-full sm:w-72">
