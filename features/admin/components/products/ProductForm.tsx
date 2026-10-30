@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -118,6 +118,36 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
       setDynamicSegmentName(initialData.id, initialData.name);
     }
   }, [initialData, setDynamicSegmentName]);
+
+  // REG-11 wheel guard: Chromium steps a focused <input type="number"> by its
+  // `step` on EVERY mouse-wheel event. Scrolling this long form with the
+  // pointer parked over a still-focused price field silently rewrote the
+  // value (typed 1460 published as 1460.25 after ~25 wheel events — the
+  // field, the action payload and the DB all carried +0.25). Blur any focused
+  // number input in the form when a wheel event passes over it — capture
+  // phase, before the browser performs the step — so scrolling scrolls the
+  // page instead of rewriting the field. The money inputs additionally block
+  // ArrowUp/ArrowDown stepping (see blockStepKeys), so their value can only
+  // change by typing: typed == stored == displayed.
+  const formElementRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const formEl = formElementRef.current;
+    if (!formEl) return;
+    const onWheelCapture = (e: WheelEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t instanceof HTMLInputElement && t.type === "number" && document.activeElement === t) {
+        t.blur();
+      }
+    };
+    formEl.addEventListener("wheel", onWheelCapture, { capture: true });
+    return () => formEl.removeEventListener("wheel", onWheelCapture, { capture: true });
+  }, []);
+
+  // REG-11: money inputs ignore ArrowUp/ArrowDown (the number input's native
+  // step keys) — prices change only by typing digits, never by stepping.
+  const blockStepKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+  };
 
   const [isLoading, setIsLoading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -756,7 +786,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form ref={formElementRef} onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         {/* Modern Luxury Executive Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border">
           <div className="space-y-1">
@@ -1688,6 +1718,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                         <Input
                           type="number"
                           step="0.01"
+                          onKeyDown={blockStepKeys}
                           placeholder="Sell Price"
                           value={bulkSellPrice}
                           onChange={(e) => setBulkSellPrice(e.target.value)}
@@ -1709,6 +1740,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                         <Input
                           type="number"
                           step="0.01"
+                          onKeyDown={blockStepKeys}
                           placeholder="Buy Cost"
                           value={bulkCostPrice}
                           onChange={(e) => setBulkCostPrice(e.target.value)}
@@ -1868,6 +1900,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                                       step="0.01"
                                       placeholder="0.00"
                                       {...field}
+                                      onKeyDown={blockStepKeys}
                                       value={field.value ?? ""}
                                       onChange={(e) =>
                                         field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)
@@ -1893,6 +1926,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                                       step="0.01"
                                       placeholder="0.00"
                                       {...field}
+                                      onKeyDown={blockStepKeys}
                                       value={field.value ?? ""}
                                       onChange={(e) =>
                                         field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)
@@ -1983,6 +2017,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                               placeholder="0.00"
                               className="pl-7 h-9 text-sm font-semibold"
                               {...field}
+                              onKeyDown={blockStepKeys}
                               value={field.value ?? ""}
                               onChange={(e) => {
                                 const val = e.target.value ? parseFloat(e.target.value) : null;
@@ -2068,6 +2103,9 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                         <FormControl>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-bold">{CURRENCY_SYMBOL}</span>
+                            {/* REG-11: onKeyDown blocks arrow-key stepping and the form-level
+                                wheel guard blocks wheel stepping, so this price can only be
+                                changed by typing (typed == stored == displayed). */}
                             <Input
                               type="number"
                               step="0.01"
@@ -2075,6 +2113,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                               placeholder="0.00"
                               className="pl-7 h-9 text-sm font-bold text-foreground"
                               {...field}
+                              onKeyDown={blockStepKeys}
                               onChange={(e) => {
                                 const sellVal = parseFloat(e.target.value) || 0;
                                 field.onChange(sellVal);
@@ -2146,6 +2185,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                               type="number"
                               step="0.01"
                               min="0"
+                              onKeyDown={blockStepKeys}
                               placeholder="0.00 (optional discount)"
                               className="pl-7 h-9 text-sm"
                               {...field}
@@ -2195,6 +2235,7 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
                               step="0.01"
                               min="0"
                               max="100"
+                              onKeyDown={blockStepKeys}
                               placeholder="0"
                               className="pr-8 h-9 text-sm"
                               {...field}
