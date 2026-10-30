@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { formatAuditDate } from "@/lib/utils/audit-date";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import {
   Search,
   Plus,
@@ -67,6 +68,7 @@ export function AuditsClient({ audits = [], allWarehouses = [] }: AuditsClientPr
 
   // Status transition state
   const [statusLoading, setStatusLoading] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<any | null>(null);
 
   const filtered = useMemo(() => {
     return audits.filter((a) => {
@@ -219,9 +221,7 @@ export function AuditsClient({ audits = [], allWarehouses = [] }: AuditsClientPr
             {filtered.map((audit) => (
               <TableRow key={audit.id}>
                 <TableCell className="text-sm font-medium">
-                  {audit.scheduled_date || audit.created_at
-                    ? format(new Date(audit.scheduled_date || audit.created_at), "PPP")
-                    : "—"}
+                  {formatAuditDate(audit)}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5 font-medium">
@@ -269,7 +269,7 @@ export function AuditsClient({ audits = [], allWarehouses = [] }: AuditsClientPr
                         variant="ghost"
                         className="text-destructive hover:bg-destructive/10"
                         disabled={statusLoading === audit.id}
-                        onClick={() => handleStatusChange(audit.id, "CANCELLED")}
+                        onClick={() => setCancelTarget(audit)}
                       >
                         <XCircle className="h-4 w-4" />
                       </Button>
@@ -358,6 +358,21 @@ export function AuditsClient({ audits = [], allWarehouses = [] }: AuditsClientPr
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Audit Confirmation */}
+      <ConfirmDialog
+        open={!!cancelTarget}
+        title="Cancel this inventory audit?"
+        description={`The scheduled audit for ${cancelTarget?.warehouses?.name || "this warehouse"} will be marked as cancelled. This cannot be undone.`}
+        confirmLabel="Cancel Audit"
+        isLoading={!!cancelTarget && statusLoading === cancelTarget.id}
+        onConfirm={async () => {
+          if (!cancelTarget) return;
+          await handleStatusChange(cancelTarget.id, "CANCELLED");
+          setCancelTarget(null);
+        }}
+        onCancel={() => setCancelTarget(null)}
+      />
     </div>
   );
 }

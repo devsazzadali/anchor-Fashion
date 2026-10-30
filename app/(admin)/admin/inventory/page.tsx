@@ -24,7 +24,7 @@ export default async function InventoryDashboardPage() {
     branches,
     rawVariants,
   ] = await Promise.all([
-    getInventoryMasterListAction({ limit: 100 }),
+    getInventoryMasterListAction({ limit: 1000 }),
     getBranchTransfersReportAction({ limit: 100 }),
     getInventoryFinancialReportAction(),
     prisma.category.findMany({

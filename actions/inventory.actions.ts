@@ -40,13 +40,14 @@ export async function adjustStock(
   inventoryId: string,
   newAvailable: number,
   newReserved: number,
-  reason: string
+  reason: string,
+  notes?: string
 ) {
   // SECURITY: server actions are public endpoints; authorize every call.
-  await verifyStaff();
+  const user = await verifyStaff();
   try {
     const service = new InventoryService();
-    await service.adjustStock(inventoryId, newAvailable, newReserved, reason);
+    await service.adjustStock(inventoryId, newAvailable, newReserved, reason, notes, user?.id);
     revalidatePath("/admin/inventory/stock");
     revalidatePath("/admin/inventory/movement");
     return { success: true };

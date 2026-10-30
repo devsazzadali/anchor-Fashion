@@ -127,6 +127,13 @@ export function PurchaseOrdersClient({ pos = [] }: PurchaseOrdersClientProps) {
       if (selectedPo && selectedPo.id === poId) {
         setSelectedPo({ ...selectedPo, status: newStatus });
       }
+      // The drawer's action buttons key off detailsData.status, which is
+      // fetched once when the drawer opens — without syncing it here,
+      // the drawer kept offering "Approve Purchase Order" after the PO
+      // had already been approved from inside the drawer.
+      setDetailsData((prev: any) =>
+        prev && prev.id === poId ? { ...prev, status: newStatus } : prev
+      );
       router.refresh();
     } else {
       toast.error(res.error || "Failed to update status");

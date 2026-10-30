@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -262,22 +263,43 @@ export async function getWarehouses() {
 export async function getVariants() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  const db = createAdminDbClient();
-  const { data, error } = await db
-    .from("variants")
-    .select("id, sku, price_override, sale_price, attributes, product:products(id, name, base_price, cost_price)")
-    .limit(300);
-    
-  if (error) return { success: false, error: error.message };
+  // Prisma, not the fluent builder: the builder never resolves the
+  // embedded `product:products(...)` join for variants, so every label
+  // fell back to the literal "Product" and — with the product's real
+  // cost_price unreachable — the unit cost was fabricated as 60% of the
+  // retail price. The old query also capped the list at 300 rows,
+  // silently omitting most of the ~719 variants. No cap now: every
+  // active variant is selectable, labelled with its real product name,
+  // attributes and SKU, and costed from the same cost the product
+  // record presents (variant cost, else product COGS).
+  const variants = await prisma.variant.findMany({
+    where: { isActive: true },
+    orderBy: { sku: "asc" },
+    select: {
+      id: true,
+      sku: true,
+      priceOverride: true,
+      salePrice: true,
+      costPrice: true,
+      attributes: true,
+      product: {
+        select: { id: true, name: true, basePrice: true, costPrice: true },
+      },
+    },
+  });
 
   return {
     success: true,
-    data: (data || []).map((v: any) => {
+    data: variants.map((v) => {
       const pName = v.product?.name || "Product";
-      const attrStr = v.attributes ? Object.values(v.attributes).filter(Boolean).join(" / ") : "";
+      const attrStr = v.attributes
+        ? Object.values(v.attributes as any).filter(Boolean).join(" / ")
+        : "";
       const label = attrStr ? `${pName} (${v.sku} - ${attrStr})` : `${pName} (${v.sku})`;
-      const price = Number(v.sale_price || v.price_override || v.product?.base_price || 0);
-      const costPrice = Number(v.product?.cost_price || (price ? price * 0.6 : 0));
+      const price = Number(
+        v.salePrice ?? v.priceOverride ?? v.product?.basePrice ?? 0
+      );
+      const costPrice = Number(v.costPrice ?? v.product?.costPrice ?? 0);
       return {
         id: v.id,
         sku: v.sku,

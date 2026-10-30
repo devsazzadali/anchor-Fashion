@@ -45,6 +45,7 @@ import {
   revokeReviewAction,
 } from "@/lib/actions/admin/catalog.actions";
 import { ReviewDetailDialog } from "./review-detail-dialog";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { toast } from "sonner";
 
 interface ReviewsTableProps {
@@ -58,6 +59,7 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [activeReview, setActiveReview] = useState<Review | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [hideTarget, setHideTarget] = useState<Review | null>(null);
   const [loadingRowId, setLoadingRowId] = useState<string | null>(null);
 
   // Summary Metrics
@@ -490,7 +492,7 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleToggleApproval(review)}
+                            onClick={() => setHideTarget(review)}
                             disabled={isRowLoading}
                             title="Cancel Approval (Hide from store)"
                             className="h-8 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
@@ -534,6 +536,21 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
         onOpenChange={setIsDialogOpen}
         onStatusChange={updateReviewStatus}
         onDelete={handleDeleteReview}
+      />
+
+      {/* Hide Review (Cancel Approval) Confirmation */}
+      <ConfirmDialog
+        open={!!hideTarget}
+        title="Hide this review from the store?"
+        description="The review's approval will be cancelled and it will no longer be shown on the storefront. You can approve it again at any time."
+        confirmLabel="Hide Review"
+        isLoading={!!hideTarget && loadingRowId === hideTarget.id}
+        onConfirm={async () => {
+          if (!hideTarget) return;
+          await handleToggleApproval(hideTarget);
+          setHideTarget(null);
+        }}
+        onCancel={() => setHideTarget(null)}
       />
     </div>
   );

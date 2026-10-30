@@ -13,7 +13,7 @@ import { Plus, ClipboardList } from "lucide-react";
 import Link from "next/link";
 import { getAuditsAction } from "@/app/actions/manager/inventory.actions";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { formatAuditDate } from "@/lib/utils/audit-date";
 
 export const metadata: Metadata = {
   title: "Inventory Audits | Manager Dashboard",
@@ -93,7 +93,7 @@ export default async function InventoryAuditsPage() {
                     <TableCell>{audit.warehouse?.name || "Unknown"}</TableCell>
                     <TableCell>{getStatusBadge(audit.status)}</TableCell>
                     <TableCell>
-                      {audit.scheduled_date ? format(new Date(audit.scheduled_date), "MMM d, yyyy") : "-"}
+                      {formatAuditDate(audit)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link href={`/manager/inventory/audits/${audit.id}`}>

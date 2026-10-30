@@ -40,6 +40,7 @@ interface VariantItem {
   product_name?: string;
   title?: string;
   price?: number;
+  cost_price?: number;
 }
 
 interface PurchaseOrderItem {
@@ -51,6 +52,7 @@ interface PurchaseOrderItem {
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseItem[]>([]);
   const [variants, setVariants] = useState<VariantItem[]>([]);
@@ -66,14 +68,18 @@ export default function NewPurchaseOrderPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const [suppliersRes, warehousesRes, variantsRes] = await Promise.all([
-        getSupplierProfiles(),
-        getWarehouses(),
-        getVariants()
-      ]);
-      if (suppliersRes.success && suppliersRes.data) setSuppliers(suppliersRes.data);
-      if (warehousesRes.success && warehousesRes.data) setWarehouses(warehousesRes.data);
-      if (variantsRes.success && variantsRes.data) setVariants(variantsRes.data);
+      try {
+        const [suppliersRes, warehousesRes, variantsRes] = await Promise.all([
+          getSupplierProfiles(),
+          getWarehouses(),
+          getVariants()
+        ]);
+        if (suppliersRes.success && suppliersRes.data) setSuppliers(suppliersRes.data);
+        if (warehousesRes.success && warehousesRes.data) setWarehouses(warehousesRes.data);
+        if (variantsRes.success && variantsRes.data) setVariants(variantsRes.data);
+      } finally {
+        setDataLoading(false);
+      }
     }
     fetchData();
   }, []);
@@ -92,11 +98,14 @@ export default function NewPurchaseOrderPage() {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     
-    // Auto fill unit cost if variant is selected
+    // Auto-fill the unit cost from the variant's recorded cost (variant
+    // cost, else the product's COGS) — the same cost the product record
+    // presents. (This previously fabricated 60% of the retail price,
+    // which disagreed with the product's actual COGS.)
     if (field === "variant_id") {
       const selectedVariant = variants.find(v => v.id === value);
-      if (selectedVariant && selectedVariant.price) {
-        newItems[index].unit_cost = selectedVariant.price * 0.6; // Assuming cost is 60% of retail price
+      if (selectedVariant && selectedVariant.cost_price !== undefined && selectedVariant.cost_price !== null) {
+        newItems[index].unit_cost = Number(selectedVariant.cost_price) || 0;
       }
     }
     
@@ -186,7 +195,11 @@ export default function NewPurchaseOrderPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="supplier_id">Supplier <span className="text-destructive">*</span></Label>
-                {suppliers.length > 0 ? (
+                {dataLoading ? (
+                  <div className="text-sm text-muted-foreground border border-dashed rounded-md p-3 text-center">
+                    Loading suppliers…
+                  </div>
+                ) : suppliers.length > 0 ? (
                   <Select value={supplierId} onValueChange={(val) => setSupplierId(val || "")} required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select supplier..." />

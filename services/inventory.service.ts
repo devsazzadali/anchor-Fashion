@@ -149,13 +149,17 @@ export class InventoryService {
     inventoryId: string,
     newAvailable: number,
     newReserved: number,
-    reason: string
+    reason: string,
+    notes?: string,
+    userId?: string
   ): Promise<void> {
     await this.repository.adjustStock(
       inventoryId,
       newAvailable,
       newReserved,
-      reason
+      reason,
+      notes,
+      userId
     );
   }
 

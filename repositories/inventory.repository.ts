@@ -128,6 +128,10 @@ export class InventoryRepository {
       reason_code: rawReasonCode ? String(rawReasonCode).slice(0, 50) : null,
       reference_id: movement.reference_id || null,
       reference_type: movement.reference_type || null,
+      // Pass the caller's note through verbatim: without this the DB
+      // layer derives `notes` from the 50-char-sliced `reason` above,
+      // truncating longer notes (e.g. an admin's adjustment note).
+      notes: movement.notes || undefined,
       // S4-9: callers that know the real before/after quantities pass them
       // through; without them the DB layer defaults previous=0 / new=quantity,
       // which corrupts the audit trail's quantity columns.
@@ -283,7 +287,9 @@ export class InventoryRepository {
     inventoryId: string,
     newAvailable: number,
     newReserved: number,
-    reason: string
+    reason: string,
+    notes?: string,
+    userId?: string
   ): Promise<void> {
     const db = this.getAdminClient();
 
@@ -305,14 +311,25 @@ export class InventoryRepository {
 
     if (error) throw new Error(`Failed to adjust stock: ${error.message}`);
 
-    // Record movement
+    // Record movement — with the admin's typed note appended to the
+    // system summary, the acting admin stamped as creator (the movement
+    // audit log resolves created_by → the admin's name; without it the
+    // actor rendered as "System"), and the real before/after quantities
+    // (omitting them made the DB layer default previous=0 / new=delta,
+    // corrupting the trail).
+    const adminNote = notes?.trim();
     await this.recordMovement({
       variant_id: inv.variant_id,
       warehouse_id: inv.warehouse_id,
       movement_type: "ADJUST",
       quantity: newAvailable - inv.quantity_available, // Net change
       reason_code: reason,
-      notes: `Adjusted from ${inv.quantity_available} to ${newAvailable}`,
+      notes: adminNote
+        ? `Adjusted from ${inv.quantity_available} to ${newAvailable} — ${adminNote}`
+        : `Adjusted from ${inv.quantity_available} to ${newAvailable}`,
+      previous_quantity: inv.quantity_available,
+      new_quantity: newAvailable,
+      user_id: userId || null,
     });
   }
 

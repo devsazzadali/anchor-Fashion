@@ -1,4 +1,5 @@
 import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 import {
   Warehouse,
   WarehouseZone,
@@ -422,11 +423,24 @@ export class WarehouseRepository {
   }> {
     const db = this.getAdminClient();
 
-    // Fetch inventory levels with product cost
-    const { data: levels } = await db
-      .from("inventory_levels")
-      .select("variant_id, quantity_available, quantity_reserved, quantity_damaged, reorder_point, safety_stock, variant:variants(product:products(base_price, cost_price))")
-      .eq("warehouse_id", warehouseId);
+    // Fetch inventory levels with product cost via Prisma. The fluent
+    // builder's PostgREST-style embedded select
+    // (`variant:variants(product:products(...))`) is never resolved for
+    // inventory_levels, so every row's cost used to read as 0 and the
+    // valuation came out ৳0. Cost basis matches the Inventory Overview
+    // financial report exactly: available × product cost_price.
+    const levels = await prisma.inventoryLevel.findMany({
+      where: { warehouseId },
+      select: {
+        variantId: true,
+        quantityAvailable: true,
+        quantityReserved: true,
+        reorderPoint: true,
+        variant: {
+          select: { product: { select: { costPrice: true } } },
+        },
+      },
+    });
 
     const distinctVariants = new Set<string>();
     let totalStock = 0;
@@ -437,13 +451,13 @@ export class WarehouseRepository {
     let outOfStockCount = 0;
     let totalStockValue = 0;
 
-    (levels || []).forEach((row: any) => {
-      distinctVariants.add(row.variant_id);
-      const avail = row.quantity_available || 0;
-      const res = row.quantity_reserved || 0;
-      const dam = row.quantity_damaged || 0;
+    levels.forEach((row) => {
+      distinctVariants.add(row.variantId);
+      const avail = row.quantityAvailable || 0;
+      const res = row.quantityReserved || 0;
+      const dam = 0; // inventory_levels has no damaged column
       const totalItemStock = avail + res + dam;
-      const cost = Number(row.variant?.product?.cost_price || row.variant?.product?.base_price || 0);
+      const cost = Number(row.variant?.product?.costPrice || 0);
 
       totalStock += totalItemStock;
       availableStock += avail;
@@ -451,7 +465,7 @@ export class WarehouseRepository {
       damagedStock += dam;
       totalStockValue += avail * cost;
 
-      const threshold = Number(row.reorder_point) || Number(row.safety_stock) || 5;
+      const threshold = Number(row.reorderPoint) || 5;
       if (avail <= 0) {
         outOfStockCount++;
       } else if (avail <= threshold) {
@@ -512,23 +526,38 @@ export class WarehouseRepository {
     const totalWarehouses = (whList || []).length;
     const activeWarehouses = (whList || []).filter((w: any) => w.is_active).length;
 
-    const { data: levels } = await db
-      .from("inventory_levels")
-      .select("variant_id, quantity_available, quantity_reserved, quantity_damaged, reorder_point, variant:variants(product:products(base_price, cost_price))");
+    // Prisma for the level aggregates: the fluent builder never resolves
+    // the embedded variant→product join for inventory_levels, which made
+    // every cost 0 (total valuation ৳0). Cost basis matches the Inventory
+    // Overview financial report exactly: available × product cost_price.
+    const levels = await prisma.inventoryLevel.findMany({
+      select: {
+        variantId: true,
+        quantityAvailable: true,
+        quantityReserved: true,
+        reorderPoint: true,
+        variant: {
+          select: { product: { select: { costPrice: true } } },
+        },
+      },
+    });
 
     const variantSet = new Set<string>();
     let totalStock = 0;
     let totalValuation = 0;
     let lowStockAlerts = 0;
 
-    (levels || []).forEach((row: any) => {
-      variantSet.add(row.variant_id);
-      const avail = row.quantity_available || 0;
-      totalStock += avail + (row.quantity_reserved || 0) + (row.quantity_damaged || 0);
-      const cost = Number(row.variant?.product?.cost_price || row.variant?.product?.base_price || 0);
+    levels.forEach((row) => {
+      variantSet.add(row.variantId);
+      const avail = row.quantityAvailable || 0;
+      totalStock += avail + (row.quantityReserved || 0);
+      const cost = Number(row.variant?.product?.costPrice || 0);
       totalValuation += avail * cost;
-      const reorder = Number(row.reorder_point) || 5;
-      if (avail <= reorder) {
+      const reorder = Number(row.reorderPoint) || 5;
+      // Canonical low-stock definition (same as the Stock Control page):
+      // 0 < available ≤ reorder point. Out-of-stock rows are counted
+      // separately, not as low-stock alerts.
+      if (avail > 0 && avail <= reorder) {
         lowStockAlerts++;
       }
     });

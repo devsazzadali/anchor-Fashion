@@ -137,6 +137,16 @@ export function InventoryMasterHubClient({
     });
   }, [masterItems, search, statusFilter, categoryFilter]);
 
+  // Tab badge: the TRUE catalog total from the server when no client
+  // filter is active (the loaded list used to be capped at 100 rows, so
+  // the badge showed 100 for a 190-product catalog); the filtered count
+  // while searching/filtering.
+  const catalogFiltersActive =
+    Boolean(search) || statusFilter !== "ALL" || categoryFilter !== "ALL";
+  const catalogTabCount = catalogFiltersActive
+    ? filteredCatalog.length
+    : (initialMasterData?.total ?? filteredCatalog.length);
+
   // Handle Publish Toggle
   const handleTogglePublish = async (productId: string) => {
     try {
@@ -321,14 +331,14 @@ export function InventoryMasterHubClient({
         <Card className="border border-border bg-card shadow-xs hover:border-border/80 transition-all rounded-xl">
           <CardContent className="p-4 space-y-1">
             <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-              <span>Total In Stock</span>
+              <span>Available Stock</span>
               <Warehouse className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             <div className="text-2xl font-bold text-foreground tracking-tight font-sans">
               {(finSummary.totalInStockUnits ?? 0).toLocaleString()}
             </div>
             <p className="text-[11px] text-muted-foreground font-medium">
-              +{(branchSummary.overallUnitsSent ?? 0).toLocaleString()} across {branchSummary.branchesCount ?? 5} branches
+              +{(finSummary.totalReservedUnits ?? 0).toLocaleString()} reserved · {((finSummary.totalInStockUnits ?? 0) + (finSummary.totalReservedUnits ?? 0)).toLocaleString()} total units
             </p>
           </CardContent>
         </Card>
@@ -400,7 +410,7 @@ export function InventoryMasterHubClient({
           <TabsList className="bg-muted p-1 rounded-xl">
             <TabsTrigger value="catalog" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs">
               <Boxes className="h-3.5 w-3.5" />
-              Master Inventory Catalog ({filteredCatalog.length})
+              Master Inventory Catalog ({catalogTabCount})
             </TabsTrigger>
             <TabsTrigger value="branches" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs">
               <Building2 className="h-3.5 w-3.5" />

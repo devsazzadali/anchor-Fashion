@@ -103,7 +103,8 @@ export function StockControlClient({
       adjustItem.id,
       Number(adjustAvailable),
       Number(adjustReserved),
-      adjustReason
+      adjustReason,
+      adjustNotes
     );
     setAdjustLoading(false);
 
@@ -343,7 +344,7 @@ export function StockControlClient({
               <div className="rounded-lg border bg-muted/40 p-3 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Product:</span>
-                  <span className="font-semibold">{adjustItem.variants?.name || "N/A"}</span>
+                  <span className="font-semibold">{adjustItem.variants?.product?.name || adjustItem.variants?.name || "N/A"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">SKU:</span>
