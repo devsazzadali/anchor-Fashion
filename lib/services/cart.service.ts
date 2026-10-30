@@ -2,6 +2,21 @@ import { CartRepository } from "../repositories/cart.repository";
 import { Cart } from "@/types/checkout.types";
 import { prisma } from "@/lib/prisma";
 import { FlashSaleService } from "@/lib/services/marketing/flash-sale.service";
+import { generateEAN13Sync } from "@/lib/utils/barcode";
+
+/** A variant created on the fly must still carry a real, unique EAN-13 —
+ *  no variant may exist barcode-less (REG-36). */
+async function generateUniqueVariantBarcode(): Promise<string> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = generateEAN13Sync();
+    const clash = await prisma.variant.findUnique({
+      where: { barcode: candidate },
+      select: { id: true },
+    });
+    if (!clash) return candidate;
+  }
+  return generateEAN13Sync();
+}
 
 export class CartService {
   /**
@@ -111,6 +126,7 @@ export class CartService {
           data: {
             productId: product.id,
             sku: defaultSku,
+            barcode: await generateUniqueVariantBarcode(),
             priceOverride: product.basePrice,
             isActive: true,
             attributes: { Standard: "Default" },

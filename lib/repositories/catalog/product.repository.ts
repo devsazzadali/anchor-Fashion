@@ -2,6 +2,38 @@ import { prisma } from "@/lib/prisma";
 import { CreateProductInput, Product } from "@/types/catalog.types";
 import { cache } from "react";
 import { generateUniqueProductCode } from "@/lib/utils/product-code";
+import { generateEAN13Sync } from "@/lib/utils/barcode";
+
+/**
+ * Barcode guarantee for variant writes: a variant must NEVER be persisted
+ * without a barcode (REG-36 — 22 variants reached the DB barcode-less
+ * because empty fields were stored as NULL). Resolution order: the
+ * caller-supplied barcode wins; on update, an existing barcode is kept
+ * (never overwritten/cleared); only a genuinely new, empty variant gets a
+ * freshly generated EAN-13, collision-checked against the unique index.
+ */
+async function generateUniqueVariantBarcode(db: any): Promise<string> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = generateEAN13Sync();
+    const clash = await db.variant.findUnique({
+      where: { barcode: candidate },
+      select: { id: true },
+    });
+    if (!clash) return candidate;
+  }
+  return generateEAN13Sync();
+}
+
+async function resolveVariantBarcode(
+  db: any,
+  incoming?: string | null,
+  existingBarcode?: string | null
+): Promise<string> {
+  const trimmed = incoming?.trim();
+  if (trimmed) return trimmed;
+  if (existingBarcode) return existingBarcode;
+  return generateUniqueVariantBarcode(db);
+}
 
 function mapToAdminProduct(p: any): Product {
   const variants = p.variants || [];
@@ -459,7 +491,7 @@ export class ProductRepository {
             data: {
               productId,
               sku,
-              barcode: v.barcode && v.barcode.trim() ? v.barcode.trim() : null,
+              barcode: await resolveVariantBarcode(tx, v.barcode),
               priceOverride: v.priceOverride ?? null,
               salePrice: v.salePrice ?? null,
               costPrice: v.costPrice ?? null,
@@ -504,7 +536,7 @@ export class ProductRepository {
           data: {
             productId,
             sku: defaultSku,
-            barcode: productData.barcode && productData.barcode.trim() ? productData.barcode.trim() : null,
+            barcode: await resolveVariantBarcode(tx, productData.barcode),
             priceOverride: productData.basePrice,
             salePrice: productData.salePrice ?? null,
             costPrice: productData.costPrice ?? null,
@@ -695,7 +727,7 @@ export class ProductRepository {
                 where: { id: existing.id },
                 data: {
                   sku,
-                  barcode: v.barcode && v.barcode.trim() ? v.barcode.trim() : null,
+                  barcode: await resolveVariantBarcode(tx, v.barcode, existing.barcode),
                   priceOverride: v.priceOverride ?? null,
                   salePrice: v.salePrice ?? null,
                   costPrice: v.costPrice ?? null,
@@ -709,7 +741,7 @@ export class ProductRepository {
                 data: {
                   productId: id,
                   sku,
-                  barcode: v.barcode && v.barcode.trim() ? v.barcode.trim() : null,
+                  barcode: await resolveVariantBarcode(tx, v.barcode),
                   priceOverride: v.priceOverride ?? null,
                   salePrice: v.salePrice ?? null,
                   costPrice: v.costPrice ?? null,

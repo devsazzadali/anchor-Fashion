@@ -27,7 +27,6 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import Image from "next/image";
 import { PrintBarcodeModal, BarcodeLabelData } from "@/components/admin/inventory/PrintBarcodeModal";
-import { generateEAN13Sync } from "@/lib/utils/barcode";
 import { priceWithVat } from "@/lib/utils/vat";
 
 import { Button } from "@/components/ui/button";
@@ -107,7 +106,11 @@ export function ProductsTable({
   const handleOpenBarcodePrint = (product: Product) => {
     const prodName = product.name;
     const prodSku = product.sku || "AFPRD1";
-    const prodBarcode = product.barcode || generateEAN13Sync();
+    // Never fabricate a barcode for printing: a random/generated-here code
+    // exists nowhere in the DB, so its sticker would scan back to nothing.
+    // Empty stays empty — PrintBarcodeModal excludes barcode-less variants
+    // with a visible "No barcode" notice.
+    const prodBarcode = product.barcode || "";
     const prodPrice = Number(product.basePrice || 0);
     // S4-2: the sticker is labelled "(Inc.VAT)" and must carry the
     // VAT-inclusive price, matching the storefront — this path previously
