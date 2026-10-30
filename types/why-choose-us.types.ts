@@ -42,7 +42,7 @@ export const DEFAULT_WHY_CHOOSE_US: WhyChooseUsSettings = {
       icon: "RefreshCcw",
       title: "Hassle-Free Returns",
       description:
-        "Not the right fit? Return or exchange within 14 days with zero questions asked.",
+        "Not the right fit? Return or exchange within 7 days with zero questions asked.",
     },
     {
       id: "benefit-4",

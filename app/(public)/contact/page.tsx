@@ -4,6 +4,7 @@ import { Mail, Phone, MapPin, Clock, Sparkles } from "lucide-react";
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
 import { ContactForm } from "@/components/contact/ContactForm";
+import { getStoreInfo } from "@/lib/actions/settings.actions";
 import { jost } from "@/lib/fonts";
 
 export const metadata: Metadata = {
@@ -12,7 +13,11 @@ export const metadata: Metadata = {
     "Get in touch with Anchor Fashion customer concierge, atelier headquarters, order support, and showroom inquiries.",
 };
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  // The support phone comes from the same store settings the header
+  // renders (Settings → Store Info), so every surface shows one number.
+  const storeInfo = await getStoreInfo().catch(() => null);
+  const supportPhone = storeInfo?.phone || "+880 1711-223344";
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <StoreHeader />
@@ -64,7 +69,7 @@ export default function ContactPage() {
                       <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900">
                         Phone Concierge
                       </h3>
-                      <p className="text-sm font-medium text-gray-700 mt-0.5">+880 1800 000000</p>
+                      <p className="text-sm font-medium text-gray-700 mt-0.5">{supportPhone}</p>
                       <p className="text-[11px] text-gray-400 mt-0.5">Toll-free / Direct support lines</p>
                     </div>
                   </CardContent>

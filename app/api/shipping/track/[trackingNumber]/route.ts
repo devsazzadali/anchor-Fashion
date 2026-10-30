@@ -84,6 +84,15 @@ export async function GET(
         }
       }
 
+      // "Shipped" is a fact about the ORDER's lifecycle, not only about
+      // the courier row: an order that reached SHIPPED / DELIVERED /
+      // COMPLETED has by definition been shipped, even when its shipment
+      // row carries no courier tracking number (or predates shipment-row
+      // creation). Deriving the flag from the tracking number alone made
+      // delivered orders claim "not been shipped yet" on the tracking
+      // page. When a tracking number DOES exist, the timeline branch
+      // above has already taken precedence and returned it.
+      const SHIPPED_STATUSES = ["SHIPPED", "DELIVERED", "COMPLETED"];
       return NextResponse.json({
         success: true,
         data: {
@@ -92,7 +101,9 @@ export async function GET(
             status: order.status,
             placedAt: order.createdAt.toISOString(),
             totalAmount: order.totalAmount ? Number(order.totalAmount) : null,
-            shipped: Boolean(shipment?.trackingNumber),
+            shipped:
+              Boolean(shipment?.trackingNumber) ||
+              SHIPPED_STATUSES.includes(order.status),
             trackingNumber: shipment?.trackingNumber ?? null,
           },
         },

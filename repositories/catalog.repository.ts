@@ -1,5 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { PromotionRepository } from "@/lib/repositories/marketing/promotion.repository";
+import { priceWithVat } from "@/lib/utils/vat";
+
+/**
+ * The unit price a product card actually displays: the effective selling
+ * price (sale price when set, else base price — mapProductToStorefront has
+ * already folded any active promotion into sale_price) with the product's
+ * VAT added on top. Mirrors components/product/product-card.tsx exactly so
+ * price sorting orders by what the customer sees.
+ */
+function displayedUnitPrice(p: any): number {
+  const price = Number(p?.sale_price ?? p?.base_price ?? 0);
+  return priceWithVat(price, Number(p?.vat_percent ?? 0));
+}
 
 export interface ProductListParams {
   category?: string;
@@ -387,6 +400,12 @@ export const CatalogRepository = {
 
       const limit = params.limit || 12;
       const offset = params.offset || 0;
+      // Price sorts must order by the VAT-inclusive price the cards
+      // display, which is a computed value (effective price × (1 + VAT%))
+      // that Prisma cannot orderBy. For those two sorts, fetch the full
+      // matching set, sort by the displayed price in memory, then page.
+      const isPriceSort =
+        params.sortBy === "price_asc" || params.sortBy === "price_desc";
 
       const [products, total, bestPromo] = await Promise.all([
         prisma.product.findMany({
@@ -403,8 +422,7 @@ export const CatalogRepository = {
             variants: { include: { inventoryLevels: true } },
           },
           orderBy,
-          take: limit,
-          skip: offset,
+          ...(isPriceSort ? {} : { take: limit, skip: offset }),
         }),
         prisma.product.count({ where }),
         PromotionRepository.getBestActivePromotion().catch(() => null),
@@ -412,8 +430,26 @@ export const CatalogRepository = {
 
       const promoDiscount = bestPromo?.discount_percentage ?? null;
 
+      let mapped = products.map((p) => mapProductToStorefront(p, promoDiscount));
+
+      if (isPriceSort) {
+        const dir = params.sortBy === "price_asc" ? 1 : -1;
+        mapped = mapped
+          .slice()
+          .sort((a: any, b: any) => {
+            const diff = displayedUnitPrice(a) - displayedUnitPrice(b);
+            if (diff !== 0) return diff * dir;
+            // Deterministic tie-break: newest first, then id.
+            const ca = String(a?.created_at || "");
+            const cb = String(b?.created_at || "");
+            if (ca !== cb) return cb.localeCompare(ca);
+            return String(a?.id || "").localeCompare(String(b?.id || ""));
+          })
+          .slice(offset, offset + limit);
+      }
+
       return {
-        data: products.map((p) => mapProductToStorefront(p, promoDiscount)),
+        data: mapped,
         count: total,
       };
     } catch (error) {

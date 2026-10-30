@@ -58,7 +58,15 @@ export class CustomerRepository {
       if (updates.last_name) {
         profileUpdates.lastName = updates.last_name;
       }
-      if (updates.phone) customerUpdates.phone = updates.phone;
+      if (updates.phone) {
+        customerUpdates.phone = updates.phone;
+        // The phone is the customer's identity key and lives on the
+        // PROFILE (guest checkout auto-profiles and account claiming key
+        // on profiles.phone). It was previously written only to the
+        // customers row, leaving profiles.phone null for every customer
+        // who saved a number — registration included.
+        profileUpdates.phone = updates.phone;
+      }
       if (updates.email) customerUpdates.email = updates.email;
       if (updates.avatar_url) profileUpdates.avatarUrl = updates.avatar_url;
 

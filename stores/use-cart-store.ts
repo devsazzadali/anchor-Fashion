@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import { Cart } from "@/types/checkout.types";
 import {
   fetchCartAction,
@@ -21,15 +20,22 @@ interface CartState {
   addItem: (
     productId: string,
     variantId: string | null,
-    quantity: number
+    quantity: number,
+    options?: { openSheet?: boolean }
   ) => Promise<void>;
   updateQuantity: (itemId: string, quantity: number) => Promise<void>;
   removeItem: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
 }
 
+// NOTE: this store is intentionally NOT persisted. The previous zustand
+// `persist` setup stored ONLY `isSheetOpen` — so a drawer left open (or
+// opened by an Add to Bag) was restored from localStorage on every page
+// load and navigation, springing the cart drawer over whatever page the
+// customer had moved to and masking client-side navigations (the Buy Now
+// / drawer-checkout flows appeared to "not navigate"). The cart itself is
+// server-owned and re-fetched; nothing else was ever persisted.
 export const useCartStore = create<CartState>()(
-  persist(
     (set, get) => ({
       cart: null,
       isLoading: false,
@@ -50,12 +56,15 @@ export const useCartStore = create<CartState>()(
         }
       },
 
-      addItem: async (productId, variantId, quantity) => {
+      addItem: async (productId, variantId, quantity, options) => {
         set({ isLoading: true, error: null });
         const res = await addToCartAction(productId, variantId, quantity);
         if (res.success) {
           await get().fetchCart();
-          set({ isSheetOpen: true });
+          // Add to Bag opens the drawer (default). Buy Now passes
+          // openSheet: false — it navigates straight to /checkout, and
+          // opening the drawer as a side effect fought that navigation.
+          set({ isSheetOpen: options?.openSheet ?? true });
         } else {
           set({ error: res.error, isLoading: false });
           throw new Error(res.error || "Failed to add item to cart");
@@ -117,10 +126,5 @@ export const useCartStore = create<CartState>()(
           set({ error: res.error, isLoading: false });
         }
       },
-    }),
-    {
-      name: "af-cart-storage",
-      partialize: (state) => ({ isSheetOpen: state.isSheetOpen }),
-    }
-  )
+    })
 );

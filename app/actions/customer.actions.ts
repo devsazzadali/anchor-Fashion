@@ -11,6 +11,7 @@ import { LoyaltyService } from "@/services/loyalty.service";
 import { verifyAuthenticated } from "@/lib/security/roles";
 import { prisma } from "@/lib/prisma";
 import { ReviewRepository } from "@/lib/repositories/catalog/review.repository";
+import { bdMobileSchema } from "@/schemas/phone.schema";
 
 const customerService = new CustomerService();
 
@@ -45,6 +46,45 @@ export async function updateProfileAction(formData: FormData) {
   });
 
   revalidatePath("/account/profile");
+  return { success: true };
+}
+
+/**
+ * Registration collects a mobile number, but sign-up itself goes straight
+ * to Neon Auth (authClient.signUp.email), which knows nothing about the
+ * profiles table. The register form calls this action immediately after a
+ * successful sign-up, while the fresh session is active, so the number
+ * lands on the new account's profile (created by the same upsert the
+ * account page uses, keyed by the auth user id). The phone is validated
+ * server-side with the same BD-mobile schema the form enforces.
+ */
+export async function saveRegistrationPhoneAction(
+  phone: string,
+  firstName?: string,
+  lastName?: string
+) {
+  await verifyAuthenticated();
+  const { user } = await getServerSession();
+
+  if (!user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const parsed = bdMobileSchema.safeParse(phone);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message || "Invalid phone number",
+    };
+  }
+
+  await customerService.updateProfile(user.id, {
+    first_name: firstName || undefined,
+    last_name: lastName || undefined,
+    phone: parsed.data,
+    email: user.email,
+  });
+
   return { success: true };
 }
 

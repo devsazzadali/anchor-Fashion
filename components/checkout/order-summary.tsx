@@ -14,12 +14,19 @@ import { totalVatAmount } from "@/lib/utils/vat";
 import { getPublicZonesAction } from "@/lib/actions/shipping.actions";
 import { getStoreInfo } from "@/lib/actions/settings.actions";
 import {
-  pickZone,
-  defaultZone,
+  computeShippingFee,
   type PublicZone,
 } from "@/lib/services/shipping/zone-shared";
 
-export function OrderSummary() {
+export function OrderSummary({
+  initialZones = [],
+  initialFreeThreshold = 0,
+}: {
+  /** Zones fetched by the server component — seed so the first paint is correct. */
+  initialZones?: PublicZone[];
+  /** Free-shipping threshold fetched by the server component (0 = not seeded). */
+  initialFreeThreshold?: number;
+} = {}) {
   const { cart } = useCartStore();
   const { formData, session } = useCheckoutStore();
   const [couponCode, setCouponCode] = useState("");
@@ -48,8 +55,14 @@ export function OrderSummary() {
   const shippingMethod = formData.shipping?.shipping_method;
   // Delivery charge mirrors the server's zone resolution: admin-configured
   // zones (Settings → Store) matched by the customer's city/district, with
-  // the default zone as fallback. Legacy flat rates only until zones load.
-  const [zones, setZones] = useState<PublicZone[]>([]);
+  // the default zone as fallback, and free at/above the store's
+  // free-shipping threshold (Settings → Store Info). Zones and threshold
+  // are SEEDED from the server component's fetch so the free-shipping rule
+  // applies on the very first paint — previously both loaded via client
+  // effects after mount, so a qualifying cart briefly showed the zone fee
+  // (and the higher total) until the fetch landed. The effects stay as a
+  // refresh so mid-session admin edits still arrive.
+  const [zones, setZones] = useState<PublicZone[]>(initialZones);
   useEffect(() => {
     let cancelled = false;
     getPublicZonesAction()
@@ -61,24 +74,7 @@ export function OrderSummary() {
       cancelled = true;
     };
   }, []);
-  const cityForZone = formData.information?.shipping_address?.city || "";
-  const zoneFee = (() => {
-    if (subtotal <= 0) return 0;
-    if (zones.length > 0) {
-      const zone =
-        shippingMethod === "home_delivery_outside"
-          ? defaultZone(zones)
-          : pickZone(zones, cityForZone, cityForZone);
-      if (zone) return zone.rate;
-    }
-    return shippingMethod === "home_delivery_outside" ? 150 : 100;
-  })();
-  // Free-shipping threshold (Settings → Store Info, advertised in the
-  // announcement bar and cart): at/above it delivery is free. Mirrors the
-  // server's OrderService.calculateSummary so the displayed total matches
-  // the charged total. BUG FIX: this display previously never consulted
-  // the threshold and kept showing the zone fee on qualifying orders.
-  const [freeThreshold, setFreeThreshold] = useState(0);
+  const [freeThreshold, setFreeThreshold] = useState(initialFreeThreshold);
   useEffect(() => {
     let cancelled = false;
     getStoreInfo()
@@ -92,8 +88,14 @@ export function OrderSummary() {
       cancelled = true;
     };
   }, []);
-  const shippingFee =
-    freeThreshold > 0 && subtotal >= freeThreshold ? 0 : zoneFee;
+  const cityForZone = formData.information?.shipping_address?.city || "";
+  const shippingFee = computeShippingFee({
+    subtotal,
+    zones,
+    freeThreshold,
+    shippingMethod,
+    city: cityForZone,
+  });
   // Real per-product VAT (each product's vat_percent, added on top of its
   // selling price) — identical to the server's OrderService.calculateSummary.
   // (This replaces a hardcoded 15% "estimated tax" that the server never

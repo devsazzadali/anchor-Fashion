@@ -83,17 +83,22 @@ export function FloatingPurchaseCard({
 
     try {
       setIsBuyNowLoading(true);
-      await addItem(productId, selectedVariantId || null, quantity);
-      const storeError = useCartStore.getState().error;
-      if (storeError) {
-        toast.error(storeError);
-        setIsBuyNowLoading(false);
+      // No drawer side effect on Buy Now — it navigates to /checkout
+      // (same fix as the main ProductActions Buy Now handler).
+      await addItem(productId, selectedVariantId || null, quantity, {
+        openSheet: false,
+      });
+      const storeState = useCartStore.getState();
+      if (storeState.error) {
+        toast.error(storeState.error);
       } else {
         toast.success("Proceeding to checkout...");
+        storeState.setSheetOpen(false);
         router.push("/checkout");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to proceed to checkout.");
+    } finally {
       setIsBuyNowLoading(false);
     }
   };

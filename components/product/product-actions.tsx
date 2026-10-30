@@ -101,17 +101,26 @@ export function ProductActions({
 
     try {
       setIsBuyNowLoading(true);
-      await addCartItem(productId, selectedVariantId || null, quantity);
+      // Buy Now must NOT open the cart drawer as a side effect — the
+      // drawer opening raced the /checkout navigation and left this
+      // button stuck on "Securing Checkout..." over an open drawer.
+      await addCartItem(productId, selectedVariantId || null, quantity, {
+        openSheet: false,
+      });
       const storeState = useCartStore.getState();
       if (storeState.error) {
         toast.error(storeState.error);
-        setIsBuyNowLoading(false);
       } else {
         toast.success("Proceeding to checkout...");
+        storeState.setSheetOpen(false);
         router.push("/checkout");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to proceed to checkout.");
+    } finally {
+      // The pending state ALWAYS resets — on success the component
+      // normally unmounts during navigation, but if navigation is
+      // interrupted the button must not stay stuck.
       setIsBuyNowLoading(false);
     }
   };

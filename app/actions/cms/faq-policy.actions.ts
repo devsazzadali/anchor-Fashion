@@ -35,9 +35,12 @@ export interface ReturnPolicyConfig {
 
 const DEFAULT_SHIPPING_POLICY: ShippingPolicyConfig = {
   inside_dhaka_delivery_time: "24 to 48 hours",
-  inside_dhaka_fee: 60,
+  // Aligned with the live delivery_zones rates (Inside Dhaka ৳100 /
+  // Outside Dhaka ৳150) — these defaults are what /support/shipping
+  // renders until an admin saves policy settings.
+  inside_dhaka_fee: 100,
   outside_dhaka_delivery_time: "3 to 5 business days",
-  outside_dhaka_fee: 120,
+  outside_dhaka_fee: 150,
   free_shipping_threshold: 999,
   courier_partners: "Pathao, Steadfast, Paperfly",
   processing_time: "Same day dispatch for orders before 2:00 PM",

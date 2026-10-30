@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import Link from "next/link";
 
 import { authClient } from "@/lib/auth/client";
+import { bdMobileSchema } from "@/schemas/phone.schema";
+import { saveRegistrationPhoneAction } from "@/app/actions/customer.actions";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -33,6 +35,7 @@ const formSchema = z
     email: z.string().email({
       message: "Please enter a valid email address.",
     }),
+    phone: bdMobileSchema,
     password: z.string().min(8, {
       message: "Password must be at least 8 characters.",
     }),
@@ -54,6 +57,7 @@ export function RegisterForm() {
       firstName: "",
       lastName: "",
       email: "",
+      phone: "",
       password: "",
       confirmPassword: "",
     },
@@ -92,6 +96,17 @@ export function RegisterForm() {
 
     // SECURITY: never persist the plaintext password to localStorage
     // (removed — any script/shared device could read it back).
+
+    // Persist the mobile number collected above on the new account's
+    // profile, while the fresh sign-up session is active (sign-up itself
+    // goes to Neon Auth, which has no profile row). Non-fatal: the
+    // account exists either way and the number can be added later from
+    // the Profile page.
+    await saveRegistrationPhoneAction(
+      values.phone,
+      values.firstName,
+      values.lastName
+    ).catch(() => null);
 
     // Merge cart in background — do NOT await, so navigation is instant
     mergeGuestCartAction().catch(() => {});
@@ -174,6 +189,33 @@ export function RegisterForm() {
                     </svg>
                     <Input
                       placeholder="Enter your email address"
+                      className="pl-10 h-12 bg-slate-50/70 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:border-[#C9A86A] focus-visible:ring-[#C9A86A]/20"
+                      {...field}
+                      disabled={isLoading}
+                    />
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-slate-700 dark:text-slate-300 font-medium text-sm">Mobile Number</FormLabel>
+                <FormControl>
+                  <div className="relative">
+                    <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#C9A86A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                    </svg>
+                    <Input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="01XXXXXXXXX"
                       className="pl-10 h-12 bg-slate-50/70 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:border-[#C9A86A] focus-visible:ring-[#C9A86A]/20"
                       {...field}
                       disabled={isLoading}

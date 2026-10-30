@@ -95,11 +95,22 @@ export function ProductGallery({
   const thumbnailRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const mainImageRef = useRef<HTMLDivElement>(null);
 
-  // Reset current index when images list completely changes (e.g. variant switched)
+  // Reset current index when the image SET actually changes (e.g.
+  // variant switched). This used to key on the `images` array identity,
+  // so any parent re-render that rebuilt the array — a variant-selector
+  // emission, an RSC refresh — snapped the slider back to image 01
+  // mid-interaction and thumbnail / Next clicks appeared to do nothing.
+  // Compare the URL list instead: identity churn with the same images
+  // no longer resets the position.
+  const imagesKey = normalizedImages.map((img) => img.url).join("|");
+  const prevImagesKeyRef = useRef(imagesKey);
   useEffect(() => {
-    setCurrentIndex(0);
-    setImageLoaded(false);
-  }, [images]);
+    if (prevImagesKeyRef.current !== imagesKey) {
+      prevImagesKeyRef.current = imagesKey;
+      setCurrentIndex(0);
+      setImageLoaded(false);
+    }
+  }, [imagesKey]);
 
   // Keep active thumbnail visible in vertical / horizontal strip
   useEffect(() => {
@@ -573,7 +584,7 @@ export function ProductGallery({
                     type="button"
                     onClick={goToPrev}
                     aria-label="Previous image"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-zinc-800 shadow-lg backdrop-blur-md transition-all duration-200 hover:bg-black hover:text-white hover:scale-110 active:scale-95 dark:bg-zinc-900/90 dark:text-zinc-200 dark:hover:bg-white dark:hover:text-black opacity-0 group-hover:opacity-100"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-zinc-800 shadow-lg backdrop-blur-md transition-all duration-200 hover:bg-black hover:text-white hover:scale-110 active:scale-95 dark:bg-zinc-900/90 dark:text-zinc-200 dark:hover:bg-white dark:hover:text-black opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </button>
@@ -581,7 +592,7 @@ export function ProductGallery({
                     type="button"
                     onClick={goToNext}
                     aria-label="Next image"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-zinc-800 shadow-lg backdrop-blur-md transition-all duration-200 hover:bg-black hover:text-white hover:scale-110 active:scale-95 dark:bg-zinc-900/90 dark:text-zinc-200 dark:hover:bg-white dark:hover:text-black opacity-0 group-hover:opacity-100"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-zinc-800 shadow-lg backdrop-blur-md transition-all duration-200 hover:bg-black hover:text-white hover:scale-110 active:scale-95 dark:bg-zinc-900/90 dark:text-zinc-200 dark:hover:bg-white dark:hover:text-black opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                   >
                     <ChevronRight className="h-5 w-5" />
                   </button>
