@@ -2,6 +2,26 @@
 
 import { getServerSession, resolveUserRole } from "@/lib/auth/server";
 import { ADMIN_ROLES, STAFF_ROLES } from "@/lib/constants/auth";
+import {
+  recordAuditForSessionUser,
+  AUDIT_ACTIONS,
+} from "@/lib/security/audit";
+
+/**
+ * REG-27: sign-in audit writer. Sign-in itself happens client-side
+ * against Neon Auth (authClient.signIn.email), so there is no server
+ * handler for the event; the login form calls this action immediately
+ * after a successful sign-in, while the fresh session cookie is
+ * already set. The actor is resolved from that session — the row is
+ * written for the user who just signed in, never "System".
+ * Fire-and-forget by design: auditing must not block the login flow.
+ */
+export async function recordSignInAuditAction(): Promise<void> {
+  await recordAuditForSessionUser({
+    action: AUDIT_ACTIONS.USER_SIGNED_IN,
+    entity: "user",
+  });
+}
 
 export async function getPostLoginRedirectAction(
   nextUrl?: string | null,

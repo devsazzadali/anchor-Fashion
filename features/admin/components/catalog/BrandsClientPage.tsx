@@ -178,7 +178,7 @@ export function BrandsClientPage({ initialBrands }: BrandsClientPageProps) {
       // Remove from local list (it's now inactive / soft-deleted)
       setBrands((prev) => prev.filter((b) => b.id !== deleteTarget.id));
     } else {
-      toast.error(res.error || "Failed to delete brand");
+      toast.error(res.error || "Failed to deactivate brand");
     }
     setIsDeleting(false);
     setConfirmOpen(false);
@@ -266,6 +266,7 @@ export function BrandsClientPage({ initialBrands }: BrandsClientPageProps) {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-600"
+                          title="Deactivate brand"
                           onClick={() => confirmDelete(brand)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -416,12 +417,12 @@ export function BrandsClientPage({ initialBrands }: BrandsClientPageProps) {
         </SheetContent>
       </Sheet>
 
-      {/* Delete Confirmation */}
+      {/* Deactivate Confirmation (REG-40: the action deactivates) */}
       <ConfirmDialog
         open={confirmOpen}
-        title={`Delete "${deleteTarget?.name}"?`}
+        title={`Deactivate "${deleteTarget?.name}"?`}
         description="This will deactivate the brand. It will no longer appear in product forms or the storefront."
-        confirmLabel="Delete"
+        confirmLabel="Deactivate"
         isLoading={isDeleting}
         onConfirm={handleDelete}
         onCancel={() => {

@@ -34,7 +34,9 @@ export default async function ManagerLayout({ children }: { children: ReactNode 
       <style>{`html, body { overflow: hidden !important; height: 100% !important; margin: 0 !important; padding: 0 !important; }`}</style>
       <ManagerSidebar role={role} />
       <div className="flex min-w-0 min-h-0 flex-1 flex-col h-full overflow-hidden">
-        <ManagerHeader user={sanitizedUser} />
+        {/* REG-34: pass the resolved role so the header labels the
+            user correctly (Support, Manager, …). */}
+        <ManagerHeader user={sanitizedUser} role={role} />
         <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 lg:p-6 overscroll-contain">
           <div className="mx-auto w-full max-w-[1600px] flex-1 flex flex-col gap-6">
             {children}

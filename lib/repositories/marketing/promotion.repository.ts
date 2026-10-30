@@ -35,10 +35,14 @@ function mapPromotion(row: any): PromotionRecord {
     discount_percentage: row.value != null ? Number(row.value) : 0,
     start_date: row.start_date ? new Date(row.start_date).toISOString() : "",
     end_date: row.end_date ? new Date(row.end_date).toISOString() : "",
-    is_active: row.is_active ?? true,
+    // REG-30: the promotions table has no banner/popup columns — the
+    // mapper previously FABRICATED show_popup: true for every row, so
+    // every promotion claimed "Popup active". Report what is stored:
+    // no stored popup setting means no popup.
+    is_active: row.is_active ?? false,
     banner_url: "",
     banner_link: "",
-    show_popup: true,
+    show_popup: false,
     popup_delay: 5,
     description: row.description || "",
     created_at: row.created_at
@@ -73,7 +77,9 @@ export class PromotionRepository {
         value: input.discount_percentage,
         start_date: input.start_date ? new Date(input.start_date) : null,
         end_date: input.end_date ? new Date(input.end_date) : null,
-        is_active: input.is_active ?? true,
+        // REG-30: server-side default matches the form — a promotion
+        // is created inactive unless the caller explicitly enables it.
+        is_active: input.is_active ?? false,
       },
     });
     return mapPromotion(row);

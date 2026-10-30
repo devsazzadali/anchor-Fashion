@@ -46,20 +46,14 @@ const FIELDS: {
     label: "Web Address",
     hint: "Shown in the invoice footer contact block.",
   },
-  {
-    key: "customer_care",
-    label: "Customer Care Phone",
-    hint: "Support hotline printed in the invoice footer.",
-  },
+  // REG-29: "Customer Care Phone" and "Contact Email" are NOT edited
+  // here anymore — they are canonical in General Settings (store_info)
+  // and the invoice reads them from there, so the invoice footer can
+  // never drift from the storefront header again.
   {
     key: "shop_concern",
     label: "Shop Concern Phone",
     hint: "Second contact number printed in the invoice footer.",
-  },
-  {
-    key: "email",
-    label: "Contact Email",
-    hint: "Printed in the invoice footer and the delivered-order email.",
   },
   {
     key: "system_by",
@@ -100,7 +94,9 @@ export function InvoiceSettingsClient({
               These details are printed on every customer invoice — the admin
               print view, the customer invoice, the public invoice link and the
               delivered-order email. Changes apply to newly rendered invoices
-              immediately.
+              immediately. The invoice&apos;s contact email and customer-care
+              phone come from General Settings, so they always match the
+              storefront header.
             </CardDescription>
           </div>
         </div>

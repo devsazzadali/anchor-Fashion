@@ -10,6 +10,10 @@ import { TagRepository } from "@/lib/repositories/catalog/tag.repository";
 import { CreateProductSchema } from "@/types/catalog.types";
 import { revalidatePath } from "next/cache";
 import { invalidateProductCache } from "@/lib/cache/invalidate-catalog";
+import {
+  recordAuditForSessionUser,
+  AUDIT_ACTIONS,
+} from "@/lib/security/audit";
 
 // ============================================================================
 // SCHEMAS
@@ -79,6 +83,16 @@ export const createAdminProductAction = createAdminAction(
       })),
     };
     const newProduct = await ProductRepository.createProduct(payload as any);
+    // REG-27: audit the creation (actor = the acting user).
+    await recordAuditForSessionUser({
+      action: AUDIT_ACTIONS.PRODUCT_CREATED,
+      entity: "product",
+      entityId: (newProduct as any)?.id ?? null,
+      newValues: {
+        name: (newProduct as any)?.name ?? payload.name ?? null,
+        status: (newProduct as any)?.status ?? payload.status ?? null,
+      },
+    });
     revalidatePath("/admin/products");
     invalidateProductCache(newProduct?.slug);
     return newProduct;
@@ -102,6 +116,18 @@ export const updateAdminProductAction = createAdminAction(
       id,
       payload as any
     );
+    // REG-27: audit the edit (actor = the acting user). The changed
+    // field NAMES are recorded (values may include pricing; names are
+    // enough for the audit trail without duplicating the payload).
+    await recordAuditForSessionUser({
+      action: AUDIT_ACTIONS.PRODUCT_UPDATED,
+      entity: "product",
+      entityId: id,
+      newValues: {
+        name: (updatedProduct as any)?.name ?? null,
+        changed_fields: Object.keys(data || {}),
+      },
+    });
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${id}/edit`);
     invalidateProductCache(updatedProduct?.slug);

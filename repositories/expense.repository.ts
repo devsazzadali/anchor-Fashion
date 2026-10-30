@@ -276,7 +276,14 @@ export class ExpenseRepository {
       category: row.category,
       description: row.description,
       amount: Number(row.amount),
-      status: row.status,
+      // REG-25: stored statuses are not case-consistent (legacy rows
+      // carry "PAID" while the schema/UI vocabulary is lowercase
+      // "paid" | "pending" | "scheduled" | "cancelled"). Every consumer
+      // — getExpenseSummary() and the Expenses UI KPI — compares
+      // lowercase, so the one PAID row was invisible and "Settled /
+      // Paid" showed ৳0. Normalize ONCE here, the single choke point
+      // every read passes through.
+      status: String(row.status || "pending").toLowerCase() as Expense["status"],
       vendor: row.vendor || "",
       branchId: row.branch_id || null,
       branchName: row.branch?.name || null,

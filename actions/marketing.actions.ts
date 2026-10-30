@@ -285,6 +285,48 @@ export async function updateCampaign(
   return campaign;
 }
 
+/**
+ * REG-23: Save Draft — persists a campaign in the `draft` state
+ * WITHOUT sending or scheduling it. Only the name is required; a
+ * draft is by definition unfinished, so subject/body may be filled
+ * in later. Drafts surface distinctly (status "draft") in the
+ * campaign history.
+ */
+export async function saveCampaignDraftAction(payload: {
+  name: string;
+  type: "email" | "push" | "sms" | "drip";
+  subject?: string;
+  content?: string;
+  audience_id?: string | null;
+}): Promise<{ success: boolean; campaign?: Campaign; error?: string }> {
+  // SECURITY: server actions are public endpoints; authorize every call.
+  await verifyStaff();
+  try {
+    if (!payload.name?.trim()) {
+      return { success: false, error: "Campaign name is required" };
+    }
+    const createdBy = await resolveCurrentAdminUserId();
+    const campaign = await marketingService.createCampaign({
+      name: payload.name.trim(),
+      type: payload.type,
+      subject: payload.subject?.trim() || null,
+      content: payload.content?.trim() || null,
+      audience_id: payload.audience_id || null,
+      status: "draft",
+      created_by: createdBy,
+    });
+    revalidatePath("/admin/marketing/campaigns");
+    revalidatePath("/manager/marketing/campaigns");
+    return { success: true, campaign };
+  } catch (err: any) {
+    console.error("[saveCampaignDraftAction] Error:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to save campaign draft",
+    };
+  }
+}
+
 export async function deleteCampaignAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {

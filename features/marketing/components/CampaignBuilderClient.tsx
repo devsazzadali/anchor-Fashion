@@ -34,14 +34,20 @@ import {
   Clock,
   Sparkles,
   ArrowLeft,
+  Save,
+  Trash2,
+  FileEdit,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   createAndSendCampaignAction,
   createAndScheduleCampaignAction,
+  saveCampaignDraftAction,
+  deleteCampaignAction,
   getCampaignsAction,
 } from "@/actions/marketing.actions";
+import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { Campaign } from "@/types/marketing.types";
 import { ScheduleCampaignDialog } from "@/features/marketing/components/ScheduleCampaignDialog";
 
@@ -64,6 +70,10 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  // REG-23: draft saving + delete-with-confirm state
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Campaign History
   const [campaignHistory, setCampaignHistory] = useState<Campaign[]>([]);
@@ -197,6 +207,72 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
       toast.error(err.message || "Failed to schedule campaign");
     } finally {
       setIsScheduling(false);
+    }
+  };
+
+  // REG-23: Save Draft — name is the only requirement; the campaign
+  // is persisted with status "draft" and is neither sent nor
+  // scheduled. It appears in the history below with a Draft badge.
+  const handleSaveDraft = async () => {
+    if (!campaignName.trim()) {
+      toast.error("Please enter a campaign name");
+      return;
+    }
+
+    setIsSavingDraft(true);
+    try {
+      const content = channelType === "email" ? emailBody : pushMessage;
+      const sub = channelType === "email" ? subject : pushTitle;
+
+      const res = await saveCampaignDraftAction({
+        name: campaignName,
+        type: channelType,
+        subject: sub || undefined,
+        content: content || undefined,
+      });
+
+      if (!res.success) {
+        toast.error(res.error || "Failed to save draft");
+        return;
+      }
+
+      toast.success("Campaign saved as draft.");
+
+      // Reset form
+      setCampaignName("");
+      setSubject("");
+      setEmailBody("");
+      setPushTitle("");
+      setPushMessage("");
+
+      // Refresh history
+      fetchCampaigns();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save draft");
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  // REG-23: Delete — removes the campaign row entirely (the backend
+  // action already existed; the builder simply never exposed it, so
+  // a stuck QA campaign once had to be deleted via raw DB access).
+  const handleDeleteCampaign = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteCampaignAction(deleteTarget.id);
+      if (!res.success) {
+        toast.error(res.error || "Failed to delete campaign");
+        return;
+      }
+      toast.success("Campaign deleted.");
+      setDeleteTarget(null);
+      fetchCampaigns();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete campaign");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -433,6 +509,20 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
                 <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                 Schedule for Later
               </Button>
+
+              <Button
+                variant="secondary"
+                className="w-full gap-2"
+                onClick={handleSaveDraft}
+                disabled={isSending || isScheduling || isSavingDraft}
+              >
+                {isSavingDraft ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 text-muted-foreground" />
+                )}
+                Save Draft
+              </Button>
             </CardContent>
           </Card>
 
@@ -497,12 +587,13 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
                   <TableHead>Status</TableHead>
                   <TableHead>Scheduled / Delivered</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingHistory ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin text-primary" />
                         <span>Loading campaign history...</span>
@@ -511,7 +602,7 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
                   </TableRow>
                 ) : campaignHistory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                       No campaigns recorded yet. Use the builder above to send or schedule your first campaign.
                     </TableCell>
                   </TableRow>
@@ -523,6 +614,7 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
                     const isSending =
                       c.status === "sending" || c.status === "running";
                     const isFailed = c.status === "failed";
+                    const isDraft = c.status === "draft";
 
                     return (
                       <TableRow key={c.id}>
@@ -556,6 +648,14 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
                             <Badge variant="destructive" className="text-xs font-normal">
                               Failed
                             </Badge>
+                          ) : isDraft ? (
+                            <Badge
+                              variant="outline"
+                              className="text-xs font-normal gap-1 border-dashed"
+                            >
+                              <FileEdit className="h-3 w-3" />
+                              Draft
+                            </Badge>
                           ) : (
                             <Badge variant="secondary" className="text-xs font-normal capitalize">
                               {c.status}
@@ -580,6 +680,17 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {new Date(c.created_at).toLocaleDateString()}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:text-red-600"
+                            title={`Delete campaign "${c.name}"`}
+                            onClick={() => setDeleteTarget(c)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     );
                   })
@@ -597,6 +708,17 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
         campaignName={campaignName}
         onConfirmSchedule={handleConfirmSchedule}
         isScheduling={isScheduling}
+      />
+
+      {/* REG-23: Delete confirmation — deletion removes the row. */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={`Delete "${deleteTarget?.name}"?`}
+        description="This permanently deletes the campaign and its history entry. This cannot be undone."
+        confirmLabel="Delete"
+        isLoading={isDeleting}
+        onConfirm={handleDeleteCampaign}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );

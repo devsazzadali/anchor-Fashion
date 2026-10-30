@@ -10,27 +10,46 @@ import {
   fetchOperationalMetricsAction,
   fetchRecentOrdersAction,
 } from "@/app/actions/bi/dashboard.actions";
+import { getServerSession, resolveUserRole } from "@/lib/auth/server";
+import { roleDisplayLabel } from "@/lib/auth/role-label";
 
-export const metadata: Metadata = {
-  title: "Manager Dashboard Overview | Anchor Fashion",
-  description: "Overview of today's business operations.",
-};
+// REG-34: the dashboard heading/title names the viewer's actual
+// role (a SUPPORT user saw "Manager Dashboard Overview").
+export async function generateMetadata(): Promise<Metadata> {
+  const { user } = await getServerSession();
+  const role = user ? (user.role || (await resolveUserRole(user))) : "";
+  const label = roleDisplayLabel(role);
+  return {
+    title: `${label} Dashboard Overview | Anchor Fashion`,
+    description: "Overview of today's business operations.",
+  };
+}
 
 export default async function ManagerDashboardPage() {
-  const [kpisRes, revenueRes, recentOrdersRes, opsRes] = await Promise.all([
-    fetchDashboardKPIsAction(),
-    fetchDashboardRevenueAction(7),
-    fetchRecentOrdersAction(),
-    fetchOperationalMetricsAction(),
-  ]);
+  const [kpisRes, revenueRes, recentOrdersRes, opsRes, sessionRes] =
+    await Promise.all([
+      fetchDashboardKPIsAction(),
+      fetchDashboardRevenueAction(7),
+      fetchRecentOrdersAction(),
+      fetchOperationalMetricsAction(),
+      getServerSession(),
+    ]);
+
+  const viewerRole = sessionRes.user
+    ? (sessionRes.user as any).role ||
+      (await resolveUserRole(sessionRes.user as any))
+    : "";
+  const viewerRoleLabel = roleDisplayLabel(viewerRole);
 
   const rawKpis = kpisRes.data || {
     revenue: { value: 0, trend: { value: 0, isPositive: true } },
     orders: { value: 0, trend: { value: 0, isPositive: true } },
+    todaysOrders: { value: 0, trend: { value: 0, isPositive: true } },
   };
 
   const ops = opsRes.data || {
     pendingOrders: 0,
+    processingOrders: 0,
     supportTickets: 0,
     lowStock: 0,
     outOfStock: 0,
@@ -38,9 +57,13 @@ export default async function ManagerDashboardPage() {
 
   const kpis = {
     revenue: rawKpis.revenue,
-    orders: rawKpis.orders,
+    // REG-35: the "Today's Orders" card now receives the orders
+    // placed today (Asia/Dhaka) — not the all-time count — and the
+    // "Processing" card receives orders currently in processing
+    // states — not PENDING_PAYMENT + PREPARING.
+    orders: rawKpis.todaysOrders || rawKpis.orders,
     processing: {
-      value: ops.pendingOrders,
+      value: ops.processingOrders ?? ops.pendingOrders,
       trend: { value: 0, isPositive: true },
     },
     alerts: {
@@ -70,7 +93,7 @@ export default async function ManagerDashboardPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Dashboard Overview
+            {viewerRoleLabel} Dashboard Overview
           </h1>
           <p className="mt-1 text-muted-foreground">
             Welcome back. Here is what is happening with your store today.

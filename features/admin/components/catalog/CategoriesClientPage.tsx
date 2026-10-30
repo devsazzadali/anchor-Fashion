@@ -500,7 +500,7 @@ export function CategoriesClientPage({
       toast.success("Category deactivated");
       setCategories((prev) => prev.filter((c) => c.id !== deleteTarget.id));
     } else {
-      toast.error(res.error || "Failed to delete category");
+      toast.error(res.error || "Failed to deactivate category");
     }
     setIsDeleting(false);
     setConfirmOpen(false);
@@ -699,6 +699,7 @@ export function CategoriesClientPage({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-600"
+                          title="Deactivate category"
                           onClick={() => confirmDelete(category)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -898,12 +899,12 @@ export function CategoriesClientPage({
         </SheetContent>
       </Sheet>
 
-      {/* Delete Confirmation */}
+      {/* Deactivate Confirmation (REG-40: the action deactivates) */}
       <ConfirmDialog
         open={confirmOpen}
-        title={`Delete "${deleteTarget?.name}"?`}
+        title={`Deactivate "${deleteTarget?.name}"?`}
         description="This will deactivate the category. It will no longer appear in menus or the storefront. Products in this category will become uncategorized."
-        confirmLabel="Delete"
+        confirmLabel="Deactivate"
         isLoading={isDeleting}
         onConfirm={handleDelete}
         onCancel={() => {

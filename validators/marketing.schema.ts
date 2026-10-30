@@ -37,10 +37,11 @@ export const promotionSchema = z
       .max(100, "Discount cannot exceed 100%"),
     start_date: z.string().min(1, "Start date is required"),
     end_date: z.string().min(1, "End date is required"),
-    is_active: z.boolean().default(true),
+    // REG-30: omitted must mean OFF for both switches.
+    is_active: z.boolean().default(false),
     banner_url: z.string().optional().default(""),
     banner_link: z.string().optional().default(""),
-    show_popup: z.boolean().default(true),
+    show_popup: z.boolean().default(false),
     popup_delay: z.coerce.number().min(1).max(60).default(5),
     description: z.string().optional().default(""),
   })

@@ -396,7 +396,18 @@ export class AnalyticsRepository {
       totalOrdersCount > 0
         ? Math.round((totalSales / totalOrdersCount) * 100) / 100
         : 0;
-    const cancelledOrdersCount = orders.length - validOrders.length;
+    // REG-28: honest order counts. Previously cancelledOrdersCount was
+    // ALL − valid, silently folding RETURNED orders into "cancelled",
+    // and the page's "Total Orders" card displayed the VALID count.
+    // Expose each population under its own name; `totalOrders` in the
+    // return below is now the ALL-orders count its label claims.
+    const cancelledOrdersCount = orders.filter(
+      (o: any) => (o.status || "").toLowerCase() === "cancelled"
+    ).length;
+    const returnedOrdersCount = orders.filter(
+      (o: any) => (o.status || "").toLowerCase() === "returned"
+    ).length;
+    const allOrdersCount = orders.length;
 
     return {
       dailySales,
@@ -412,9 +423,15 @@ export class AnalyticsRepository {
       topSellingProducts,
       recentOrders,
       totalSales,
-      totalOrders: totalOrdersCount,
+      // REG-28: totalOrders = ALL orders in range (what the "Total
+      // Orders" label always claimed); the valid-only count travels
+      // under its own name for the sales/AOV context.
+      totalOrders: allOrdersCount,
+      validOrdersCount: totalOrdersCount,
+      allOrdersCount,
       averageOrderValue,
       cancelledOrdersCount,
+      returnedOrdersCount,
     };
   }
 

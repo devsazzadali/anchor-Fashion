@@ -4,6 +4,20 @@ import { createDbClient } from "@/lib/db/client";
 import { createAdminDbClient } from "@/lib/db/client";
 import { verifySuperAdmin } from "../security/roles";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
+import {
+  recordAuditForSessionUser,
+  AUDIT_ACTIONS,
+} from "@/lib/security/audit";
+
+/** REG-27: every settings write is audited with its settings key. */
+async function auditSettingsChange(key: string) {
+  await recordAuditForSessionUser({
+    action: AUDIT_ACTIONS.SETTINGS_UPDATED,
+    entity: "settings",
+    entityId: key,
+    newValues: { key },
+  });
+}
 
 export type StoreInfo = {
   store_name: string;
@@ -168,8 +182,30 @@ export async function getStoreInfo(): Promise<StoreInfo> {
   return getCachedSetting("store_info", DEFAULTS.store_info);
 }
 
+/**
+ * REG-29 + REG-52: ONE source of truth for identity + contacts.
+ *
+ * Canonical store identity/contacts live in `store_info`
+ * (store_name, email, phone, address) — the same row the storefront
+ * header/footer, checkout, and contact page already read. The invoice
+ * previously carried its OWN contact email/phone in `invoice_info`,
+ * which had drifted apart (info@ / +8801885598889 on the invoice vs
+ * support@ / +880 1711-223344 in the header). getInvoiceInfo now takes
+ * the contact fields (email, customer_care) from the canonical
+ * store_info; `invoice_info` keeps only the invoice-legal identity —
+ * company_name (the legal "Anchor Fashion Ltd"), central_bin,
+ * central_address, web_address, shop_concern, system_by.
+ */
 export async function getInvoiceInfo(): Promise<InvoiceInfo> {
-  return getCachedSetting("invoice_info", DEFAULTS.invoice_info);
+  const [invoiceInfo, storeInfo] = await Promise.all([
+    getCachedSetting("invoice_info", DEFAULTS.invoice_info) as Promise<InvoiceInfo>,
+    getStoreInfo(),
+  ]);
+  return {
+    ...invoiceInfo,
+    email: storeInfo.email,
+    customer_care: storeInfo.phone,
+  };
 }
 
 export async function updateInvoiceInfo(info: InvoiceInfo) {
@@ -177,18 +213,25 @@ export async function updateInvoiceInfo(info: InvoiceInfo) {
     await verifySuperAdmin(); // Enforce strict role-based access
     const db = createAdminDbClient(); // Bypass RLS securely for writing settings
 
+    // REG-29: contact email / customer-care phone are canonical in
+    // store_info (edited under General Settings) — never persist a
+    // divergent copy here.
+    const { email: _email, customer_care: _customerCare, ...legalInfo } = info;
+
     const { error } = await db
       .from("settings")
       .upsert(
         {
           key: "invoice_info",
-          value: info as any,
-          description: "Company identity printed on invoices (name, BIN, address, contacts)",
+          value: legalInfo as any,
+          description: "Legal company identity printed on invoices (name, BIN, address). Contacts come from store_info.",
         },
         { onConflict: "key" }
       );
 
     if (error) throw error;
+
+    await auditSettingsChange("invoice_info");
 
     try {
       revalidateTag("settings", "max");
@@ -222,6 +265,8 @@ export async function updateStoreInfo(info: StoreInfo) {
       );
       
     if (error) throw error;
+
+    await auditSettingsChange("store_info");
     
     try {
       revalidateTag("settings", "max");
@@ -251,6 +296,8 @@ export async function updateSocialLinks(links: SocialLinks) {
       );
       
     if (error) throw error;
+
+    await auditSettingsChange("social_links");
     
     try {
       revalidateTag("settings", "max");
@@ -264,7 +311,17 @@ export async function updateSocialLinks(links: SocialLinks) {
 }
 
 export async function getStoreConfig(): Promise<StoreConfig> {
-  return getCachedSetting("store_config", DEFAULTS.store_config);
+  // REG-29: the store NAME is canonical in store_info — Store Settings
+  // and General Settings used to keep two different names ("Anchor
+  // Fashion" here vs "Anchor Fashion Enterprise" in store_info). The
+  // name served from this getter is always the canonical one;
+  // store_config keeps only operational config (currency, timezone,
+  // weight unit).
+  const [config, storeInfo] = await Promise.all([
+    getCachedSetting("store_config", DEFAULTS.store_config) as Promise<StoreConfig>,
+    getStoreInfo(),
+  ]);
+  return { ...config, store_name: storeInfo.store_name };
 }
 
 export async function updateStoreConfig(config: StoreConfig) {
@@ -282,9 +339,38 @@ export async function updateStoreConfig(config: StoreConfig) {
         },
         { onConflict: "key" }
       );
-      
+
     if (error) throw error;
-    
+
+    // REG-29: mirror the name into the canonical store_info row so
+    // editing the name here updates the one value the storefront,
+    // invoices, and General Settings all read. Read fresh (not the
+    // cache) so no other store_info field is reverted.
+    try {
+      const { data: currentInfoRow } = await db
+        .from("settings")
+        .select("value")
+        .eq("key", "store_info")
+        .single();
+      const currentInfo = {
+        ...DEFAULTS.store_info,
+        ...((currentInfoRow?.value as any) || {}),
+      };
+      if (config.store_name && config.store_name !== currentInfo.store_name) {
+        await db.from("settings").upsert(
+          {
+            key: "store_info",
+            value: { ...currentInfo, store_name: config.store_name } as any,
+            description: "Global store contact and branding info",
+          },
+          { onConflict: "key" }
+        );
+      }
+    } catch (mirrorErr) {
+      console.error("[updateStoreConfig] store_name mirror failed:", mirrorErr);
+    }
+
+    await auditSettingsChange("store_config");
     try {
       revalidateTag("settings", "max");
       revalidatePath("/admin/settings/store");
@@ -318,6 +404,8 @@ export async function updateSeoSettings(settings: SeoSettings) {
       );
 
     if (error) throw error;
+
+    await auditSettingsChange("seo_settings");
 
     try {
       revalidateTag("settings", "max");
@@ -363,6 +451,8 @@ export async function updateSecuritySettings(config: SecuritySettingsConfig) {
 
     if (error) throw error;
 
+    await auditSettingsChange("security_settings");
+
     revalidatePath("/admin/settings/security");
     return { success: true };
   } catch (error: any) {
@@ -403,6 +493,8 @@ export async function updateEmailSettings(config: EmailSettingsConfig) {
 
     if (error) throw error;
 
+    await auditSettingsChange("email_settings");
+
     revalidatePath("/admin/settings/email");
     return { success: true };
   } catch (error: any) {
@@ -442,6 +534,8 @@ export async function updateAnalyticsSettings(config: AnalyticsSettingsConfig) {
       );
 
     if (error) throw error;
+
+    await auditSettingsChange("analytics_settings");
 
     revalidatePath("/admin/settings/analytics");
     revalidatePath("/", "layout");

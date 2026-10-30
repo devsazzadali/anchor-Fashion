@@ -7,6 +7,7 @@ import { Campaign, CampaignAudience } from "@/types/marketing.types";
 import { createAdminDbClient } from "@/lib/db/client";
 import { EmailProvider } from "@/lib/notifications/EmailProvider";
 import { QueueService } from "@/services/jobs/queue.service";
+import { recordAudit, AUDIT_ACTIONS } from "@/lib/security/audit";
 
 const marketingRepository = new MarketingRepository();
 
@@ -150,6 +151,22 @@ export class MarketingService {
         recipientCount: recipients.length,
         sentAt: new Date().toISOString(),
         errors: sendErrors.slice(0, 5),
+      });
+
+      // REG-27: audit the send. This one hook covers both human sends
+      // (createAndSendCampaignAction) and cron-dispatched scheduled
+      // sends (processScheduledCampaigns); the actor is the campaign's
+      // creator — the human who created/scheduled it — never "System".
+      await recordAudit({
+        userId: campaign.created_by || null,
+        action: AUDIT_ACTIONS.CAMPAIGN_SENT,
+        entity: "campaign",
+        entityId: campaignId,
+        newValues: {
+          name: campaign.name,
+          sent_count: sentCount,
+          recipient_count: recipients.length,
+        },
       });
 
       return {

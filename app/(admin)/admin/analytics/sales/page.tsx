@@ -67,10 +67,14 @@ export default async function SalesAnalyticsPage({
       ? [...sales.shippingMethodSales].sort((a, b) => b.value - a.value)[0]
       : null;
 
+  // REG-28: totalOrders is now the ALL-orders count (its label's plain
+  // meaning); the valid-only count is separate and feeds the sales/AOV
+  // context lines.
   const totalOrders = sales.totalOrders || 0;
+  const validOrders = sales.validOrdersCount ?? totalOrders;
   const aov =
     sales.averageOrderValue ||
-    (totalOrders > 0 ? Math.round(sales.totalSales / totalOrders) : 0);
+    (validOrders > 0 ? Math.round(sales.totalSales / validOrders) : 0);
   const dailyAverage =
     sales.dailySales && sales.dailySales.length > 0
       ? Math.round((sales.totalSales / sales.dailySales.length) * 100) / 100
@@ -94,13 +98,13 @@ export default async function SalesAnalyticsPage({
         <StatCard
           title="Total Sales"
           value={formatCurrency(sales.totalSales)}
-          description={`From ${totalOrders} valid orders`}
+          description={`From ${validOrders} valid orders`}
           icon={<DollarSign className="h-4 w-4" />}
         />
         <StatCard
           title="Total Orders"
           value={totalOrders.toString()}
-          description={`${sales.cancelledOrdersCount || 0} cancelled/refunded`}
+          description={`${validOrders} valid · ${sales.cancelledOrdersCount || 0} cancelled · ${sales.returnedOrdersCount || 0} returned`}
           icon={<ShoppingCart className="h-4 w-4" />}
         />
         <StatCard

@@ -8,7 +8,10 @@ import { toast } from "sonner";
 import Link from "next/link";
 
 import { authClient } from "@/lib/auth/client";
-import { getPostLoginRedirectAction } from "@/actions/auth.actions";
+import {
+  getPostLoginRedirectAction,
+  recordSignInAuditAction,
+} from "@/actions/auth.actions";
 import { LoadingButton } from "@/components/ui/loading-button";
 import {
   Form,
@@ -76,6 +79,11 @@ export function LoginForm() {
 
       toast.success("Successfully logged in!");
       setIsRedirecting(true);
+
+      // REG-27: record the sign-in in the audit log (server action
+      // resolves the actor from the fresh session). Not awaited — the
+      // redirect must not wait on bookkeeping.
+      recordSignInAuditAction().catch(() => {});
 
       const params = new URLSearchParams(window.location.search);
       const next = params.get("next");

@@ -3,6 +3,11 @@
 import { createAdminDbClient } from "@/lib/db/client";
 import { createDbClient } from "@/lib/db/client";
 import { verifyAdmin, verifySelfOrStaff } from "@/lib/security/roles";
+import { prisma } from "@/lib/prisma";
+import {
+  recordAuditForSessionUser,
+  AUDIT_ACTIONS,
+} from "@/lib/security/audit";
 import { revalidatePath } from "next/cache";
 
 export type UserData = {
@@ -43,24 +48,63 @@ export async function getUsersByRoleAction(roleNames: string[]) {
     const authRes = await db.auth.admin.listUsers();
     const users = authRes?.data?.users || [];
 
+    // 3b. REG-26: REAL last sign-in. The old code read
+    // `authUser.last_sign_in_at` from the admin list — but the Prisma
+    // shim behind db.auth.admin.listUsers() builds users from the
+    // profiles table and NEVER sets that field, so every account
+    // showed "Never". The true source is Neon Auth itself: each
+    // sign-in creates a row in neon_auth.session, so MAX(createdAt)
+    // per user is the last sign-in. Match profiles by auth id, with
+    // an email fallback for legacy profiles whose id predates the
+    // auth re-keying.
+    const lastSignInById = new Map<string, Date>();
+    const lastSignInByEmail = new Map<string, Date>();
+    try {
+      const sessionRows = await prisma.$queryRaw<
+        { user_id: string; email: string | null; last_sign_in: Date }[]
+      >`
+        SELECT s."userId" AS user_id, u."email" AS email,
+               MAX(s."createdAt") AS last_sign_in
+        FROM neon_auth.session s
+        LEFT JOIN neon_auth."user" u ON u."id" = s."userId"
+        GROUP BY s."userId", u."email"
+      `;
+      for (const row of sessionRows) {
+        if (row.user_id && row.last_sign_in) {
+          lastSignInById.set(row.user_id, new Date(row.last_sign_in));
+        }
+        if (row.email && row.last_sign_in) {
+          lastSignInByEmail.set(
+            row.email.toLowerCase(),
+            new Date(row.last_sign_in)
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[getUsersByRoleAction] last sign-in lookup failed:", err);
+    }
+
     // Merge data
     const mappedUsers: UserData[] = (profiles || []).map((profile: any) => {
       const authUser: any = users.find((u: any) => u.id === profile.id);
-      
-      const roleName = Array.isArray(profile.roles) 
-        ? profile.roles[0]?.name 
+
+      const roleName = Array.isArray(profile.roles)
+        ? profile.roles[0]?.name
         : (profile.roles as any)?.name || "Unknown";
 
+      // REG-26: "Never" only when the account has genuinely never
+      // signed in (no Neon Auth session rows at all).
+      const lastSignIn =
+        lastSignInById.get(profile.id) ||
+        (profile.email
+          ? lastSignInByEmail.get(String(profile.email).toLowerCase())
+          : undefined) ||
+        (authUser?.email
+          ? lastSignInByEmail.get(String(authUser.email).toLowerCase())
+          : undefined);
       let lastActiveFormatted = "Never";
-      if (authUser?.last_sign_in_at) {
-        try {
-          const date = new Date(authUser.last_sign_in_at);
-          lastActiveFormatted = !isNaN(date.getTime())
-            ? date.toISOString().split("T")[0]
-            : "Never";
-        } catch {
-          lastActiveFormatted = "Never";
-        }
+      if (lastSignIn && !isNaN(lastSignIn.getTime())) {
+        lastActiveFormatted = lastSignIn.toISOString().split("T")[0];
       }
 
       return {
@@ -180,6 +224,14 @@ export async function createUserAction(data: {
 
     if (profileError) throw profileError;
 
+    // REG-27: audit the creation (actor = the acting admin).
+    await recordAuditForSessionUser({
+      action: AUDIT_ACTIONS.USER_CREATED,
+      entity: "user",
+      entityId: authData.user.id,
+      newValues: { email: data.email, role: data.roleName },
+    });
+
     revalidatePath("/admin/users/admins");
     revalidatePath("/admin/users/managers");
     revalidatePath("/admin/users/staff");
@@ -221,6 +273,17 @@ export async function toggleUserStatusAction(userId: string, currentStatus: stri
     } else {
       await db.auth.admin.updateUserById(userId, { ban_duration: "none" });
     }
+
+    // REG-27: audit the (de)activation (actor = the acting admin).
+    await recordAuditForSessionUser({
+      action: newActiveState
+        ? AUDIT_ACTIONS.USER_ACTIVATED
+        : AUDIT_ACTIONS.USER_DEACTIVATED,
+      entity: "user",
+      entityId: userId,
+      oldValues: { is_active: !newActiveState },
+      newValues: { is_active: newActiveState },
+    });
 
     revalidatePath("/admin/users/admins");
     revalidatePath("/admin/users/managers");

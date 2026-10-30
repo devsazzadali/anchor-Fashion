@@ -47,6 +47,11 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     orders: { value: 0, trend: { value: 0, isPositive: true } },
     aov: { value: 0, trend: { value: 0, isPositive: true } },
     newCustomers: { value: 0, trend: { value: 0, isPositive: true } },
+    // REG-35 fields (present on the real payload from getDashboardKPIs)
+    todaysOrders: { value: 0, trend: { value: 0, isPositive: true } },
+    validOrdersCount: 0,
+    deliveredOrdersCount: 0,
+    returningCustomers: { value: 0, trend: { value: 0, isPositive: true } },
   };
 
   const topSellers = topSellersRes.data || [];
@@ -153,7 +158,16 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
               {formatCurrency(rawKpis.aov.value)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Based on {formatNumber(rawKpis.orders.value)} completed orders
+              {/* REG-35: "completed orders" = DELIVERED (+COMPLETED)
+                  orders only. This line previously printed the ALL-time
+                  order count (33) as "completed" while 11 orders were
+                  actually delivered. AOV itself is computed over valid
+                  orders — stated here so neither figure masquerades as
+                  the other. */}
+              {formatNumber(rawKpis.deliveredOrdersCount ?? 0)} completed
+              (delivered) orders · AOV across{" "}
+              {formatNumber(rawKpis.validOrdersCount ?? rawKpis.orders.value)}{" "}
+              valid orders
             </p>
           </CardContent>
         </Card>

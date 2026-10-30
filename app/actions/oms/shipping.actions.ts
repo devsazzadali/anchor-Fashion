@@ -26,6 +26,14 @@ export async function dispatchOrderAction(
 
     const role = await getRoleForUser(user);
 
+    // REG-33: dispatching is an order mutation — SUPPORT is read-only.
+    if (String(role || "").toUpperCase().trim() === "SUPPORT") {
+      return {
+        success: false,
+        error: "Support accounts are read-only and cannot dispatch orders.",
+      };
+    }
+
     const adminDb = await createAdminDbClient();
     const orderService = new OrderService();
     const shippingService = new ShippingService();

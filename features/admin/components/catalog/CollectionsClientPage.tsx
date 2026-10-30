@@ -253,7 +253,7 @@ export function CollectionsClientPage({
         prev.filter((c) => c.id !== deleteTarget.id)
       );
     } else {
-      toast.error(res.error || "Failed to delete collection");
+      toast.error(res.error || "Failed to deactivate collection");
     }
     setIsDeleting(false);
     setConfirmOpen(false);
@@ -357,6 +357,7 @@ export function CollectionsClientPage({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-600"
+                          title="Deactivate collection"
                           onClick={() => confirmDelete(collection)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -596,12 +597,12 @@ export function CollectionsClientPage({
         </SheetContent>
       </Sheet>
 
-      {/* Delete Confirmation */}
+      {/* Deactivate Confirmation (REG-40: the action deactivates) */}
       <ConfirmDialog
         open={confirmOpen}
-        title={`Delete "${deleteTarget?.name}"?`}
+        title={`Deactivate "${deleteTarget?.name}"?`}
         description="This will deactivate the collection. It will be hidden from the storefront."
-        confirmLabel="Delete"
+        confirmLabel="Deactivate"
         isLoading={isDeleting}
         onConfirm={handleDelete}
         onCancel={() => {

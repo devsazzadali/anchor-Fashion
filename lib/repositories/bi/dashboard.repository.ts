@@ -110,6 +110,34 @@ export class DashboardRepository {
     const buyersPrev = new Set(validPrev.map((o) => o.profileId).filter(Boolean));
     const repeatBuyersPrev = [...buyersPrev].filter((id) => (ordersPerBuyer.get(id as string) || 0) >= 2).length;
 
+    // REG-35: "Today's Orders" must mean orders placed TODAY in the
+    // store's timezone (Asia/Dhaka, fixed UTC+6, no DST) — the manager
+    // dashboard previously displayed the ALL-TIME order count under
+    // that label. Trend is today vs yesterday (Dhaka), matching the
+    // card's meaning.
+    const dhakaDateStr = (d: Date) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Dhaka",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(d);
+    const todayStartUtc = Date.parse(`${dhakaDateStr(new Date())}T00:00:00+06:00`);
+    const tomorrowStartUtc = todayStartUtc + DAY;
+    const yesterdayStartUtc = todayStartUtc - DAY;
+    const todaysOrdersCount = allOrders.filter((o) =>
+      inWindow(o.createdAt, todayStartUtc, tomorrowStartUtc)
+    ).length;
+    const yesterdaysOrdersCount = allOrders.filter((o) =>
+      inWindow(o.createdAt, yesterdayStartUtc, todayStartUtc)
+    ).length;
+
+    // REG-35: delivered ("completed") = DELIVERED + COMPLETED, the
+    // same bucket the admin surfaces label "Delivered" (REG-22).
+    const deliveredOrdersCount = allOrders.filter((o) =>
+      ["DELIVERED", "COMPLETED"].includes(o.status.toUpperCase())
+    ).length;
+
     return {
       revenue: {
         value: totalRev,
@@ -119,6 +147,12 @@ export class DashboardRepository {
         value: totalOrdersCount,
         trend: trendOf(ordCur, ordPrev),
       },
+      todaysOrders: {
+        value: todaysOrdersCount,
+        trend: trendOf(todaysOrdersCount, yesterdaysOrdersCount),
+      },
+      validOrdersCount: validOrders.length,
+      deliveredOrdersCount,
       aov: {
         value: avgOrderVal,
         trend: trendOf(aovCur, aovPrev),
@@ -158,9 +192,29 @@ export class DashboardRepository {
       (i) => i.quantityAvailable > 0 && i.quantityAvailable <= (i.reorderPoint || 0)
     ).length;
 
+    // REG-35: "Processing" = orders currently in a processing state
+    // (confirmed → ready for shipment). It previously counted only
+    // PENDING_PAYMENT + PREPARING (showing 1 while 14 orders were in
+    // processing states). "Completed" previously added SHIPPED —
+    // in-transit is not completed; completed = DELIVERED + COMPLETED.
+    const PROCESSING_STATES = [
+      "CONFIRMED",
+      "PREPARING",
+      "PROCESSING",
+      "PICKING",
+      "PACKING",
+      "READY_FOR_SHIPMENT",
+    ];
+    const processingOrders = PROCESSING_STATES.reduce(
+      (sum, s) => sum + (statusCounts[s] || 0),
+      0
+    );
+
     return {
       pendingOrders: (statusCounts["PENDING_PAYMENT"] || 0) + (statusCounts["PREPARING"] || 0),
-      completedOrders: (statusCounts["DELIVERED"] || 0) + (statusCounts["SHIPPED"] || 0),
+      processingOrders,
+      completedOrders:
+        (statusCounts["DELIVERED"] || 0) + (statusCounts["COMPLETED"] || 0),
       cancelledOrders: statusCounts["CANCELLED"] || 0,
       refundRequests: statusCounts["REFUNDED"] || 0,
       lowStock,

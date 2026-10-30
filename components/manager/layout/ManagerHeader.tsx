@@ -43,11 +43,23 @@ import { useRouter, usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { roleDisplayLabel } from "@/lib/auth/role-label";
 
 
 
-export function ManagerHeader({ user }: { user?: any }) {
+export function ManagerHeader({
+  user,
+  role,
+}: {
+  user?: any;
+  // REG-34: the viewer's actual role, resolved server-side by the
+  // manager layout — the header previously fell back to the name
+  // "Store Manager" for everyone without a full_name, so a SUPPORT
+  // user was labelled Store Manager.
+  role?: string;
+}) {
   const router = useRouter();
+  const viewerRoleLabel = roleDisplayLabel(role || user?.role);
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -117,10 +129,11 @@ export function ManagerHeader({ user }: { user?: any }) {
               </Avatar>
               <div className="flex-1 overflow-hidden">
                 <p className="text-xs font-bold text-white truncate">
-                  {user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Store Manager"}
+                  {user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Team Member"}
                 </p>
                 <p className="text-[10px] text-slate-400 truncate">
-                  {user?.email || "manager@anchorfashion.com"}
+                  {/* REG-34: label the user with their real role. */}
+                  {viewerRoleLabel} · {user?.email || "manager@anchorfashion.com"}
                 </p>
               </div>
             </div>
@@ -385,10 +398,12 @@ export function ManagerHeader({ user }: { user?: any }) {
                   <p className="text-sm font-medium leading-none">
                     {user?.user_metadata?.first_name ||
                       user?.user_metadata?.full_name ||
-                      "Store Manager"}
+                      user?.email?.split("@")[0] ||
+                      "Team Member"}
                   </p>
                   <p className="text-xs leading-none text-muted-foreground truncate">
-                    {user?.email || "manager@anchorfashion.com"}
+                    {/* REG-34: the user menu names the real role. */}
+                    {viewerRoleLabel} · {user?.email || "manager@anchorfashion.com"}
                   </p>
                 </div>
               </DropdownMenuLabel>

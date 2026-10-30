@@ -27,9 +27,13 @@ export interface SalesReportProductRow {
 
 export interface SalesReportData {
   totalSales: number;
+  /** REG-28: ALL orders in range. */
   totalOrders: number;
+  /** REG-28: valid (non-cancelled, non-returned) orders in range. */
+  validOrdersCount?: number;
   averageOrderValue: number;
   cancelledOrdersCount: number;
+  returnedOrdersCount?: number;
   recentOrders: SalesReportOrderRow[];
   topSellingProducts: SalesReportProductRow[];
 }
@@ -50,11 +54,16 @@ export function buildSalesReportCsv(
   lines.push("");
   lines.push("Summary");
   lines.push(`Total Sales (BDT),${Number(sales.totalSales || 0).toFixed(2)}`);
-  lines.push(`Valid Orders,${sales.totalOrders || 0}`);
+  // REG-28: the row previously labelled "Valid Orders" printed the
+  // valid count — keep it, and add the all-orders figure it was
+  // confused with, each under its true name.
+  lines.push(`Total Orders,${sales.totalOrders || 0}`);
+  lines.push(`Valid Orders,${sales.validOrdersCount ?? sales.totalOrders ?? 0}`);
   lines.push(
     `Average Order Value (BDT),${Number(sales.averageOrderValue || 0).toFixed(2)}`
   );
   lines.push(`Cancelled Orders,${sales.cancelledOrdersCount || 0}`);
+  lines.push(`Returned Orders,${sales.returnedOrdersCount || 0}`);
   lines.push("");
   lines.push("Recent Orders");
   lines.push(

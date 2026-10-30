@@ -10,6 +10,10 @@ import {
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "@/lib/auth/server";
 import { isStaffOrManager, getRoleForUser, verifyAuthenticated, verifyStaff } from "@/lib/security/roles";
+import {
+  recordAuditForSessionUser,
+  AUDIT_ACTIONS,
+} from "@/lib/security/audit";
 import { InventoryService } from "@/services/inventory.service";
 import { PaymentService } from "@/services/payment/payment.service";
 
@@ -40,12 +44,43 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
     const role = await getRoleForUser(user);
     const userId = user?.id;
 
+    // REG-33: SUPPORT is READ-ONLY on orders. The manager UI hides the
+    // controls for support accounts, but this action is a public
+    // endpoint — enforce the rule here, server-side, so a crafted
+    // request from a support session cannot mutate an order. Managers
+    // and admins keep full power.
+    if (String(role || "").toUpperCase().trim() === "SUPPORT") {
+      return {
+        success: false,
+        error: "Support accounts are read-only and cannot change order status.",
+      };
+    }
+
+    // REG-27: capture the prior status so the audit row can record
+    // the actual transition (old -> new).
+    const priorOrder = await prisma.order.findUnique({
+      where: { id: validatedData.order_id },
+      select: { status: true, orderNumber: true },
+    });
+
     const updatedOrder = await orderService.updateOrderStatus(
       validatedData.order_id,
       validatedData.new_status,
       userId,
       role
     );
+
+    // REG-27: audit the status change (actor = the acting user).
+    await recordAuditForSessionUser({
+      action: AUDIT_ACTIONS.ORDER_STATUS_CHANGED,
+      entity: "order",
+      entityId: validatedData.order_id,
+      oldValues: { status: priorOrder?.status ?? null },
+      newValues: {
+        status: validatedData.new_status,
+        order_number: priorOrder?.orderNumber ?? null,
+      },
+    });
 
     if (validatedData.reason) {
       try {

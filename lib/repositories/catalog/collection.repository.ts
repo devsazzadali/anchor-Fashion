@@ -136,8 +136,18 @@ export class CollectionRepository {
   }
 
   static async deleteCollection(id: string): Promise<void> {
+    // REG-40: despite the historical name, this is a DEACTIVATION —
+    // the collection is kept with is_active=false (recoverable via
+    // Edit → Active), exactly like categories and brands. It
+    // previously removed the entry from the stored list outright
+    // while the UI copy claimed it would "deactivate"; behaviour and
+    // wording now agree.
     const collections = await this.getRawCollections();
-    const filtered = collections.filter((c) => c.id !== id);
-    await this.saveCollections(filtered);
+    const updated = collections.map((c) =>
+      c.id === id
+        ? { ...c, is_active: false, updated_at: new Date().toISOString() }
+        : c
+    );
+    await this.saveCollections(updated);
   }
 }

@@ -1,4 +1,5 @@
 import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 import { Campaign, CampaignAudience } from "@/types/marketing.types";
 
 export class MarketingRepository {
@@ -156,37 +157,50 @@ export class MarketingRepository {
   }
 
   async getAdminMarketingStats() {
-    // For admin, we return some aggregate metrics. In a real system, these would be calculated 
-    // from orders attributed to campaigns and campaign_logs.
-    // We will simulate revenue attribution and open rates for the MVP based on real campaigns count.
-    const db = createAdminDbClient();
-    let campaignCount = 0;
-    try {
-      const { count } = await db.from("campaigns").select("*", { count: "exact", head: true });
-      campaignCount = count || 0;
-    } catch (e) {}
-
-    let runningCount = 0;
-    try {
-      const { count } = await db.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "running");
-      runningCount = count || 0;
-    } catch (e) {}
-    
-    let scheduledCount = 0;
-    try {
-      const { count } = await db.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "scheduled");
-      scheduledCount = count || 0;
-    } catch (e) {}
+    // REG-24: this previously FABRICATED its headline numbers —
+    // revenue was a hardcoded 124592 + 1000 per campaign row (so
+    // merely SCHEDULING a campaign "earned" 1000), and open rate /
+    // CTR were constants with cosmetic jitter. There is NO real source
+    // for any of the three: orders carry no campaign attribution, and
+    // no open/click tracking exists anywhere in the system. Those
+    // metrics are REMOVED. What remains is computed from the two real
+    // sources that exist: the `campaigns` table (status counts) and
+    // `campaign_logs` (one row per recipient per send attempt, written
+    // by MarketingService.sendCampaign).
+    const [
+      campaignsTotal,
+      campaignsSent,
+      campaignsScheduled,
+      campaignsDraft,
+      runningCount,
+      messagesSent,
+      messagesFailed,
+    ] = await Promise.all([
+      prisma.campaigns.count(),
+      prisma.campaigns.count({
+        where: { status: { in: ["sent", "completed"] } },
+      }),
+      prisma.campaigns.count({ where: { status: "scheduled" } }),
+      prisma.campaigns.count({ where: { status: "draft" } }),
+      prisma.campaigns.count({
+        where: { status: { in: ["running", "sending"] } },
+      }),
+      prisma.campaign_logs.count({ where: { status: "sent" } }),
+      prisma.campaign_logs.count({ where: { status: "failed" } }),
+    ]);
 
     return {
-      revenue: 124592.00 + (campaignCount * 1000), // dynamic based on db
-      openRate: 42.8 + (runningCount * 0.1),
-      ctr: 8.4 + (runningCount * 0.05),
+      campaignsTotal,
+      campaignsSent,
+      campaignsScheduled,
+      campaignsDraft,
+      messagesSent,
+      messagesFailed,
       automations: {
-        total: runningCount + scheduledCount,
+        total: runningCount + campaignsScheduled,
         running: runningCount,
-        scheduled: scheduledCount,
-      }
+        scheduled: campaignsScheduled,
+      },
     };
   }
 

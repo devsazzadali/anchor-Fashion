@@ -73,10 +73,12 @@ export function PromotionDialog({
       end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0],
-      is_active: true,
+      // REG-30: a new promotion must start INACTIVE with no popup —
+      // both switches default OFF; the admin opts in deliberately.
+      is_active: false,
       banner_url: "",
       banner_link: "",
-      show_popup: true,
+      show_popup: false,
       popup_delay: 5,
       description: "",
     },
@@ -95,11 +97,12 @@ export function PromotionDialog({
           is_active: initialData.is_active,
           banner_url: initialData.banner_url || "",
           banner_link: initialData.banner_link || "",
-          show_popup: initialData.show_popup ?? true,
+          show_popup: initialData.show_popup ?? false,
           popup_delay: initialData.popup_delay ?? 5,
           description: initialData.description || "",
         });
       } else {
+        // REG-30: create mode — Enable Promotion / Show Popup default OFF.
         form.reset({
           name: "",
           discount_percentage: 10,
@@ -107,10 +110,10 @@ export function PromotionDialog({
           end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
             .toISOString()
             .split("T")[0],
-          is_active: true,
+          is_active: false,
           banner_url: "",
           banner_link: "",
-          show_popup: true,
+          show_popup: false,
           popup_delay: 5,
           description: "",
         });

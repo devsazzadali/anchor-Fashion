@@ -11,14 +11,11 @@ import {
   Mail,
   Smartphone,
   TrendingUp,
-  DollarSign,
-  ArrowUpRight,
   Plus,
   Play,
 } from "lucide-react";
 import Link from "next/link";
 import { fetchAdminMarketingStatsAction, fetchDashboardCampaignsAction } from "@/app/actions/manager/marketing.actions";
-import { formatCurrency } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Marketing Automation | Admin Dashboard",
@@ -30,7 +27,18 @@ export default async function MarketingDashboardPage() {
     fetchDashboardCampaignsAction(undefined, 5)
   ]);
 
-  const stats = statsRes.data || { revenue: 0, openRate: 0, ctr: 0, automations: { total: 0, running: 0, scheduled: 0 } };
+  // REG-24: revenue / open-rate / CTR cards were removed — they had no
+  // real source (the old stats fabricated them). Every figure below is
+  // a count from the campaigns / campaign_logs tables.
+  const stats = statsRes.data || {
+    campaignsTotal: 0,
+    campaignsSent: 0,
+    campaignsScheduled: 0,
+    campaignsDraft: 0,
+    messagesSent: 0,
+    messagesFailed: 0,
+    automations: { total: 0, running: 0, scheduled: 0 },
+  };
   const campaigns = campaignsRes.data || [];
 
   return (
@@ -61,32 +69,14 @@ export default async function MarketingDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Marketing Revenue
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(stats.revenue)}
-            </div>
-            <p className="mt-1 flex items-center text-xs text-emerald-500">
-              <ArrowUpRight className="mr-1 h-3 w-3" />
-              Real-time attribution
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Avg. Open Rate
+              Campaigns Sent
             </CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.openRate.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">{stats.campaignsSent}</div>
             <p className="mt-1 flex items-center text-xs text-muted-foreground">
-              Based on active campaigns
+              of {stats.campaignsTotal} campaigns created
             </p>
           </CardContent>
         </Card>
@@ -94,14 +84,31 @@ export default async function MarketingDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Click-Through Rate
+              Messages Delivered
+            </CardTitle>
+            <Mail className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.messagesSent}</div>
+            <p className="mt-1 flex items-center text-xs text-muted-foreground">
+              {stats.messagesFailed} failed deliveries logged
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Scheduled &amp; Drafts
             </CardTitle>
             <Smartphone className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.ctr.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">
+              {stats.campaignsScheduled + stats.campaignsDraft}
+            </div>
             <p className="mt-1 flex items-center text-xs text-muted-foreground">
-              Based on active campaigns
+              {stats.campaignsScheduled} scheduled, {stats.campaignsDraft} drafts
             </p>
           </CardContent>
         </Card>
