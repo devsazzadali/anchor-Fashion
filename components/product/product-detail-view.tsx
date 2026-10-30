@@ -119,7 +119,18 @@ export function ProductDetailView({
       setSelectedVariantId(info.variant?.id || null);
 
       if (info.images && info.images.length > 0) {
-        setCurrentGalleryImages(info.images);
+        const nextImages = info.images;
+        setCurrentGalleryImages((prev) => {
+          // Keep the previous array when the URL set is unchanged —
+          // a fresh array identity here re-renders the gallery and
+          // used to feed the notify loop in the variant selector.
+          const toUrl = (m: any) => (typeof m === "string" ? m : m?.url);
+          const prevUrls = prev.map(toUrl);
+          const nextUrls = (nextImages as any[]).map(toUrl);
+          return JSON.stringify(prevUrls) === JSON.stringify(nextUrls)
+            ? prev
+            : nextImages;
+        });
       } else {
         setCurrentGalleryImages(baseGalleryItems);
       }
@@ -155,6 +166,18 @@ export function ProductDetailView({
 
   // Per-product VAT % — displayed prices add VAT on top of the selling price.
   const vatPercent = Number(product.vat_percent ?? product.vatPercent ?? 0);
+
+  // Stable-identity image URL list for the variant selector. Building
+  // this inline in JSX mints a new array on EVERY render, which kept
+  // invalidating the selector's gallery memo and re-firing its notify
+  // effect (its parent setState → re-render → new array → … loop).
+  const productImages = useMemo<string[]>(
+    () =>
+      typeof currentGalleryImages[0] === "string"
+        ? (currentGalleryImages as string[])
+        : (currentGalleryImages as any[]).map((m) => m.url || m),
+    [currentGalleryImages]
+  );
 
   return (
     <div className="min-h-screen bg-[#FCFCFD] pb-24 pt-3">
@@ -332,11 +355,7 @@ export function ProductDetailView({
                 productSalePrice={product.sale_price}
                 productVatPercent={vatPercent}
                 productSku={product.sku}
-                productImages={
-                  typeof currentGalleryImages[0] === "string"
-                    ? (currentGalleryImages as string[])
-                    : (currentGalleryImages as any[]).map((m) => m.url || m)
-                }
+                productImages={productImages}
                 productMedia={product.product_media || []}
                 flashSale={flashSale}
                 sizeCharts={product.size_charts || []}

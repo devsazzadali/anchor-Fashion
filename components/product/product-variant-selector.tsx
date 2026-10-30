@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { ProductActions } from "./product-actions";
 import { cn, formatCurrency } from "@/lib/utils";
 import { priceWithVat } from "@/lib/utils/vat";
@@ -462,9 +462,35 @@ export function ProductVariantSelector({
     return productImages;
   }, [matchedVariant, productMedia, productImages]);
 
-  // Notify parent component of changes
+  // Notify parent component of changes.
+  //
+  // The payload is guarded by a value signature: this effect must only
+  // notify when something the parent actually displays has changed.
+  // Without the guard, identity-only churn (e.g. the parent rebuilding
+  // the `productImages` array on every render, which recomputes
+  // `variantGallery` to a new array with identical contents) re-fires
+  // this effect, the parent setStates in response, re-renders, rebuilds
+  // the array again — an infinite render loop ("Maximum update depth
+  // exceeded" in dev; in production the loop silently starves the App
+  // Router's transition-priority navigation commits, which is why Buy
+  // Now / drawer checkout / even plain Links never navigated away from
+  // a product page).
+  const lastNotifiedSignatureRef = useRef<string | null>(null);
   useEffect(() => {
     if (onVariantChange) {
+      const signature = JSON.stringify({
+        variantId: matchedVariant?.id ?? null,
+        price: effectivePrice,
+        compareAtPrice,
+        sku: currentSku,
+        images: variantGallery,
+        stock: currentStock,
+        isOutOfStock,
+      });
+      if (lastNotifiedSignatureRef.current === signature) {
+        return;
+      }
+      lastNotifiedSignatureRef.current = signature;
       onVariantChange({
         variant: matchedVariant,
         price: effectivePrice,
