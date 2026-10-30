@@ -90,9 +90,9 @@ export default function AdminReturnsOrdersPage() {
                     <TableCell>{getStatusBadge(ret.status)}</TableCell>
                     <TableCell>
                       {ret.refund_status === "PROCESSED" ? (
-                         <Badge variant="outline" className="bg-green-100 text-green-800">Refunded</Badge>
+                         <Badge variant="outline" className="bg-green-100 text-green-800">PROCESSED</Badge>
                       ) : ret.refund_status === "PENDING" ? (
-                        <Badge variant="secondary">Pending Refund</Badge>
+                        <Badge variant="secondary">Pending</Badge>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}

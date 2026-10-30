@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useOrderMetrics } from "@/hooks/oms/use-orders";
+import { ORDER_DELIVERED_LABEL } from "@/lib/orders/status-labels";
 import {
   LayoutDashboard,
   BarChart3,
@@ -127,7 +128,7 @@ const navigation: NavCategory[] = [
           { name: "All Orders", href: "/admin/orders" },
           { name: "Pending", href: "/admin/orders/pending" },
           { name: "Processing", href: "/admin/orders/processing" },
-          { name: "Completed", href: "/admin/orders/completed" },
+          { name: ORDER_DELIVERED_LABEL, href: "/admin/orders/completed" },
           { name: "Cancelled", href: "/admin/orders/cancelled" },
           { name: "Returns", href: "/admin/orders/returns" },
         ],
@@ -247,7 +248,7 @@ export const AdminSidebar = ({
         return orderMetrics.pendingOrders;
       case "Processing":
         return orderMetrics.processingOrders;
-      case "Completed":
+      case ORDER_DELIVERED_LABEL:
         return orderMetrics.completedOrders;
       case "Cancelled":
         return orderMetrics.cancelledOrders;
