@@ -150,6 +150,7 @@ const navigation: NavCategory[] = [
         items: [
           { name: "Overview", href: "/admin/inventory" },
           { name: "Stock Control", href: "/admin/inventory/stock" },
+          { name: "Scan Station", href: "/admin/operations/scan" },
           { name: "Warehouses", href: "/admin/inventory/warehouses" },
           { name: "Stock Movement", href: "/admin/inventory/movement" },
           { name: "Movement Audit Log", href: "/admin/inventory/stock-movements" },

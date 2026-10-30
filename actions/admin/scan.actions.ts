@@ -1,8 +1,70 @@
 "use server";
 
 import { createAdminDbClient } from "@/lib/db/client";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
+
+/**
+ * Shape a Prisma variant (+ product + inventory levels) into exactly the
+ * plain object ScanStationClient reads: snake_case scalars, `product`,
+ * and `inventory_levels[].warehouse`. Decimals become plain numbers so
+ * the result can cross the server → client boundary.
+ */
+function mapScannedVariant(v: any) {
+  if (!v) return null;
+  const product = v.product ?? null;
+  return {
+    id: v.id,
+    sku: v.sku,
+    barcode: v.barcode ?? null,
+    price_override:
+      v.priceOverride !== null && v.priceOverride !== undefined
+        ? Number(v.priceOverride)
+        : null,
+    sale_price:
+      v.salePrice !== null && v.salePrice !== undefined
+        ? Number(v.salePrice)
+        : null,
+    attributes: v.attributes ?? {},
+    product: product
+      ? {
+          id: product.id,
+          name: product.name,
+          slug: product.slug,
+          base_price: Number(product.basePrice ?? 0),
+          status: product.status,
+          sku: product.sku ?? null,
+        }
+      : null,
+    inventory_levels: (v.inventoryLevels || []).map((l: any) => ({
+      id: l.id,
+      quantity_available: l.quantityAvailable,
+      quantity_reserved: l.quantityReserved,
+      reorder_point: l.reorderPoint,
+      warehouse_id: l.warehouseId,
+      warehouse: l.warehouse
+        ? {
+            id: l.warehouse.id,
+            name: l.warehouse.name,
+            code: l.warehouse.code || "",
+            warehouse_code: l.warehouse.code || "",
+          }
+        : null,
+    })),
+  };
+}
+
+const scannedVariantInclude = {
+  product: {
+    select: { id: true, name: true, slug: true, basePrice: true, status: true, sku: true },
+  },
+  inventoryLevels: {
+    include: {
+      warehouse: { select: { id: true, name: true, code: true } },
+    },
+  },
+} as const;
 
 export async function lookupBarcodeAction(query: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
@@ -13,77 +75,36 @@ export async function lookupBarcodeAction(query: string) {
       return { success: false, error: "Please enter a barcode or SKU to search." };
     }
 
-    const db = createAdminDbClient();
-
-    // 1. Search variant by barcode or SKU
-    let { data: variant, error: varError } = await db
-      .from("variants")
-      .select(`
-        id,
-        sku,
-        barcode,
-        price_override,
-        sale_price,
-        attributes,
-        product:products(
-          id,
-          name,
-          slug,
-          base_price,
-          status,
-          sku
-        ),
-        inventory_levels(
-          id,
-          quantity_available,
-          quantity_reserved,
-          reorder_point,
-          warehouse_id,
-          warehouse:warehouses(id, name, warehouse_code)
-        )
-      `)
-      .or(`barcode.ilike.%${trimmed}%,sku.ilike.%${trimmed}%`)
-      .limit(1)
-      .maybeSingle();
-
-    if (varError) throw varError;
+    // REG-42: Prisma is the reliable path here. The fluent builder
+    // (createAdminDbClient) silently DROPS embedded relations from its
+    // select strings — the old query below resolved the variant row but
+    // returned no `product` and no `inventory_levels`, so the Scan Station
+    // rendered "Product" with "No inventory levels recorded" for every
+    // real barcode (same failure the Stock Control page comment records).
+    // 1. Search variant by barcode or SKU (contains, case-insensitive —
+    //    same semantics as the previous `barcode.ilike.%q%,sku.ilike.%q%`).
+    let variant: any = await prisma.variant.findFirst({
+      where: {
+        OR: [
+          { barcode: { contains: trimmed, mode: "insensitive" } },
+          { sku: { contains: trimmed, mode: "insensitive" } },
+        ],
+      },
+      include: scannedVariantInclude,
+    });
 
     if (!variant) {
       // Try searching product SKU if variant not directly matched
-      const { data: product } = await db
-        .from("products")
-        .select("id, name, slug, base_price, sku")
-        .ilike("sku", `%${trimmed}%`)
-        .limit(1)
-        .maybeSingle();
+      const product = await prisma.product.findFirst({
+        where: { sku: { contains: trimmed, mode: "insensitive" } },
+        select: { id: true },
+      });
 
       if (product) {
-        const { data: firstVariant } = await db
-          .from("variants")
-          .select(`
-            id,
-            sku,
-            barcode,
-            attributes,
-            inventory_levels(
-              id,
-              quantity_available,
-              quantity_reserved,
-              reorder_point,
-              warehouse_id,
-              warehouse:warehouses(id, name, warehouse_code)
-            )
-          `)
-          .eq("product_id", product.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (firstVariant) {
-          variant = {
-            ...firstVariant,
-            product,
-          } as any;
-        }
+        variant = await prisma.variant.findFirst({
+          where: { productId: product.id },
+          include: scannedVariantInclude,
+        });
       }
     }
 
@@ -95,22 +116,22 @@ export async function lookupBarcodeAction(query: string) {
     }
 
     // Fetch all active warehouses for quick adjustment dropdown
-    const { data: rawWarehouses } = await db
-      .from("warehouses")
-      .select("id, name, warehouse_code")
-      .eq("is_active", true);
+    const rawWarehouses = await prisma.warehouse.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, code: true },
+    });
 
-    const warehouses = (rawWarehouses || []).map((w: any) => ({
+    const warehouses = rawWarehouses.map((w) => ({
       id: w.id,
       name: w.name,
-      code: w.warehouse_code || "",
-      warehouse_code: w.warehouse_code || "",
+      code: w.code || "",
+      warehouse_code: w.code || "",
     }));
 
     return {
       success: true,
       data: {
-        variant,
+        variant: mapScannedVariant(variant),
         warehouses,
       },
     };

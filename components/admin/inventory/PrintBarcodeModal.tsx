@@ -807,7 +807,12 @@ export function PrintBarcodeModal({
                               {[colorText, sizeText].filter(Boolean).join(" · ")}
                             </span>
                             <span className="shrink-0 font-mono text-[7.5px] font-semibold text-zinc-500">
-                              {lbl.styleCode || lbl.sku}
+                              {/* REG-41: print the VARIANT SKU — the SKU this
+                                  barcode belongs to. Every label builder sets
+                                  `sku` to the variant SKU and `styleCode` to
+                                  the base product SKU; preferring styleCode
+                                  printed the base SKU on variant stickers. */}
+                              {lbl.sku}
                             </span>
                           </div>
                         </div>

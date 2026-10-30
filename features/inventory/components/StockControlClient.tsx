@@ -65,11 +65,15 @@ export function StockControlClient({
   const filteredInventory = useMemo(() => {
     return inventory.filter((item) => {
       const sku = item.variants?.sku?.toLowerCase() || "";
+      // REG-42: the server page already ships each row's variant barcode
+      // (`variants.barcode`); the filter never tested it, so scanning or
+      // typing a barcode in Stock Control resolved nothing.
+      const barcode = item.variants?.barcode?.toLowerCase() || "";
       const name = (item.variants?.product?.name || item.variants?.name || "").toLowerCase();
       const warehouse = item.warehouses?.name?.toLowerCase() || "";
       const query = search.toLowerCase();
 
-      const matchesSearch = !search || sku.includes(query) || name.includes(query) || warehouse.includes(query);
+      const matchesSearch = !search || sku.includes(query) || barcode.includes(query) || name.includes(query) || warehouse.includes(query);
 
       const matchesWarehouse = warehouseFilter === "ALL" || item.warehouse_id === warehouseFilter;
 
@@ -175,7 +179,7 @@ export function StockControlClient({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search SKU, product name, warehouse..."
+            placeholder="Search barcode, SKU, product name, warehouse..."
             className="pl-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

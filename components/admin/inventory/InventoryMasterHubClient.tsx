@@ -125,6 +125,15 @@ export function InventoryMasterHubClient({
         item.name?.toLowerCase().includes(q) ||
         item.sku?.toLowerCase().includes(q) ||
         item.barcode?.toLowerCase().includes(q) ||
+        // REG-42: barcodes (REG-36 EAN-13s) live on VARIANTS, not on the
+        // product row — a variant barcode or variant SKU must surface the
+        // parent product. The payload already carries variants[].barcode/sku
+        // (same fields the server action matches when `search` is passed).
+        (item.variants || []).some(
+          (v: any) =>
+            v.barcode?.toLowerCase().includes(q) ||
+            v.sku?.toLowerCase().includes(q)
+        ) ||
         item.category?.toLowerCase().includes(q);
 
       const matchStatus = statusFilter === "ALL" || item.status === statusFilter;
