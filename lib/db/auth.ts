@@ -8,6 +8,105 @@
  */
 import prisma from "@/lib/prisma";
 
+/**
+ * Sets an EXISTING Neon Auth user's password through the auth layer's own
+ * reset-token flow — the supported server-side mechanism for changing an
+ * existing credential:
+ *   1. POST /request-password-reset — the auth service mints a single-use
+ *      token in neon_auth.verification (identifier "reset-password:<token>",
+ *      value = the auth user id, ~1 hour expiry).
+ *   2. Read that token back from the shared Neon database (this backend
+ *      owns the database; no email round-trip is needed).
+ *   3. POST /reset-password — the auth service itself hashes the new
+ *      password and updates neon_auth.account, consuming the token.
+ * Every failure returns a real error: a caller must never report success
+ * for a password that was not actually set (REG-58 — previously the
+ * password field was silently ignored and success was fabricated).
+ */
+async function setNeonAuthPassword(params: {
+  authUserId: string;
+  email: string;
+  newPassword: string;
+}): Promise<{ error: { message: string } | null }> {
+  const baseUrl = process.env.NEON_AUTH_BASE_URL;
+  if (!baseUrl) {
+    return { error: { message: "NEON_AUTH_BASE_URL is not configured" } };
+  }
+  const appOrigin = (
+    process.env.NEXT_PUBLIC_APP_URL || "https://anchorfashion.com"
+  ).replace(/\/+$/, "");
+  const headers = {
+    "Content-Type": "application/json",
+    Origin: appOrigin,
+    Referer: `${appOrigin}/admin/users`,
+  };
+
+  // 1. Ask the auth service to mint a reset token for this user.
+  const requestRes = await fetch(`${baseUrl}/request-password-reset`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      email: params.email,
+      redirectTo: `${appOrigin}/auth/reset-password`,
+    }),
+  });
+  if (!requestRes.ok) {
+    const body: any = await requestRes.json().catch(() => ({}));
+    return {
+      error: {
+        message:
+          body?.message ||
+          `Password reset request failed (${requestRes.status})`,
+      },
+    };
+  }
+
+  // 2. Read back the token just stored for THIS user.
+  const rows: any[] = await prisma.$queryRawUnsafe(
+    `SELECT identifier FROM neon_auth."verification"
+     WHERE identifier LIKE 'reset-password:%' AND value = $1
+       AND "expiresAt" > NOW()
+     ORDER BY "createdAt" DESC LIMIT 1`,
+    params.authUserId
+  );
+  const identifier = rows?.[0]?.identifier
+    ? String(rows[0].identifier)
+    : null;
+  if (!identifier) {
+    return {
+      error: {
+        message:
+          "The auth service did not issue a reset token; the password was not changed.",
+      },
+    };
+  }
+  const token = identifier.slice("reset-password:".length);
+
+  // 3. Redeem it — the auth service hashes and stores the new credential
+  //    and consumes the token.
+  const resetRes = await fetch(`${baseUrl}/reset-password`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ token, newPassword: params.newPassword }),
+  });
+  if (!resetRes.ok) {
+    const body: any = await resetRes.json().catch(() => ({}));
+    // Do not leave a live reset token behind after a failed attempt.
+    await prisma
+      .$executeRawUnsafe(
+        `DELETE FROM neon_auth."verification" WHERE identifier = $1`,
+        identifier
+      )
+      .catch(() => {});
+    return {
+      error: {
+        message: body?.message || `Password reset failed (${resetRes.status})`,
+      },
+    };
+  }
+  return { error: null };
+}
+
 export const dbAuth = {
   getUser: async (_token?: string) => {
     try {
@@ -105,6 +204,30 @@ export const dbAuth = {
         const { getServerSession } = await import("@/lib/auth/server");
         const { user } = await getServerSession();
         if (user?.id) {
+          // REG-58: a password change must reach the auth credential —
+          // it used to be silently dropped here while success was
+          // returned. Set it through the auth layer and surface any
+          // failure to the caller.
+          if (
+            typeof updates?.password === "string" &&
+            updates.password.length > 0
+          ) {
+            const email = (user as any)?.email;
+            if (!email) {
+              return {
+                data: null,
+                error: { message: "Authentication required. Please log in again." },
+              };
+            }
+            const pwResult = await setNeonAuthPassword({
+              authUserId: user.id,
+              email,
+              newPassword: updates.password,
+            });
+            if (pwResult.error) {
+              return { data: null, error: pwResult.error };
+            }
+          }
           const meta = updates?.data || updates?.user_metadata || {};
           await prisma.profile.update({
             where: { id: user.id },
@@ -122,7 +245,71 @@ export const dbAuth = {
     }
   },
   resetPasswordForEmail: async (email: string, opts?: any) => {
-    return { data: {}, error: null };
+    // REG-58: this used to return a fabricated success without contacting
+    // the auth service — no reset email was ever sent. It now performs the
+    // real request through the auth layer and surfaces failures.
+    try {
+      const redirectTo = opts?.redirectTo;
+      if (typeof window !== "undefined") {
+        const { authClient } = await import("@/lib/auth/client");
+        const client: any = authClient as any;
+        const requestReset =
+          client.requestPasswordReset || client.forgetPassword;
+        if (typeof requestReset !== "function") {
+          return {
+            data: null,
+            error: { message: "Password reset is not available." },
+          };
+        }
+        const res = await requestReset.call(client, { email, redirectTo });
+        if (res?.error) {
+          return {
+            data: null,
+            error: {
+              message: res.error.message || "Failed to send reset password link",
+            },
+          };
+        }
+        return { data: {}, error: null };
+      }
+      const baseUrl = process.env.NEON_AUTH_BASE_URL;
+      if (!baseUrl) {
+        return {
+          data: null,
+          error: { message: "NEON_AUTH_BASE_URL is not configured" },
+        };
+      }
+      const appOrigin = (
+        process.env.NEXT_PUBLIC_APP_URL || "https://anchorfashion.com"
+      ).replace(/\/+$/, "");
+      const res = await fetch(`${baseUrl}/request-password-reset`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: appOrigin,
+          Referer: `${appOrigin}/auth/forgot-password`,
+        },
+        body: JSON.stringify({
+          email,
+          redirectTo: redirectTo || `${appOrigin}/auth/reset-password`,
+        }),
+      });
+      if (!res.ok) {
+        const body: any = await res.json().catch(() => ({}));
+        return {
+          data: null,
+          error: {
+            message: body?.message || "Failed to send reset password link",
+          },
+        };
+      }
+      return { data: {}, error: null };
+    } catch (e: any) {
+      return {
+        data: null,
+        error: { message: e?.message || "Failed to send reset password link" },
+      };
+    }
   },
   onAuthStateChange: (cb: any) => {
     return { data: { subscription: { unsubscribe: () => {} } } };
@@ -219,6 +406,7 @@ export const dbAuth = {
         // follows the proven pattern in lib/services/auth/account-claim.service.ts:
         // explicit Origin/Referer, response checked, auth id captured.)
         let authUserId: string | null = null;
+        let identityAlreadyExisted = false;
         if (userData.password) {
           const baseUrl = process.env.NEON_AUTH_BASE_URL;
           if (!baseUrl) {
@@ -262,7 +450,9 @@ export const dbAuth = {
               };
             }
             // Email already has an auth identity — link to it below instead
-            // of duplicating.
+            // of duplicating, and apply the password the admin entered to
+            // that identity (REG-58: it used to be dropped silently).
+            identityAlreadyExisted = true;
           }
           if (!authUserId) {
             // Resolve the auth user id from the shared Neon database.
@@ -284,6 +474,19 @@ export const dbAuth = {
                   "The auth user could not be provisioned; no profile was created.",
               },
             };
+          }
+          if (identityAlreadyExisted) {
+            // The admin entered a password for an email that already has
+            // credentials: set it on the existing identity BEFORE writing
+            // any profile, and fail loudly if the auth write fails.
+            const pwResult = await setNeonAuthPassword({
+              authUserId,
+              email,
+              newPassword: userData.password,
+            });
+            if (pwResult.error) {
+              return { data: { user: null }, error: pwResult.error };
+            }
           }
         }
 
@@ -374,6 +577,58 @@ export const dbAuth = {
       updates: any
     ): Promise<{ data: { user: any }; error: { message: string } | null }> => {
       try {
+        // REG-58: a password in the payload is a CREDENTIAL change, not a
+        // profile field. It used to be silently ignored here while success
+        // was returned — admins set passwords that never took effect. Set
+        // it through the auth layer FIRST; on failure, return the error
+        // and write nothing, so profile and credential never diverge
+        // under a false "success".
+        if (
+          typeof updates.password === "string" &&
+          updates.password.length > 0
+        ) {
+          const profile = await prisma.profile.findUnique({
+            where: { id },
+            select: { email: true },
+          });
+          let email = profile?.email || null;
+          let authUserId: string | null = null;
+          if (email) {
+            const byEmail: any[] = await prisma.$queryRawUnsafe(
+              `SELECT id FROM neon_auth."user" WHERE lower(email) = lower($1) LIMIT 1`,
+              email
+            );
+            authUserId = byEmail?.[0]?.id ? String(byEmail[0].id) : null;
+          }
+          if (!authUserId) {
+            const byId: any[] = await prisma.$queryRawUnsafe(
+              `SELECT id, email FROM neon_auth."user" WHERE id = $1::uuid LIMIT 1`,
+              id
+            );
+            if (byId?.[0]?.id) {
+              authUserId = String(byId[0].id);
+              email = email || byId[0].email || null;
+            }
+          }
+          if (!authUserId || !email) {
+            return {
+              data: { user: null },
+              error: {
+                message:
+                  "No auth identity found for this user; the password was not changed.",
+              },
+            };
+          }
+          const pwResult = await setNeonAuthPassword({
+            authUserId,
+            email,
+            newPassword: updates.password,
+          });
+          if (pwResult.error) {
+            return { data: { user: null }, error: pwResult.error };
+          }
+        }
+
         const meta = updates.user_metadata || {};
         const isUuid =
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -404,7 +659,7 @@ export const dbAuth = {
         return { data: { user: { id, ...updates } }, error: null };
       } catch (e: any) {
         return {
-          data: { user: { id, ...updates } },
+          data: { user: null },
           error: { message: e?.message || "Failed to update user" },
         };
       }

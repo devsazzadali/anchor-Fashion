@@ -110,8 +110,11 @@ export function ManagerSidebar({ role }: ManagerSidebarProps) {
     )}>
       <div className="flex h-full max-h-screen flex-col gap-2 relative">
         <div className={cn("flex h-14 items-center border-b lg:h-[60px]", isCollapsed ? "justify-center px-0" : "px-4 lg:px-6")}>
+          {/* Brand mark links to the storefront home, same as the
+              storefront header logo. The Dashboard nav item below still
+              leads to /manager. */}
           <Link
-            href="/manager"
+            href="/"
             className={cn("flex items-center gap-2 font-semibold", isCollapsed && "justify-center")}
           >
             <Package className="h-6 w-6 text-primary" />

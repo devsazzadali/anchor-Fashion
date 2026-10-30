@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Printer } from "lucide-react";
+import { FileText } from "lucide-react";
 import Link from "next/link";
 
 export function CustomerOrderInvoiceButton({ order }: { order: any }) {
@@ -11,8 +11,8 @@ export function CustomerOrderInvoiceButton({ order }: { order: any }) {
       asChild
     >
       <Link href={`/account/orders/${order.id}/invoice`} target="_blank">
-        <Printer className="h-4 w-4" />
-        Print Invoice
+        <FileText className="h-4 w-4" />
+        View Invoice
       </Link>
     </Button>
   );

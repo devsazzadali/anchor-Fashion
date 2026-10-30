@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
+import { AnchorFashionLogo } from "@/components/shared/logo";
 import { ForgotPasswordForm } from "@/features/auth/components/forgot-password-form";
 import { ChevronLeft } from "lucide-react";
 
@@ -12,18 +12,8 @@ export const metadata: Metadata = {
 export default function ForgotPasswordPage() {
   return (
     <div className="flex flex-col items-center gap-6">
-      {/* Logo */}
-      <Link href="/" aria-label="Go to homepage">
-        <Image
-          src="/logo.png"
-          alt="Anchor Fashion"
-          width={180}
-          height={50}
-          style={{ width: "auto", height: "auto" }}
-          className="max-w-[160px]"
-          priority
-        />
-      </Link>
+      {/* Logo — the shared animated brand mark, same as the storefront header */}
+      <AnchorFashionLogo className="w-[160px]" />
 
       {/* Heading */}
       <div className="text-center space-y-1">

@@ -34,14 +34,21 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
   if (!p) return null;
 
   const variants = p.variants || [];
-  const totalAvailable = variants.reduce(
-    (sum: number, variant: any) => {
-      const variantStock = (variant.inventoryLevels || []).reduce(
-        (vSum: number, level: any) => vSum + (level.quantityAvailable || 0),
-        0
-      );
-      return sum + variantStock;
-    },
+
+  // Purchasable stock per variant: units available across all of the
+  // variant's warehouse levels. Reserved units are already excluded —
+  // reserving stock decrements quantity_available (InventoryService).
+  // This per-variant figure is computed once, here on the server, and is
+  // the only stock number the storefront displays; the product total is
+  // simply its sum.
+  const variantAvailableStock = variants.map((variant: any) =>
+    (variant.inventoryLevels || []).reduce(
+      (vSum: number, level: any) => vSum + (level.quantityAvailable || 0),
+      0
+    )
+  );
+  const totalAvailable = variantAvailableStock.reduce(
+    (sum: number, n: number) => sum + n,
     0
   );
 
@@ -109,7 +116,7 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
     product_media: mediaList,
     media: mediaList,
     primary_image_url: primaryMedia ? primaryMedia.url : p.imageUrl || "/placeholder.png",
-    variants: variants.map((v: any) => ({
+    variants: variants.map((v: any, variantIndex: number) => ({
       id: v.id,
       sku: v.sku,
       barcode: v.barcode,
@@ -118,6 +125,8 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
       weight: v.weight ? Number(v.weight) : null,
       attributes: v.attributes,
       is_active: v.isActive,
+      // Server-computed purchasable stock for THIS variant (see above).
+      available_stock: variantAvailableStock[variantIndex],
       inventory_levels: (v.inventoryLevels || []).map((il: any) => ({
         id: il.id,
         warehouse_id: il.warehouseId,

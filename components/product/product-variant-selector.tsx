@@ -31,7 +31,8 @@ export interface VariantData {
   price?: number | null;
   price_override?: number | null;
   sale_price?: number | null;
-  stock_quantity?: number;
+  // Server-computed purchasable stock for this variant (catalog payload).
+  available_stock?: number;
   is_active?: boolean;
   attributes?: Record<string, string> | string | null;
   variant_attribute_values?: VariantAttributeValueRelational[];
@@ -119,19 +120,28 @@ function normalizeAttributes(v: VariantData): Record<string, string> {
 }
 
 /**
- * Computes authoritative stock from inventory_levels
+ * The variant's purchasable stock, as computed by the server.
+ *
+ * The catalog payload carries `available_stock` per variant: the sum of
+ * quantity_available across the variant's warehouse levels, with reserved
+ * units already excluded (reserving decrements quantity_available). That
+ * server figure is the only number the PDP may display for the variant —
+ * never the product-wide total, never another variant's stock, never an
+ * unrelated payload field. If the explicit field is absent, derive the
+ * same sum from inventory_levels. A variant with no stock data has 0
+ * purchasable units — the same answer checkout gives for it.
  */
-function calculateVariantStock(v: VariantData, fallbackStock: number = 0): number {
-  if (Array.isArray(v.inventory_levels) && v.inventory_levels.length > 0) {
+function getVariantAvailableStock(v: VariantData): number {
+  if (typeof v.available_stock === "number") {
+    return Math.max(0, v.available_stock);
+  }
+  if (Array.isArray(v.inventory_levels)) {
     return v.inventory_levels.reduce(
       (sum, lvl) => sum + (lvl.quantity_available || 0),
       0
     );
   }
-  if (typeof v.stock_quantity === "number") {
-    return v.stock_quantity;
-  }
-  return fallbackStock;
+  return 0;
 }
 
 const FASHION_COLOR_MAP: Record<string, string> = {
@@ -274,7 +284,7 @@ export function ProductVariantSelector({
     return (variants || []).map((v) => ({
       raw: v,
       attributes: normalizeAttributes(v),
-      stock: calculateVariantStock(v, baseStockQuantity),
+      stock: getVariantAvailableStock(v),
       isActive: v.is_active ?? true,
     }));
   }, [variants, baseStockQuantity]);
@@ -344,7 +354,7 @@ export function ProductVariantSelector({
       return baseStockQuantity;
     }
     if (matchedVariant) {
-      return calculateVariantStock(matchedVariant, baseStockQuantity);
+      return getVariantAvailableStock(matchedVariant);
     }
     return 0;
   }, [processedVariants, matchedVariant, baseStockQuantity]);

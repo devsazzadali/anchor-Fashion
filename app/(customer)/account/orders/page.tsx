@@ -73,7 +73,7 @@ export default function CustomerOrdersPage() {
             My Orders
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Track shipments, review past purchases, and download official invoices.
+            Track shipments, review past purchases, and view official invoices.
           </p>
         </div>
         <Button asChild variant="outline" size="sm">

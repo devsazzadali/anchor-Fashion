@@ -269,10 +269,12 @@ export const AdminSidebar = ({
       <div className={cn("h-[80px] shrink-0 flex items-center border-b border-border relative", effectiveCollapsed ? "px-0 justify-center" : "px-6 gap-3")}>
         {!effectiveCollapsed && (
           <>
-            <AnchorFashionLogo noLink={true} className="text-foreground" />
+            {/* Brand mark links to the storefront home, same as the
+                storefront header logo (shared component's built-in link). */}
+            <AnchorFashionLogo className="text-foreground" />
           </>
         )}
-        {effectiveCollapsed && <AnchorFashionLogo noLink={true} className="text-foreground w-8 h-8" />}
+        {effectiveCollapsed && <AnchorFashionLogo className="text-foreground w-8 h-8" />}
         
         {!isMobile && (
           <button

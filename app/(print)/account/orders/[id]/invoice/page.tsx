@@ -250,10 +250,11 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
 
   return (
     <div className="min-h-screen bg-slate-100 py-4 sm:py-8 print:py-0 print:bg-white text-slate-900 font-sans antialiased">
-      {/* Screen Toolbar & AutoPrint */}
+      {/* Screen Toolbar — view-only for customers: no print/download */}
       <InvoiceToolbar
         backUrl={`/account/orders/${order.id}`}
         backLabel="Back to Order Details"
+        allowPrint={false}
       />
 
       {/* Printable Sheet */}

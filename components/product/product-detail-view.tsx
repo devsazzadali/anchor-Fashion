@@ -69,8 +69,9 @@ export function ProductDetailView({
     flashSale || product.sale_price ? product.base_price : null
   );
   const [currentSku, setCurrentSku] = useState<string>(product.sku || "");
-  const initialStock =
-    product.total_available_stock ?? (product.is_in_stock ? 10 : 0);
+  // Server-computed product total. If it is ever absent the honest
+  // initial state is 0 (out of stock) — never an invented quantity.
+  const initialStock = product.total_available_stock ?? 0;
   const [isOutOfStock, setIsOutOfStock] = useState<boolean>(
     !product.is_in_stock || initialStock <= 0
   );
