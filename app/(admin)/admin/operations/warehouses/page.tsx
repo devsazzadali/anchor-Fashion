@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { getAllWarehouses } from "@/actions/warehouse.actions";
+import { getAllWarehouses } from "@/lib/actions/warehouse.actions";
 import { OperationsWarehouseClient } from "@/features/warehouse/components/OperationsWarehouseClient";
 
 export const metadata: Metadata = {

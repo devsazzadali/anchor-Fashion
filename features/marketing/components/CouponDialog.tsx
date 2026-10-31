@@ -33,7 +33,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createCouponAction } from "@/actions/marketing.actions";
+import { createCouponAction } from "@/lib/actions/marketing.actions";
 import { CouponRecord } from "@/lib/repositories/marketing/coupon.repository";
 
 const couponFormSchema = z

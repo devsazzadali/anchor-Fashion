@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CourierProviderRecord } from "@/types/shipping.types";
-import { getCourierLogsAction } from "@/actions/logistics.actions";
+import { getCourierLogsAction } from "@/lib/actions/logistics.actions";
 import {
   Dialog,
   DialogContent,

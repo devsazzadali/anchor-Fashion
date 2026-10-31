@@ -55,7 +55,7 @@ import {
   logCommunicationAction,
   updateCommunicationLogAction,
   deleteCommunicationLogAction,
-} from "@/actions/crm.actions";
+} from "@/lib/actions/crm.actions";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 interface MessagesClientProps {

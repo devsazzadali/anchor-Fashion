@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { createDbClient } from "@/lib/db/client";
-import { getPickListsAction, getPickersAction } from "@/actions/admin/fulfillment.actions";
+import { getPickListsAction, getPickersAction } from "@/lib/actions/admin/fulfillment.actions";
 import { PickListsClient } from "@/features/fulfillment/components/PickListsClient";
 
 export const metadata: Metadata = {

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { PackageMinus, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { stockOutAction, getWarehouseInventoryAction } from "@/actions/warehouse.actions";
+import { stockOutAction, getWarehouseInventoryAction } from "@/lib/actions/warehouse.actions";
 
 interface StockOutDialogProps {
   open: boolean;

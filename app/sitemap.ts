@@ -1,6 +1,6 @@
 import { MetadataRoute } from "next";
 import { CatalogRepository } from "@/repositories/catalog.repository";
-import { getPosts } from "@/actions/blog.actions";
+import { getPosts } from "@/lib/actions/blog.actions";
 
 export const dynamic = "force-dynamic";
 

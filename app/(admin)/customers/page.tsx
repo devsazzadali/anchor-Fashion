@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { getUsersByRoleAction } from "@/actions/users.actions";
+import { getUsersByRoleAction } from "@/lib/actions/users.actions";
 import { Users } from "lucide-react";
 
 export const metadata = {

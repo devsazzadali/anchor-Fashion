@@ -33,7 +33,7 @@ import {
   getLeadNotesAction,
   addLeadNoteAction,
   getLeadCommunicationLogsAction,
-} from "@/actions/crm.actions";
+} from "@/lib/actions/crm.actions";
 
 interface LeadDetailsSheetProps {
   lead: CRMLead | null;

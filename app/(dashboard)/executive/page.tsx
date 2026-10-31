@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { getDashboardSnapshot } from "@/actions/analytics.actions";
+import { getDashboardSnapshot } from "@/lib/actions/analytics.actions";
 
 export const metadata: Metadata = {
   title: "Executive Dashboard | Anchor Fashion",

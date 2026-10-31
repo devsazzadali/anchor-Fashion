@@ -33,7 +33,7 @@ import { Loader2, UserPlus, Pencil, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { createCRMLeadSchema } from "@/schemas/crm.schema";
 import { CRMLead } from "@/types/crm.types";
-import { createLeadAction, updateLeadAction } from "@/actions/crm.actions";
+import { createLeadAction, updateLeadAction } from "@/lib/actions/crm.actions";
 import { z } from "zod";
 
 type LeadFormValues = z.infer<typeof createCRMLeadSchema>;

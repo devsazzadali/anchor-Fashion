@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { MediaUploader } from "@/components/cms/MediaUploader";
 import { CMSMediaItem } from "@/types/cms.types";
-import { deleteMedia, seedSampleMedia, uploadMedia } from "@/actions/cms.actions";
+import { deleteMedia, seedSampleMedia, uploadMedia } from "@/lib/actions/cms.actions";
 
 type FilterType = "all" | "image" | "video" | "document";
 type SortOption = "newest" | "oldest" | "name_asc" | "name_desc" | "size_desc" | "size_asc";

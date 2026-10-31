@@ -26,7 +26,7 @@ import {
   deleteWarehouseZoneAction,
   createWarehouseBinAction,
   deleteWarehouseBinAction,
-} from "@/actions/warehouse.actions";
+} from "@/lib/actions/warehouse.actions";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 

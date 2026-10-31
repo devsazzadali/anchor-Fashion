@@ -11,7 +11,7 @@ import { authClient } from "@/lib/auth/client";
 import {
   getPostLoginRedirectAction,
   recordSignInAuditAction,
-} from "@/actions/auth.actions";
+} from "@/lib/actions/auth.actions";
 import { LoadingButton } from "@/components/ui/loading-button";
 import {
   Form,

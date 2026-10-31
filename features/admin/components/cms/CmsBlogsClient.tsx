@@ -48,7 +48,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
-import { deletePost, updatePost } from "@/actions/blog.actions";
+import { deletePost, updatePost } from "@/lib/actions/blog.actions";
 import { toast } from "sonner";
 import { BlogPost } from "@/types/blog.types";
 

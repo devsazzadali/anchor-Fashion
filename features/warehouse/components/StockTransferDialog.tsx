@@ -24,7 +24,7 @@ import {
 import { ArrowRightLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Warehouse, WarehouseZone } from "@/types/inventory.types";
-import { stockTransferAction, getWarehouseZones, getWarehouseInventoryAction } from "@/actions/warehouse.actions";
+import { stockTransferAction, getWarehouseZones, getWarehouseInventoryAction } from "@/lib/actions/warehouse.actions";
 
 interface StockTransferDialogProps {
   open: boolean;

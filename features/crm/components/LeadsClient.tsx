@@ -45,7 +45,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteLeadAction, convertLeadAction } from "@/actions/crm.actions";
+import { deleteLeadAction, convertLeadAction } from "@/lib/actions/crm.actions";
 import { LeadDialog } from "@/features/crm/components/LeadDialog";
 import { LeadDetailsSheet } from "@/features/crm/components/LeadDetailsSheet";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";

@@ -1,4 +1,4 @@
-import { getAdminHeroSlides } from "@/actions/cms.actions";
+import { getAdminHeroSlides } from "@/lib/actions/cms.actions";
 import { BannersManager } from "./BannersManager";
 
 export const metadata = {

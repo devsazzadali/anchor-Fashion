@@ -63,7 +63,7 @@ import {
   generatePickListFromOrdersAction,
   assignPickerAction,
   updatePickListStatusAction,
-} from "@/actions/admin/fulfillment.actions";
+} from "@/lib/actions/admin/fulfillment.actions";
 
 interface Picker {
   id: string;

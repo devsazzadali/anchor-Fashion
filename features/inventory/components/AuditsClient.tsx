@@ -46,7 +46,7 @@ import {
 import {
   createAuditAction,
   updateAuditStatusAction,
-} from "@/actions/inventory.actions";
+} from "@/lib/actions/inventory.actions";
 import { toast } from "sonner";
 
 interface AuditsClientProps {

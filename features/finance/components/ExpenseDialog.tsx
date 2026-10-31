@@ -33,7 +33,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ExpenseFormSchema, ExpenseFormValues } from "@/schemas/finance.schema";
 import { Expense } from "@/types/finance.types";
-import { createExpenseAction, updateExpenseAction } from "@/actions/finance.actions";
+import { createExpenseAction, updateExpenseAction } from "@/lib/actions/finance.actions";
 
 interface ExpenseDialogProps {
   open: boolean;

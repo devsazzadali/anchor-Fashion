@@ -31,7 +31,7 @@ import {
   getTicketMessagesAction,
   sendAgentMessageAction,
   updateTicketStatusAction,
-} from "@/actions/support.actions";
+} from "@/lib/actions/support.actions";
 import {
   SupportTicketRecord,
   TicketMessageRecord,

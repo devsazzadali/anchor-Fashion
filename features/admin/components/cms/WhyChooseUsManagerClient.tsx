@@ -37,7 +37,7 @@ import {
 import {
   updateWhyChooseUsSettings,
   resetWhyChooseUsSettings,
-} from "@/actions/why-choose-us.actions";
+} from "@/lib/actions/why-choose-us.actions";
 import { uploadImageAction } from "@/lib/actions/upload.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

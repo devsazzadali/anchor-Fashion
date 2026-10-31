@@ -1,4 +1,4 @@
-import { getPosts } from "@/actions/blog.actions";
+import { getPosts } from "@/lib/actions/blog.actions";
 import { CmsBlogsClient } from "@/features/admin/components/cms/CmsBlogsClient";
 
 export const metadata = {

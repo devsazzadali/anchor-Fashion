@@ -30,7 +30,7 @@ import { Category } from "@/types/catalog.types";
 import {
   updateCuratedCategoriesSettings,
   resetCuratedCategoriesSettings,
-} from "@/actions/curated-categories.actions";
+} from "@/lib/actions/curated-categories.actions";
 import { uploadImageAction } from "@/lib/actions/upload.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

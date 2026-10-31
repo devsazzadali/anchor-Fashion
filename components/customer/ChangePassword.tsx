@@ -17,7 +17,7 @@ import { Loader2, Eye, EyeOff, Lock, CheckCircle2, Copy, Check } from "lucide-re
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { updateUserPasswordAction } from "@/actions/users.actions";
+import { updateUserPasswordAction } from "@/lib/actions/users.actions";
 
 const changePasswordSchema = z
   .object({

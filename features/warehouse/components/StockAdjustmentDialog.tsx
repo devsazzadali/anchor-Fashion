@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Scale, Loader2, TrendingUp, TrendingDown, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import { stockAdjustmentAction, getWarehouseInventoryAction } from "@/actions/warehouse.actions";
+import { stockAdjustmentAction, getWarehouseInventoryAction } from "@/lib/actions/warehouse.actions";
 
 interface StockAdjustmentDialogProps {
   open: boolean;

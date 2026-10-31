@@ -56,7 +56,7 @@ import {
   getUserBookmarksAction,
   addBookmarkAction,
   removeBookmarkAction,
-} from "@/actions/admin/bookmarks.actions";
+} from "@/lib/actions/admin/bookmarks.actions";
 
 export function AdminBookmarksMenu() {
   const pathname = usePathname();

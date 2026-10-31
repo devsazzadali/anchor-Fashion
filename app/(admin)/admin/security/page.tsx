@@ -19,7 +19,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getAuditLogsAction } from "@/actions/admin/security.actions";
+import { getAuditLogsAction } from "@/lib/actions/admin/security.actions";
 
 interface AuditLog {
   id: string;

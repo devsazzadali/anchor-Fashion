@@ -20,7 +20,7 @@ import { TrendingProducts } from "@/components/home/trending-products";
 import { LatestBlogs } from "@/components/home/latest-blogs";
 import { FadeIn } from "@/components/ui/fade-in";
 import { FlashSaleService } from "@/lib/services/marketing/flash-sale.service";
-import { getPromoSections } from "@/actions/cms.actions";
+import { getPromoSections } from "@/lib/actions/cms.actions";
 import {
   getHomepageLayout,
   getFeaturesBarConfig,

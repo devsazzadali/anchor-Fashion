@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, Trash2, Heart, Loader2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { priceWithVat } from "@/lib/utils/vat";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useCartStore } from "@/stores/use-cart-store";
@@ -80,6 +81,11 @@ export function WishlistGrid() {
         const product = item.product as any;
         const title = product?.name || product?.title || "Unknown Product";
         const price = product?.base_price || product?.price || 0;
+        // REG-50: one VAT rule everywhere a price is shown — the figure
+        // next to a product is the VAT-INCLUSIVE price (the PDP/card
+        // wording), labelled "incl. VAT" when the product carries VAT.
+        const vatPercent = Number(product?.vat_percent ?? product?.vatPercent ?? 0);
+        const displayPrice = priceWithVat(price, vatPercent);
         const image =
           product?.product_media?.find((m: any) => m.is_primary)?.url ||
           product?.product_media?.[0]?.url ||
@@ -129,7 +135,14 @@ export function WishlistGrid() {
               >
                 {title}
               </Link>
-              <p className="text-sm font-semibold">{formatCurrency(price)}</p>
+              <p className="text-sm font-semibold">
+                {formatCurrency(displayPrice)}
+                {vatPercent > 0 && (
+                  <span className="block text-[10px] font-normal text-slate-400">
+                    incl. VAT
+                  </span>
+                )}
+              </p>
             </div>
 
             <Button

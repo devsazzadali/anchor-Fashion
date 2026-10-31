@@ -5,7 +5,7 @@ import { CourierProviderRecord } from "@/types/shipping.types";
 import {
   updateCourierProviderAction,
   testCourierConnectionAction,
-} from "@/actions/logistics.actions";
+} from "@/lib/actions/logistics.actions";
 import {
   Dialog,
   DialogContent,

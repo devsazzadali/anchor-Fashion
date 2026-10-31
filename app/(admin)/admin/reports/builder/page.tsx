@@ -43,7 +43,7 @@ import {
 import {
   saveReportAction,
   runReportQueryAction,
-} from "@/actions/report.actions";
+} from "@/lib/actions/report.actions";
 import { SavedReportsModal } from "@/features/reports/components/SavedReportsModal";
 
 const DIMENSIONS: { id: ReportDimension; label: string }[] = [

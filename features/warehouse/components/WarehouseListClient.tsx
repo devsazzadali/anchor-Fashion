@@ -62,7 +62,7 @@ import {
 import {
   deleteWarehouse,
   toggleWarehouseStatus,
-} from "@/actions/warehouse.actions";
+} from "@/lib/actions/warehouse.actions";
 import { StockTransferDialog } from "./StockTransferDialog";
 
 interface WarehouseListClientProps {

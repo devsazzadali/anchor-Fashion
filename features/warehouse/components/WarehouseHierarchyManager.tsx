@@ -58,7 +58,7 @@ import {
   deleteRackAction,
   createWarehouseBinAction,
   deleteWarehouseBinAction,
-} from "@/actions/warehouse.actions";
+} from "@/lib/actions/warehouse.actions";
 
 interface ZoneWithBins extends WarehouseZone {
   bins?: WarehouseBin[];

@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { getPostBySlug, getPosts } from "@/actions/blog.actions";
+import { getPostBySlug, getPosts } from "@/lib/actions/blog.actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Clock, Calendar, ArrowLeft, ChevronRight } from "lucide-react";

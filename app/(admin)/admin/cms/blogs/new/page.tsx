@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createPost, getCategories } from "@/actions/blog.actions";
+import { createPost, getCategories } from "@/lib/actions/blog.actions";
 import { uploadImageAction } from "@/lib/actions/upload.actions";
 import { BlogCategory } from "@/types/blog.types";
 import { ArrowLeft, Save, Image as ImageIcon, Loader2, X } from "lucide-react";

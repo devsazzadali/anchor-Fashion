@@ -5,7 +5,7 @@ import {
   getWarehouseZones,
   getWarehouseInventoryAction,
   getAllWarehouses,
-} from "@/actions/warehouse.actions";
+} from "@/lib/actions/warehouse.actions";
 import { WarehouseInventoryClient } from "@/features/warehouse/components/WarehouseInventoryClient";
 
 export const metadata: Metadata = {

@@ -19,6 +19,7 @@ export class WishlistRepository {
                   slug: true,
                   basePrice: true,
                   salePrice: true,
+                  vatPercent: true,
                   imageUrl: true,
                   media: {
                     select: {
@@ -76,6 +77,7 @@ export class WishlistRepository {
             price: Number(prod.basePrice),
             base_price: Number(prod.basePrice),
             sale_price: prod.salePrice ? Number(prod.salePrice) : null,
+            vat_percent: Number(prod.vatPercent || 0),
             main_image_url: mainImageUrl,
             stock_quantity: stockQuantity,
           },

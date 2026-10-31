@@ -1,5 +1,5 @@
 import React from "react";
-import { getPageBySlug, getPageBlocks } from "@/actions/cms.actions";
+import { getPageBySlug, getPageBlocks } from "@/lib/actions/cms.actions";
 import { notFound } from "next/navigation";
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";

@@ -67,7 +67,7 @@ import {
   toggleNotificationStatusAction,
   markAllNotificationsAsReadAction,
   type AdminNotification,
-} from "@/actions/admin/notification.actions";
+} from "@/lib/actions/admin/notification.actions";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 interface Template {

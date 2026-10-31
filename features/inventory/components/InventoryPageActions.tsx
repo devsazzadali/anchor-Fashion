@@ -39,7 +39,7 @@ import {
   addStockAction,
   transferStock,
   recordManualMovementAction,
-} from "@/actions/inventory.actions";
+} from "@/lib/actions/inventory.actions";
 import { StockInwardDialog } from "@/features/inventory/components/StockInwardDialog";
 import { Loader2 } from "lucide-react";
 

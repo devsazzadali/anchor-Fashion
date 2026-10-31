@@ -36,13 +36,13 @@ import { toast } from "sonner";
 import {
   promotionSchema,
   PromotionFormValues,
-} from "@/validators/marketing.schema";
+} from "@/schemas/marketing.schema";
 import { PromotionRecord } from "@/lib/repositories/marketing/promotion.repository";
 import {
   createPromotionAction,
   updatePromotionAction,
-} from "@/actions/marketing.actions";
-import { uploadMedia } from "@/actions/cms.actions";
+} from "@/lib/actions/marketing.actions";
+import { uploadMedia } from "@/lib/actions/cms.actions";
 import Image from "next/image";
 
 interface PromotionDialogProps {

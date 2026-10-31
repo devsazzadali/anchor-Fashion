@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { getSystemAlerts } from "@/actions/ops.actions";
+import { getSystemAlerts } from "@/lib/actions/ops.actions";
 
 export const metadata: Metadata = {
   title: "AI Insights | Anchor Fashion",

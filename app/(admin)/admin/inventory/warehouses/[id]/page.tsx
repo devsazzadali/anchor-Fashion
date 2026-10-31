@@ -10,7 +10,7 @@ import {
   getWarehouseInventoryAction,
   getDetailedMovementsAction,
   getAllWarehouses,
-} from "@/actions/warehouse.actions";
+} from "@/lib/actions/warehouse.actions";
 import { WarehouseDetailClient } from "@/features/warehouse/components/WarehouseDetailClient";
 
 export const metadata: Metadata = {

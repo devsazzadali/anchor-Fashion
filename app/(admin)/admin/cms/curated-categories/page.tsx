@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { getCuratedCategoriesSettings } from "@/actions/curated-categories.actions";
+import { getCuratedCategoriesSettings } from "@/lib/actions/curated-categories.actions";
 import { CategoryRepository } from "@/lib/repositories/catalog/category.repository";
 import { CuratedCategoriesManagerClient } from "@/features/admin/components/cms/CuratedCategoriesManagerClient";
 

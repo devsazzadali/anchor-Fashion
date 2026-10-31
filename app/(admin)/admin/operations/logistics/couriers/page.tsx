@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { CourierListClient } from "@/features/admin/components/shipping/CourierListClient";
-import { getCourierProvidersAction } from "@/actions/logistics.actions";
+import { getCourierProvidersAction } from "@/lib/actions/logistics.actions";
 
 export const metadata: Metadata = {
   title: "Courier Integration | Anchor Fashion Enterprise",

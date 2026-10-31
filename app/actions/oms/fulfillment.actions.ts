@@ -4,7 +4,7 @@ import { FulfillmentService } from "@/lib/services/oms/fulfillment.service";
 import {
   FulfillShipmentInput,
   fulfillShipmentSchema,
-} from "@/lib/validations/oms";
+} from "@/schemas/oms.schema";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 

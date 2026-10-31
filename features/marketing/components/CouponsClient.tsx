@@ -34,7 +34,7 @@ import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog"
 import {
   toggleCouponStatusAction,
   deleteCouponAction,
-} from "@/actions/marketing.actions";
+} from "@/lib/actions/marketing.actions";
 
 interface CouponsClientProps {
   initialCoupons: CouponRecord[];

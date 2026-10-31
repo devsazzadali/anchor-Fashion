@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { toast } from "sonner";
 
-import { updateUserPasswordAction } from "@/actions/users.actions";
+import { updateUserPasswordAction } from "@/lib/actions/users.actions";
 import { Button } from "@/components/ui/button";
 import {
   Form,

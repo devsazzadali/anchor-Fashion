@@ -40,7 +40,7 @@ import { toast } from "sonner";
 import {
   lookupBarcodeAction,
   adjustScannedStockAction,
-} from "@/actions/admin/scan.actions";
+} from "@/lib/actions/admin/scan.actions";
 
 export function ScanStationClient() {
   const [query, setQuery] = useState("");

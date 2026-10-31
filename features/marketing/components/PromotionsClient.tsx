@@ -46,7 +46,7 @@ import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog"
 import {
   deletePromotionAction,
   togglePromotionStatusAction,
-} from "@/actions/marketing.actions";
+} from "@/lib/actions/marketing.actions";
 
 interface PromotionsClientProps {
   initialPromotions: PromotionRecord[];

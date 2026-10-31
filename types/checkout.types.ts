@@ -59,6 +59,8 @@ export interface WishlistItem {
     slug: string;
     price: number;
     sale_price?: number | null;
+    /** Per-product VAT % — VAT is charged on top of the selling price. */
+    vat_percent?: number;
     main_image_url?: string | null;
     stock_quantity: number;
   };

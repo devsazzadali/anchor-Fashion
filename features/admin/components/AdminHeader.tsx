@@ -56,14 +56,14 @@ import {
   markNotificationAsReadAction,
   markAllNotificationsAsReadAction,
   type AdminNotification,
-} from "@/actions/admin/notification.actions";
+} from "@/lib/actions/admin/notification.actions";
 import {
   getAdminHeaderMessagesAction,
   markAllMessagesAsReadAction,
   deleteMessageAction,
   deleteAllMessagesAction,
   type AdminMessage,
-} from "@/actions/admin/messages.actions";
+} from "@/lib/actions/admin/messages.actions";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers

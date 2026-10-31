@@ -1,5 +1,5 @@
 import { SEORepository } from "@/repositories/seo.repository";
-import { seoMetadataSchema } from "@/validators/seo.schema";
+import { seoMetadataSchema } from "@/schemas/seo.schema";
 import { SEOMetadata } from "@/types/seo.types";
 
 const seoRepository = new SEORepository();

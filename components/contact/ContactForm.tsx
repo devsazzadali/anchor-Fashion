@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send } from "lucide-react";
-import { submitContactMessageAction } from "@/actions/crm.actions";
+import { submitContactMessageAction } from "@/lib/actions/crm.actions";
 
 const contactSchema = z.object({
   name: z.string().trim().min(2, "Full name must be at least 2 characters"),

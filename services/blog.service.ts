@@ -1,5 +1,5 @@
 import { BlogRepository } from "@/repositories/blog.repository";
-import { blogPostSchema } from "@/validators/blog.schema";
+import { blogPostSchema } from "@/schemas/blog.schema";
 import { BlogPost, BlogCategory, BlogTag } from "@/types/blog.types";
 
 const blogRepository = new BlogRepository();

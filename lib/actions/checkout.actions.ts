@@ -331,7 +331,7 @@ export async function processCheckoutAction(
 
     // Trigger Real-time Admin Notification
     try {
-      const { createOrderNotificationAction } = await import("@/actions/admin/notification.actions");
+      const { createOrderNotificationAction } = await import("@/lib/actions/admin/notification.actions");
       const customerFullName = [
         parsedData.information.shipping_address.first_name,
         parsedData.information.shipping_address.last_name,

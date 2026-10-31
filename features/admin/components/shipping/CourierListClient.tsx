@@ -29,7 +29,7 @@ import {
   getCourierMetricsAction,
   testCourierConnectionAction,
   CourierMetrics,
-} from "@/actions/logistics.actions";
+} from "@/lib/actions/logistics.actions";
 import {
   Dialog,
   DialogContent,

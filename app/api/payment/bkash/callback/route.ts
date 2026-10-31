@@ -308,7 +308,7 @@ async function handleCallback(req: NextRequest) {
 
       // Authoritative Admin Notification for captured bKash payment
       try {
-        const { createOrderNotificationAction } = await import("@/actions/admin/notification.actions");
+        const { createOrderNotificationAction } = await import("@/lib/actions/admin/notification.actions");
         await createOrderNotificationAction({
           orderId: order.id,
           orderNumber: order.order_number,

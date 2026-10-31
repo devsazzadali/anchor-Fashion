@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Calendar, Clock, BookOpen, Sparkles } from "lucide-react";
-import { getPosts } from "@/actions/blog.actions";
+import { getPosts } from "@/lib/actions/blog.actions";
 
 import { Button } from "@/components/ui/button";
 

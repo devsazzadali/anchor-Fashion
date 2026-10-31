@@ -17,7 +17,7 @@ import { KeyRound, Smartphone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingButton } from "@/components/ui/loading-button";
-import { getPostLoginRedirectAction } from "@/actions/auth.actions";
+import { getPostLoginRedirectAction } from "@/lib/actions/auth.actions";
 
 function toE164(raw: string): string | null {
   const cleaned = raw.trim().replace(/[\s\-()]/g, "");

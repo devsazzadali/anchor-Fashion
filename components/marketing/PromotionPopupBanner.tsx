@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { PromotionRecord } from "@/lib/repositories/marketing/promotion.repository";
-import { getActivePromotionAction } from "@/actions/marketing.actions";
+import { getActivePromotionAction } from "@/lib/actions/marketing.actions";
 
 interface PromotionPopupBannerProps {
   initialPromotion?: PromotionRecord | null;

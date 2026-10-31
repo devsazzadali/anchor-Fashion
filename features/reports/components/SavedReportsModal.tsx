@@ -15,7 +15,7 @@ import { CustomReportConfig } from "@/types/report.types";
 import {
   getSavedReportsAction,
   deleteReportAction,
-} from "@/actions/report.actions";
+} from "@/lib/actions/report.actions";
 import { toast } from "sonner";
 
 interface SavedReportsModalProps {

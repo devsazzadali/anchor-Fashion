@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StockControlActions } from "@/features/inventory/components/InventoryPageActions";
-import { adjustStock } from "@/actions/inventory.actions";
+import { adjustStock } from "@/lib/actions/inventory.actions";
 import { exportToCsv } from "@/lib/utils/export";
 import { toast } from "sonner";
 

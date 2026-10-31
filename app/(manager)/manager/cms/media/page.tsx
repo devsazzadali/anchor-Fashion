@@ -1,6 +1,6 @@
 import React from "react";
 import { Metadata } from "next";
-import { getMedia } from "@/actions/cms.actions";
+import { getMedia } from "@/lib/actions/cms.actions";
 import { MediaLibraryView } from "@/components/cms/MediaLibraryView";
 
 export const metadata: Metadata = {

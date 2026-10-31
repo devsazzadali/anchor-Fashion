@@ -10,7 +10,7 @@ import {
   markReturnReceivedAction,
   syncReturnInventoryAction,
   completeReturnAction,
-} from "@/actions/returns.actions";
+} from "@/lib/actions/returns.actions";
 import { ReturnFilters } from "@/types/shipping.types";
 
 export const returnKeys = {
@@ -142,7 +142,7 @@ export function useProcessReturnRefund() {
   return useMutation({
     mutationFn: async (returnId: string) => {
       const { processReturnRefundAction } = await import(
-        "@/actions/returns.actions"
+        "@/lib/actions/returns.actions"
       );
       const res = await processReturnRefundAction(returnId);
       if (!res.success) throw new Error(res.error);
@@ -168,7 +168,7 @@ export function useResolveReturnRefund() {
       note?: string;
     }) => {
       const { resolveReturnRefundAction } = await import(
-        "@/actions/returns.actions"
+        "@/lib/actions/returns.actions"
       );
       const res = await resolveReturnRefundAction(returnId, { refundMethod, note });
       if (!res.success) throw new Error(res.error);
@@ -191,7 +191,7 @@ export function useCustomerReturns() {
     queryKey: ["customer", "returns"] as const,
     queryFn: async () => {
       const { fetchCustomerReturnsAction } = await import(
-        "@/actions/returns.actions"
+        "@/lib/actions/returns.actions"
       );
       const res = await fetchCustomerReturnsAction();
       if (!res.success) throw new Error(res.error);
@@ -206,7 +206,7 @@ export function useCustomerReturnDetail(returnId: string | undefined) {
     queryKey: ["customer", "returns", returnId] as const,
     queryFn: async () => {
       const { fetchCustomerReturnDetailAction } = await import(
-        "@/actions/returns.actions"
+        "@/lib/actions/returns.actions"
       );
       const res = await fetchCustomerReturnDetailAction(returnId!);
       if (!res.success) throw new Error(res.error);
@@ -222,7 +222,7 @@ export function useReturnEligibility(orderId: string | undefined) {
     queryKey: ["customer", "orders", orderId, "return-eligibility"] as const,
     queryFn: async () => {
       const { checkReturnEligibilityAction } = await import(
-        "@/actions/returns.actions"
+        "@/lib/actions/returns.actions"
       );
       const res = await checkReturnEligibilityAction(orderId!);
       if (!res.success) throw new Error(res.error);
@@ -238,7 +238,7 @@ export function useSubmitCustomerReturn() {
   return useMutation({
     mutationFn: async (payload: any) => {
       const { submitCustomerReturnAction } = await import(
-        "@/actions/returns.actions"
+        "@/lib/actions/returns.actions"
       );
       const res = await submitCustomerReturnAction(payload);
       if (!res.success) throw new Error(res.error);

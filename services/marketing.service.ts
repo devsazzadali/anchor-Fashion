@@ -2,7 +2,7 @@ import { MarketingRepository } from "@/repositories/marketing.repository";
 import {
   campaignSchema,
   campaignAudienceSchema,
-} from "@/validators/marketing.schema";
+} from "@/schemas/marketing.schema";
 import { Campaign, CampaignAudience } from "@/types/marketing.types";
 import { createAdminDbClient } from "@/lib/db/client";
 import { EmailProvider } from "@/lib/notifications/EmailProvider";

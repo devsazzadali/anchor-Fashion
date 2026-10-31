@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Save, Globe } from "lucide-react";
 import { toast } from "sonner";
-import { updateSeoSettings } from "@/actions/cms.actions";
+import { updateSeoSettings } from "@/lib/actions/cms.actions";
 
 export default function SeoManager() {
   const [loading, setLoading] = useState(false);

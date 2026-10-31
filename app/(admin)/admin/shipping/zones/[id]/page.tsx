@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { getDeliveryZoneAction } from "@/actions/delivery-zones.actions";
+import { getDeliveryZoneAction } from "@/lib/actions/delivery-zones.actions";
 import { notFound } from "next/navigation";
 
 export const metadata: Metadata = {

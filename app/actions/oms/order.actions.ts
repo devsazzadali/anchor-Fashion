@@ -6,7 +6,7 @@ import { OrderRepository } from "@/lib/repositories/oms/order.repository";
 import {
   UpdateOrderStatusInput,
   updateOrderStatusSchema,
-} from "@/lib/validations/oms";
+} from "@/schemas/oms.schema";
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "@/lib/auth/server";
 import { isStaffOrManager, getRoleForUser, verifyAuthenticated, verifyStaff } from "@/lib/security/roles";

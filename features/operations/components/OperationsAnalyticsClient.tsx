@@ -35,7 +35,7 @@ import {
 import {
   getOperationsAnalyticsAction,
   OperationsMetrics,
-} from "@/actions/admin/operations-analytics.actions";
+} from "@/lib/actions/admin/operations-analytics.actions";
 import { toast } from "sonner";
 
 export function OperationsAnalyticsClient() {

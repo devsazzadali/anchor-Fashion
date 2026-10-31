@@ -258,7 +258,12 @@ export function OrderSummary({
             <Input
               placeholder="Enter discount code"
               value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
+              onChange={(e) => {
+                setCouponCode(e.target.value);
+                // A stale coupon error must not linger once the customer
+                // edits (or clears) the code — clear it on any change.
+                if (couponMessage?.kind === "error") setCouponMessage(null);
+              }}
               className="flex-1"
               disabled={isApplying}
             />

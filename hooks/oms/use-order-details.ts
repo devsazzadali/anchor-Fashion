@@ -3,7 +3,7 @@ import {
   getOrderDetailsAction,
   updateOrderStatusAction,
 } from "@/app/actions/oms/order.actions";
-import { UpdateOrderStatusInput } from "@/lib/validations/oms";
+import { UpdateOrderStatusInput } from "@/schemas/oms.schema";
 
 export function useOrderDetails(orderId: string) {
   const queryClient = useQueryClient();

@@ -1,4 +1,4 @@
-import { getLeadsAction } from "@/actions/crm.actions";
+import { getLeadsAction } from "@/lib/actions/crm.actions";
 import { LeadsClient } from "@/features/crm/components/LeadsClient";
 
 export const metadata = {

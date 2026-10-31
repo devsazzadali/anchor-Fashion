@@ -41,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createWarehouse, updateWarehouse } from "@/actions/warehouse.actions";
+import { createWarehouse, updateWarehouse } from "@/lib/actions/warehouse.actions";
 import { Warehouse } from "@/types/inventory.types";
 
 export const warehouseFormSchema = z.object({

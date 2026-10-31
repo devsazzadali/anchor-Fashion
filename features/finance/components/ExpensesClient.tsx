@@ -52,7 +52,7 @@ import { toast } from "sonner";
 import { Expense } from "@/types/finance.types";
 import { ExpenseDialog } from "./ExpenseDialog";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
-import { deleteExpenseAction } from "@/actions/finance.actions";
+import { deleteExpenseAction } from "@/lib/actions/finance.actions";
 
 interface ExpensesClientProps {
   initialExpenses: Expense[];

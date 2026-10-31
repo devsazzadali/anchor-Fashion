@@ -54,7 +54,7 @@ import { toast } from "sonner";
 import {
   createStockInwardAction,
   addStockAction,
-} from "@/actions/inventory.actions";
+} from "@/lib/actions/inventory.actions";
 import {
   getWarehouses,
   getVariants,

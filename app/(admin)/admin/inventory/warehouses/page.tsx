@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { Card, CardContent } from "@/components/ui/card";
-import { getAllWarehouses, getOverallWarehouseStatsAction } from "@/actions/warehouse.actions";
+import { getAllWarehouses, getOverallWarehouseStatsAction } from "@/lib/actions/warehouse.actions";
 import { WarehouseListClient } from "@/features/warehouse/components/WarehouseListClient";
 import {
   Building2,

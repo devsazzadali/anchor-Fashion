@@ -46,7 +46,7 @@ import {
   saveCampaignDraftAction,
   deleteCampaignAction,
   getCampaignsAction,
-} from "@/actions/marketing.actions";
+} from "@/lib/actions/marketing.actions";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { Campaign } from "@/types/marketing.types";
 import { ScheduleCampaignDialog } from "@/features/marketing/components/ScheduleCampaignDialog";

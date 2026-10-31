@@ -56,7 +56,7 @@ import {
   updateUserProfileAction,
   getAllAvailableRolesAction,
   updateUserPasswordAction,
-} from "@/actions/users.actions";
+} from "@/lib/actions/users.actions";
 import { toast } from "sonner";
 
 export type UserData = {

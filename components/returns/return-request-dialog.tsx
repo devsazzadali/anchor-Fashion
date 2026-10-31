@@ -38,7 +38,7 @@ import {
   useReturnEligibility,
   useSubmitCustomerReturn,
 } from "@/hooks/shipping/use-returns";
-import { uploadReturnProofAction } from "@/actions/returns.actions";
+import { uploadReturnProofAction } from "@/lib/actions/returns.actions";
 import { formatCurrency } from "@/lib/utils";
 
 interface ReturnRequestDialogProps {

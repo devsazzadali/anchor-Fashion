@@ -1,7 +1,7 @@
 import { createDbClient } from "@/lib/db/client";
 import { OrderService } from "./order.service";
 import { InventoryService } from "@/services/inventory.service";
-import { FulfillShipmentInput } from "@/lib/validations/oms";
+import { FulfillShipmentInput } from "@/schemas/oms.schema";
 
 export class FulfillmentService {
   private orderService = new OrderService();

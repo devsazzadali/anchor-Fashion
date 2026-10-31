@@ -1,5 +1,5 @@
 import { UsersTable } from "@/features/admin/components/UsersTable";
-import { getUsersByRoleAction } from "@/actions/users.actions";
+import { getUsersByRoleAction } from "@/lib/actions/users.actions";
 import { AlertTriangle } from "lucide-react";
 
 export const metadata = {

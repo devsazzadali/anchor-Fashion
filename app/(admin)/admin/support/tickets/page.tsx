@@ -3,7 +3,7 @@ import {
   getTicketsAction,
   getAvailableAgentsAction,
 } from "@/app/actions/support/ticket.actions";
-import { getCustomersAction } from "@/actions/crm.actions";
+import { getCustomersAction } from "@/lib/actions/crm.actions";
 import { createDbClient } from "@/lib/db/client";
 import { TicketsClient } from "./TicketsClient";
 
