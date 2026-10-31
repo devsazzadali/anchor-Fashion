@@ -10,7 +10,7 @@ import {
   syncTrackingAction,
   createShipmentAction,
   reassignCourierAction,
-} from "@/actions/shipping.actions";
+} from "@/actions/shipment.actions";
 import { ShipmentFilters } from "@/types/shipping.types";
 
 export const shipmentKeys = {

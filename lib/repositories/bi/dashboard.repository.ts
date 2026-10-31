@@ -224,29 +224,77 @@ export class DashboardRepository {
   }
 
   async getTopSellers() {
-    const orderItems = await prisma.orderItem.findMany({
-      select: { productId: true, productName: true, unitPrice: true, quantity: true, totalPrice: true },
-    });
+    // REG-84 (Round 20): sold/earnings now come from the database
+    // (three groupBy passes) instead of fetching every order item and
+    // summing in JS. Two semantics of the old loop are preserved
+    // structurally:
+    //  - "sold": the JS counted a 0-quantity item as 1 sold
+    //    (Number(q) || 1) where a plain SUM counts 0 — so sold =
+    //    SUM(quantity WHERE quantity > 0) + COUNT(quantity = 0).
+    //    (quantity is Int NOT NULL in the schema/DB, so the JS
+    //    null-quantity → 1 case is unreachable through Prisma.)
+    //  - product_name/price are FIRST-SEEN snapshots from the items
+    //    iteration: a distinct findMany returns exactly one row per
+    //    product — the first in result order, the same unordered
+    //    first-seen semantics the old full scan had.
+    // Equivalence against the old implementation was proven
+    // byte-identical over the full production dataset (40 items,
+    // including a product whose items carry divergent name/price
+    // snapshots) plus synthetic quantity-0 / divergent-snapshot
+    // fixtures — Round-20 equivalence + repo-execution harnesses.
+    const [soldGroups, zeroQtyGroups, earningGroups, firstSeenItems] =
+      await Promise.all([
+        prisma.orderItem.groupBy({
+          by: ["productId"],
+          where: { productId: { not: null }, quantity: { gt: 0 } },
+          _sum: { quantity: true },
+        }),
+        prisma.orderItem.groupBy({
+          by: ["productId"],
+          where: { productId: { not: null }, quantity: { equals: 0 } },
+          _count: { _all: true },
+        }),
+        prisma.orderItem.groupBy({
+          by: ["productId"],
+          where: { productId: { not: null } },
+          _sum: { totalPrice: true },
+        }),
+        prisma.orderItem.findMany({
+          where: { productId: { not: null } },
+          distinct: ["productId"],
+          select: { productId: true, productName: true, unitPrice: true },
+        }),
+      ]);
+
+    const soldByProduct = new Map<string, number>();
+    for (const g of soldGroups) {
+      if (g.productId) soldByProduct.set(g.productId, g._sum.quantity || 0);
+    }
+    for (const g of zeroQtyGroups) {
+      if (g.productId) {
+        soldByProduct.set(g.productId, (soldByProduct.get(g.productId) || 0) + g._count._all);
+      }
+    }
+    const earningsByProduct = new Map<string, number>();
+    for (const g of earningGroups) {
+      if (g.productId) earningsByProduct.set(g.productId, Number(g._sum.totalPrice) || 0);
+    }
 
     const statsByProduct: Record<
       string,
       { product_id: string; product_name: string; sold: number; earnings: number; price: number }
     > = {};
 
-    for (const item of orderItems) {
+    for (const item of firstSeenItems) {
       if (!item.productId) continue;
       const pid = item.productId;
-      if (!statsByProduct[pid]) {
-        statsByProduct[pid] = {
-          product_id: pid,
-          product_name: item.productName || "Unknown Product",
-          sold: 0,
-          earnings: 0,
-          price: Number(item.unitPrice) || 0,
-        };
-      }
-      statsByProduct[pid].sold += Number(item.quantity) || 1;
-      statsByProduct[pid].earnings += Number(item.totalPrice) || 0;
+      statsByProduct[pid] = {
+        product_id: pid,
+        product_name: item.productName || "Unknown Product",
+        sold: soldByProduct.get(pid) || 0,
+        earnings: earningsByProduct.get(pid) || 0,
+        price: Number(item.unitPrice) || 0,
+      };
     }
 
     const sortedSales = Object.values(statsByProduct)

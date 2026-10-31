@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, ShieldCheck } from "lucide-react";
-import { applyCouponAction, removeCouponAction } from "@/actions/checkout.actions";
+import { applyCouponAction, removeCouponAction } from "@/lib/actions/checkout.actions";
 import { toast } from "sonner";
 import { totalVatAmount, priceWithVat } from "@/lib/utils/vat";
 import { getPublicZonesAction } from "@/lib/actions/shipping.actions";

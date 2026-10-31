@@ -197,7 +197,7 @@ export async function getFreeShippingThreshold(): Promise<number> {
  * address — the label keeps the established sender block below, so an
  * untouched install prints exactly what it printed before this wiring.
  */
-export const LABEL_SENDER_ADDRESS_FALLBACK =
+const LABEL_SENDER_ADDRESS_FALLBACK =
   "Plot 42, Road 11, Block D, Banani, Dhaka 1213";
 
 export async function getLabelSenderAddress(): Promise<string> {

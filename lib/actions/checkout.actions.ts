@@ -12,6 +12,10 @@ import { CheckoutStep } from "@/types/checkout.types";
 import { CodRiskService } from "../services/fraud/cod-risk.service";
 import { CodOtpService } from "../services/fraud/cod-otp.service";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { CheckoutService as SessionCheckoutService } from "@/services/checkout.service";
+import { CouponService } from "@/services/coupon.service";
+import { createDbClient } from "@/lib/db/client";
 
 async function getSessionIdentifiers() {
   const { user } = await getServerSession();
@@ -417,4 +421,56 @@ export async function processCheckoutAction(
   } catch (error: any) {
     return { success: false, error: error.message };
   }
+}
+
+/**
+ * Coupon actions — moved verbatim (logic identical) from
+ * actions/checkout.actions.ts in Round-20 Item C Step 5, where they were
+ * the last live exports of that module. They operate on the checkout
+ * SESSION via the root (instance-style) CheckoutService and validate via
+ * CouponService, exactly as before; the lib CheckoutService imported at
+ * the top of this file is the static-style namesake, hence the alias.
+ */
+async function getCouponUserId(): Promise<string | undefined> {
+  try {
+    const { getServerSession } = await import("@/lib/auth/server");
+    const { user } = await getServerSession();
+    if (user?.id) return user.id;
+  } catch (_) {}
+  try {
+    const db = await createDbClient();
+    const {
+      data: { user },
+    } = await db.auth.getUser();
+    return user?.id ?? undefined;
+  } catch (_) {
+    return undefined;
+  }
+}
+
+export async function applyCouponAction(sessionId: string, code: string, subtotal: number) {
+  const checkoutService = new SessionCheckoutService();
+  const session = await checkoutService.getSession(sessionId);
+  if (!session) throw new Error("Session not found");
+
+  const userId = await getCouponUserId();
+  const validation = await CouponService.validateAndCalculateDiscount(code, subtotal, userId);
+
+  if (!validation.isValid) {
+    return { success: false, error: validation.error };
+  }
+
+  await checkoutService.updateCouponStep(sessionId, validation.coupon?.code || code);
+  revalidatePath("/checkout");
+  return { success: true, discount: validation.discount, code: validation.coupon?.code };
+}
+
+export async function removeCouponAction(sessionId: string) {
+  const checkoutService = new SessionCheckoutService();
+  const session = await checkoutService.getSession(sessionId);
+  if (!session) throw new Error("Session not found");
+
+  await checkoutService.updateCouponStep(sessionId, null);
+  revalidatePath("/checkout");
+  return { success: true };
 }
