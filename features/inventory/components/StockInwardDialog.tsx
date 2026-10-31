@@ -63,7 +63,9 @@ import {
 import {
   printGRNChallan,
   numberToWordsBDT,
+  GRN_DEFAULT_CONTACT_PHONE,
 } from "@/features/inventory/utils/printGRNChallan";
+import { getStoreInfo } from "@/lib/actions/settings.actions";
 import { ClientBarcode } from "@/components/ui/ClientBarcode";
 
 export interface StockInwardDialogProps {
@@ -184,6 +186,23 @@ export function StockInwardDialog({
   // Post-submission GRN receipt modal
   const [completedGRN, setCompletedGRN] = useState<any | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
+
+  // REG-62 follow-up: the GRN letterhead phone is the canonical
+  // store_info phone (same source as the shipping label) — fetched via
+  // the getStoreInfo server action like other client surfaces do;
+  // until it lands (or if it fails) the store_info default applies.
+  const [storePhone, setStorePhone] = useState(GRN_DEFAULT_CONTACT_PHONE);
+  useEffect(() => {
+    let cancelled = false;
+    getStoreInfo()
+      .then((info) => {
+        if (!cancelled && info?.phone) setStorePhone(info.phone);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Quick single-item form state
   const [quickVariantId, setQuickVariantId] = useState("");
@@ -1276,7 +1295,9 @@ export function StockInwardDialog({
               </div>
               <Button
                 size="sm"
-                onClick={() => printGRNChallan(completedGRN)}
+                onClick={() =>
+                  printGRNChallan({ ...completedGRN, contactPhone: storePhone })
+                }
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs"
               >
                 <Printer className="mr-1.5 h-4 w-4" /> Print GRN Challan
@@ -1300,7 +1321,7 @@ export function StockInwardDialog({
                     </p>
                     <p className="text-[10px] text-slate-500 mt-1 leading-tight">
                       Plot # 42, Sector 7, Uttara Model Town, Dhaka-1230, Bangladesh<br />
-                      Direct: +880 9612-ANCHOR | Email: inventory@anchorfashion.com<br />
+                      Direct: {storePhone} | Email: inventory@anchorfashion.com<br />
                       VAT / BIN Registration: <strong className="font-mono text-slate-700">002948192-0101</strong>
                     </p>
                   </div>
@@ -1549,7 +1570,9 @@ export function StockInwardDialog({
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  onClick={() => printGRNChallan(completedGRN)}
+                  onClick={() =>
+                    printGRNChallan({ ...completedGRN, contactPhone: storePhone })
+                  }
                   className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-sm"
                 >
                   <Printer className="mr-1.5 h-4 w-4" /> Print GRN Challan (A4)

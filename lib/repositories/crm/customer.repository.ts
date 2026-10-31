@@ -101,35 +101,99 @@ export class CustomerRepository {
     );
   }
 
-  /** Real per-customer aggregates from orders + support tickets. */
+  /**
+   * Real per-customer aggregates from orders + support tickets.
+   *
+   * REG-84 (Round 19): this used to run 2 queries PER customer
+   * (an orders findMany + a ticket count), and getCustomerSegments /
+   * getCRMSummary call it for every merged customer — a classic N+1
+   * whose query count grew linearly with the directory. It now
+   * delegates to the batched loader below: 2 queries TOTAL for any
+   * number of customers, with the per-customer attribution done in
+   * memory under the exact predicate the per-customer queries used,
+   * so every figure is identical to the old implementation's.
+   */
   private async aggregatesFor(c: MergedCustomer) {
-    const ids = [c.id, c.altId].filter(Boolean) as string[];
-    const [orders, tickets] = await Promise.all([
+    const map = await this.aggregatesForMany([c]);
+    return map.get(c)!;
+  }
+
+  /** Batched aggregates for a whole set of merged customers (2 queries). */
+  private async aggregatesForMany(customers: MergedCustomer[]) {
+    const result = new Map<
+      MergedCustomer,
+      {
+        ordersCount: number;
+        totalSpent: number;
+        tickets: number;
+        lastOrderAt: Date | null;
+      }
+    >();
+    if (customers.length === 0) return result;
+
+    const allIds = [
+      ...new Set(
+        customers.flatMap((c) => [c.id, c.altId].filter(Boolean) as string[])
+      ),
+    ];
+
+    const [orders, ticketGroups] = await Promise.all([
       prisma.order.findMany({
         where: {
-          OR: [{ profileId: { in: ids } }, { customerId: { in: ids } }],
+          OR: [{ profileId: { in: allIds } }, { customerId: { in: allIds } }],
         },
-        select: { totalAmount: true, status: true, createdAt: true },
+        select: {
+          profileId: true,
+          customerId: true,
+          totalAmount: true,
+          status: true,
+          createdAt: true,
+        },
       }),
-      prisma.supportTicket.count({
-        where: { customerId: { in: ids } },
+      prisma.supportTicket.groupBy({
+        by: ["customerId"],
+        where: { customerId: { in: allIds } },
+        _count: { _all: true },
       }),
     ]);
 
-    const live = orders.filter(
-      (o) => String(o.status).toUpperCase() !== "CANCELLED"
-    );
-    const ordersCount = live.length;
-    const orderSpent = live.reduce(
-      (sum, o) => sum + (Number(o.totalAmount) || 0),
-      0
-    );
-    const totalSpent = Math.max(orderSpent, c.storedTotalSpent);
-    const lastOrderAt = live.length
-      ? new Date(Math.max(...live.map((o) => o.createdAt.getTime())))
-      : null;
+    const ticketsByCustomerId = new Map<string, number>();
+    for (const g of ticketGroups) {
+      if (g.customerId != null) {
+        ticketsByCustomerId.set(g.customerId, g._count._all);
+      }
+    }
 
-    return { ordersCount, totalSpent, tickets, lastOrderAt };
+    for (const c of customers) {
+      const ids = new Set(
+        [c.id, c.altId].filter(Boolean) as string[]
+      );
+      // Same attribution predicate as the old per-customer WHERE:
+      // an order belongs to this customer when either of its id
+      // columns names one of the customer's ids.
+      const mine = orders.filter(
+        (o) =>
+          (o.profileId != null && ids.has(o.profileId)) ||
+          (o.customerId != null && ids.has(o.customerId))
+      );
+      const live = mine.filter(
+        (o) => String(o.status).toUpperCase() !== "CANCELLED"
+      );
+      const ordersCount = live.length;
+      const orderSpent = live.reduce(
+        (sum, o) => sum + (Number(o.totalAmount) || 0),
+        0
+      );
+      const totalSpent = Math.max(orderSpent, c.storedTotalSpent);
+      const lastOrderAt = live.length
+        ? new Date(Math.max(...live.map((o) => o.createdAt.getTime())))
+        : null;
+      let tickets = 0;
+      for (const id of ids) tickets += ticketsByCustomerId.get(id) || 0;
+
+      result.set(c, { ordersCount, totalSpent, tickets, lastOrderAt });
+    }
+    return result;
   }
 
   /** Lifecycle stage derived from the customer's real order history. */
@@ -213,9 +277,11 @@ export class CustomerRepository {
       };
     };
 
-    const rows = await Promise.all(
-      pageRows.map(async (c) => {
-        const agg = await this.aggregatesFor(c);
+    // REG-84 (Round 19): one batched aggregate load for the whole page
+    // (was 2 queries per row via aggregatesFor).
+    const aggMap = await this.aggregatesForMany(pageRows);
+    const rows = pageRows.map((c) => {
+        const agg = aggMap.get(c)!;
         const lastInteraction = new Date(
           Math.max(
             c.updatedAt.getTime(),
@@ -245,8 +311,7 @@ export class CustomerRepository {
           total_support_tickets: agg.tickets,
           last_interaction_at: lastInteraction.toISOString(),
         };
-      })
-    );
+    });
     return rows;
   }
 
@@ -266,14 +331,15 @@ export class CustomerRepository {
     const counts: Record<string, number> = Object.fromEntries(
       stages.map((s) => [s, 0])
     );
-    await Promise.all(
-      merged.map(async (c) => {
-        const agg = await this.aggregatesFor(c);
-        counts[
-          this.deriveStage(agg.ordersCount, agg.totalSpent, agg.lastOrderAt)
-        ] += 1;
-      })
-    );
+    // REG-84 (Round 19): batched — 2 queries total for all customers
+    // (was 2 per customer).
+    const aggMap = await this.aggregatesForMany(merged);
+    for (const c of merged) {
+      const agg = aggMap.get(c)!;
+      counts[
+        this.deriveStage(agg.ordersCount, agg.totalSpent, agg.lastOrderAt)
+      ] += 1;
+    }
 
     const totalCustomers = merged.length;
     return stages.map((stage) => {
@@ -324,12 +390,12 @@ export class CustomerRepository {
     // customers (previously: all orders incl. cancelled/guests, and a
     // fabricated 30% loyalty-membership figure).
     let linkedRevenue = 0;
-    await Promise.all(
-      merged.map(async (c) => {
-        const agg = await this.aggregatesFor(c);
-        linkedRevenue += agg.totalSpent;
-      })
-    );
+    // REG-84 (Round 19): batched — 2 queries total for all customers
+    // (was 2 per customer).
+    const aggMap = await this.aggregatesForMany(merged);
+    for (const c of merged) {
+      linkedRevenue += aggMap.get(c)!.totalSpent;
+    }
     const loyaltyMembers = await prisma.loyalty_accounts.count();
 
     return {

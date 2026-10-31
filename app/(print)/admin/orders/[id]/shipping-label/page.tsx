@@ -1,6 +1,9 @@
 import React from "react";
 import { getOrderDetailsAction } from "@/app/actions/oms/order.actions";
-import { getStoreInfo } from "@/lib/actions/settings.actions";
+import {
+  getStoreInfo,
+  getLabelSenderAddress,
+} from "@/lib/actions/settings.actions";
 import { notFound, redirect } from "next/navigation";
 import { createDbClient } from "@/lib/db/client";
 import { STAFF_ROLES } from "@/lib/constants/auth";
@@ -45,6 +48,12 @@ export default async function AdminPrintShippingLabelPage(props: { params: Promi
   // placeholder number, not a real phone).
   const storeInfo = await getStoreInfo().catch(() => null);
   const senderPhone = storeInfo?.phone || "+880 1711-223344";
+
+  // REG-62 follow-up: the sender address likewise comes from store_info
+  // (Admin → General Settings); until an admin sets a real address there,
+  // getLabelSenderAddress returns the established Banani block, so the
+  // printed label is unchanged on an untouched install.
+  const senderAddress = await getLabelSenderAddress();
 
   // Fetch the active shipment for this order.
   // REG-83: the courier_providers(name) embed never attaches on shipments
@@ -133,7 +142,7 @@ export default async function AdminPrintShippingLabelPage(props: { params: Promi
           <div className="pr-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">From</p>
             <p className="text-xs font-bold">Anchor Fashion Ltd</p>
-            <p className="text-[10px] leading-tight">Plot 42, Road 11, Block D<br/>Banani, Dhaka 1213<br/>Phone: {senderPhone}</p>
+            <p className="text-[10px] leading-tight">{senderAddress}<br/>Phone: {senderPhone}</p>
           </div>
           <div className="shrink-0 p-1 border border-slate-300">
             <ClientQRCode value={trackingUrl} size={50} level="L" />

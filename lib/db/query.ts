@@ -1160,7 +1160,20 @@ export class DbQueryBuilder implements PromiseLike<any> {
         if (data === null) return this.gracefulEmpty();
 
         const where = this.where();
-        const existing = await delegate.findMany({ where });
+        // REG-84 (Round 19): the row fetch behind an update was the last
+        // unbounded materialization in this builder — bound it with the
+        // same MAX_UNBOUNDED_ROWS ceiling + loud log the select path got
+        // in Round 18, so a pathological filter can never pull a whole
+        // table into memory before the per-row update loop.
+        const existing = await delegate.findMany({
+          where,
+          take: MAX_UNBOUNDED_ROWS,
+        });
+        if (existing.length >= MAX_UNBOUNDED_ROWS) {
+          console.error(
+            `[db] REG-84 ceiling hit on ${this.tableName}: update matched ${MAX_UNBOUNDED_ROWS}+ rows; only the first ${MAX_UNBOUNDED_ROWS} will be updated. Narrow the filters at the call site.`
+          );
+        }
         if (existing.length === 0) return this.finish([], null);
 
         // Preserve @updatedAt columns the caller did not set: the raw-SQL
@@ -1199,7 +1212,20 @@ export class DbQueryBuilder implements PromiseLike<any> {
 
       if (this.action === "delete") {
         const where = this.where();
-        const existing = await delegate.findMany({ where });
+        // REG-84 (Round 19, same-class extension of the update bound):
+        // this fetch only ECHOES the deleted rows back to the caller —
+        // deleteMany below still removes every matching row — so bound
+        // the echo with the same ceiling + loud log rather than
+        // materializing a whole table just to return it.
+        const existing = await delegate.findMany({
+          where,
+          take: MAX_UNBOUNDED_ROWS,
+        });
+        if (existing.length >= MAX_UNBOUNDED_ROWS) {
+          console.error(
+            `[db] REG-84 ceiling hit on ${this.tableName}: delete matched ${MAX_UNBOUNDED_ROWS}+ rows; the delete applies to all of them but only the first ${MAX_UNBOUNDED_ROWS} are returned. Narrow the filters at the call site.`
+          );
+        }
         if (existing.length > 0) {
           await delegate.deleteMany({ where });
         }

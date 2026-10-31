@@ -190,6 +190,26 @@ export async function getFreeShippingThreshold(): Promise<number> {
 }
 
 /**
+ * REG-62 follow-up: the sender address printed on the shipping label.
+ * Admins set the sender address via General Settings (store_info.address).
+ * Until they do — i.e. store_info still carries the generic storefront
+ * default ("Dhaka, Bangladesh"), which is not a warehouse sender
+ * address — the label keeps the established sender block below, so an
+ * untouched install prints exactly what it printed before this wiring.
+ */
+export const LABEL_SENDER_ADDRESS_FALLBACK =
+  "Plot 42, Road 11, Block D, Banani, Dhaka 1213";
+
+export async function getLabelSenderAddress(): Promise<string> {
+  const info = await getStoreInfo().catch(() => null);
+  const address = info?.address?.trim();
+  if (!address || address === DEFAULTS.store_info.address) {
+    return LABEL_SENDER_ADDRESS_FALLBACK;
+  }
+  return address;
+}
+
+/**
  * REG-29 + REG-52: ONE source of truth for identity + contacts.
  *
  * Canonical store identity/contacts live in `store_info`

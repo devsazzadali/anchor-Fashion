@@ -35,6 +35,14 @@ export interface GRNPrintData {
   inwardType: string;
   receivedBy?: string;
   notes?: string;
+  /**
+   * REG-62 follow-up: the "Direct:" phone printed on the letterhead.
+   * Callers pass the canonical store_info phone (the same source the
+   * shipping label reads); when omitted or blank, the print falls back
+   * to GRN_DEFAULT_CONTACT_PHONE — never the old +880 9612-ANCHOR
+   * vanity number, which is not a dialable phone.
+   */
+  contactPhone?: string;
   totalQuantity: number;
   totalCost: number;
   items: Array<{
@@ -50,7 +58,17 @@ export interface GRNPrintData {
   }>;
 }
 
+/**
+ * REG-62 follow-up: fallback for the letterhead phone when the caller
+ * did not supply one — the canonical store_info default (the same value
+ * lib/actions/settings.actions DEFAULTS and the shipping label use).
+ */
+export const GRN_DEFAULT_CONTACT_PHONE = "+880 1711-223344";
+
 export function generateGRNPrintHTML(data: GRNPrintData): string {
+  const contactPhone =
+    (data.contactPhone || "").trim() || GRN_DEFAULT_CONTACT_PHONE;
+
   const dateStr = data.receivedAt
     ? new Date(data.receivedAt).toLocaleDateString("en-GB", {
         day: "2-digit",
@@ -419,7 +437,7 @@ export function generateGRNPrintHTML(data: GRNPrintData): string {
           <div class="brand-sub">Central Warehouse & Logistics Network</div>
           <div class="brand-contact">
             Plot # 42, Sector 7, Uttara Model Town, Dhaka-1230, Bangladesh<br>
-            Direct: +880 9612-ANCHOR | Email: inventory@anchorfashion.com<br>
+            Direct: ${contactPhone} | Email: inventory@anchorfashion.com<br>
             VAT / BIN Registration: <strong>002948192-0101</strong>
           </div>
         </td>
