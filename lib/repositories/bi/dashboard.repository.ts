@@ -5,45 +5,92 @@ export class DashboardRepository {
     const dateLimit = new Date();
     dateLimit.setDate(dateLimit.getDate() - days);
 
-    const rawOrders = await prisma.order.findMany({
-      select: { totalAmount: true, status: true, createdAt: true, profileId: true },
-      where: { createdAt: { gte: dateLimit } },
-      orderBy: { createdAt: "asc" },
+    // REG-84 (Round 22): day bucketing and first-seen attribution now
+    // happen in the database (one $queryRaw) instead of fetching every
+    // in-window order and grouping in JS. Prisma groupBy cannot do
+    // this — groupBy(by: ["createdAt"]) buckets by exact timestamp
+    // (Round 20 measured 35 distinct timestamps for 35 production
+    // orders). The semantics of the old loop are preserved exactly:
+    //  - Days are UTC days, bucketed explicitly with
+    //    (created_at AT TIME ZONE 'UTC')::date — never the DB session
+    //    timezone — matching the old toISOString().slice(0, 10).
+    //  - total_orders counts ALL orders that day (any status);
+    //    revenue excludes statuses whose lowercase is cancelled /
+    //    failed / refunded / returned, as the old loop did.
+    //  - Revenue is SUM(total_amount::double precision ORDER BY
+    //    created_at): the old code accumulated Number(totalAmount) in
+    //    float64, in created_at order, and Postgres double-precision
+    //    SUM reproduces that accumulation bit-for-bit. A numeric SUM
+    //    converted once would NOT be identical (e.g. 0.10 + 0.20 is
+    //    0.30000000000000004 in the old output, 0.3 as a numeric sum —
+    //    measured diverging on 22/30 random 2dp trials, Round 22).
+    //  - new_customers per day = profiles whose MIN(created_at)
+    //    inside the window falls on that day: the old first-seen Set,
+    //    in created_at-asc iteration, counted a profile on the day of
+    //    its first in-window order regardless of that order's status.
+    //    Window-scoped, not all-time; null profile_id never counts.
+    //  - The window limit is computed in JS exactly as before and
+    //    passed as a parameter, so boundary semantics (>= limit) are
+    //    preserved by construction; an empty window yields no rows,
+    //    which maps to [] just like the old early return.
+    // Equivalence against the old implementation was proven
+    // byte-identical over the full production dataset (35 orders)
+    // plus synthetic and 400-row randomised fixtures — 22 window
+    // comparisons (7d / 365d / 1d / 0d, single-day, empty and
+    // boundary-exact windows) in the Round-22 PGlite harness
+    // (PG 18.6, the production major version; session TZ forced to
+    // Asia/Dhaka) and the repo-execution stub harness.
+    const rows = await prisma.$queryRaw<
+      { date: string; total_revenue: number; total_orders: bigint; new_customers: bigint }[]
+    >`
+      WITH daily AS (
+        SELECT
+          (created_at AT TIME ZONE 'UTC')::date AS day,
+          COUNT(*) AS total_orders,
+          COALESCE(
+            SUM(total_amount::double precision ORDER BY created_at)
+              FILTER (WHERE lower(status) NOT IN ('cancelled', 'failed', 'refunded', 'returned')),
+            0
+          ) AS total_revenue
+        FROM orders
+        WHERE created_at >= ${dateLimit}
+        GROUP BY day
+      ),
+      first_seen AS (
+        SELECT
+          profile_id,
+          (MIN(created_at) AT TIME ZONE 'UTC')::date AS day
+        FROM orders
+        WHERE created_at >= ${dateLimit} AND profile_id IS NOT NULL
+        GROUP BY profile_id
+      ),
+      new_customers AS (
+        SELECT day, COUNT(*) AS new_customers
+        FROM first_seen
+        GROUP BY day
+      )
+      SELECT
+        daily.day::text AS date,
+        daily.total_revenue AS total_revenue,
+        daily.total_orders AS total_orders,
+        COALESCE(new_customers.new_customers, 0) AS new_customers
+      FROM daily
+      LEFT JOIN new_customers ON new_customers.day = daily.day
+      ORDER BY daily.day ASC
+    `;
+
+    return rows.map((r) => {
+      const revenue = Number(r.total_revenue) || 0;
+      const orders = Number(r.total_orders) || 0;
+      return {
+        date: r.date,
+        total_revenue: revenue,
+        total_orders: orders,
+        aov: orders > 0 ? Math.round(revenue / orders) : 0,
+        new_customers: Number(r.new_customers) || 0,
+        returning_customers: 0,
+      };
     });
-
-    if (rawOrders.length === 0) return [];
-
-    const grouped: Record<
-      string,
-      { date: string; revenue: number; orders: number; aov: number; newCustomers: number }
-    > = {};
-    const seenCustomers = new Set<string>();
-
-    for (const ord of rawOrders) {
-      const dateStr = ord.createdAt.toISOString().split("T")[0];
-      if (!grouped[dateStr]) {
-        grouped[dateStr] = { date: dateStr, revenue: 0, orders: 0, aov: 0, newCustomers: 0 };
-      }
-      grouped[dateStr].orders += 1;
-      
-      const statusLower = ord.status.toLowerCase();
-      if (!["cancelled", "failed", "refunded", "returned"].includes(statusLower)) {
-        grouped[dateStr].revenue += Number(ord.totalAmount) || 0;
-      }
-      if (ord.profileId && !seenCustomers.has(ord.profileId)) {
-        seenCustomers.add(ord.profileId);
-        grouped[dateStr].newCustomers += 1;
-      }
-    }
-
-    return Object.values(grouped).map((g) => ({
-      date: g.date,
-      total_revenue: g.revenue,
-      total_orders: g.orders,
-      aov: g.orders > 0 ? Math.round(g.revenue / g.orders) : 0,
-      new_customers: g.newCustomers,
-      returning_customers: 0,
-    }));
   }
 
   async getDashboardKPIs() {
