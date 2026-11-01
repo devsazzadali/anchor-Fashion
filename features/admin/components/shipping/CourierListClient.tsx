@@ -69,6 +69,16 @@ interface Props {
   initialCouriers: CourierProviderRecord[];
 }
 
+const INITIAL_NEW_COURIER = {
+  code: "steadfast",
+  name: "",
+  apiKey: "",
+  secretKey: "",
+  shipperPhone: "",
+  isSandbox: false,
+  isActive: true,
+};
+
 export function CourierListClient({ initialCouriers }: Props) {
   const [couriers, setCouriers] = useState(initialCouriers);
   const [metrics, setMetrics] = useState<Record<string, CourierMetrics>>({});
@@ -77,15 +87,22 @@ export function CourierListClient({ initialCouriers }: Props) {
   const [syncing, setSyncing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newCourier, setNewCourier] = useState({
-    code: "steadfast",
-    name: "",
-    apiKey: "",
-    secretKey: "",
-    shipperPhone: "",
-    isSandbox: false,
-    isActive: true,
-  });
+  const [newCourier, setNewCourier] = useState(INITIAL_NEW_COURIER);
+  // True once the admin types into Display name by hand — a provider
+  // switch must never stomp a hand-typed name with the prefill.
+  const [newCourierNameDirty, setNewCourierNameDirty] = useState(false);
+
+  // The Add dialog opens pristine every time: a cancelled form is
+  // discarded on close, not carried into the next open.
+  const resetNewCourierForm = () => {
+    setNewCourier({ ...INITIAL_NEW_COURIER });
+    setNewCourierNameDirty(false);
+  };
+
+  const handleAddOpenChange = (open: boolean) => {
+    setAddOpen(open);
+    if (!open) resetNewCourierForm();
+  };
 
   const handleCreateCourier = async () => {
     setCreating(true);
@@ -105,15 +122,7 @@ export function CourierListClient({ initialCouriers }: Props) {
       toast.success(`${res.data.display_name} added. Configure or test it any time.`);
       setCouriers((prev) => [...prev, res.data!]);
       setAddOpen(false);
-      setNewCourier({
-        code: "steadfast",
-        name: "",
-        apiKey: "",
-        secretKey: "",
-        shipperPhone: "",
-        isSandbox: false,
-        isActive: true,
-      });
+      resetNewCourierForm();
     } catch (err: any) {
       toast.error(err.message || "Failed to add courier");
     } finally {
@@ -419,7 +428,7 @@ export function CourierListClient({ initialCouriers }: Props) {
 
       {/* Add Courier (Phase 9): providers can now be created from the
           dashboard — previously only pre-seeded rows could be edited. */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen} onOpenChange={handleAddOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Courier Provider</DialogTitle>
@@ -437,10 +446,13 @@ export function CourierListClient({ initialCouriers }: Props) {
                   setNewCourier((s) => ({
                     ...s,
                     code: v,
-                    name:
-                      s.name ||
-                      COURIER_CODE_OPTIONS.find((o) => o.code === v)?.label ||
-                      "",
+                    // Keep the Display name prefill in sync with the
+                    // selected provider until the admin edits the name
+                    // by hand (nameDirty) — then it is left untouched.
+                    name: newCourierNameDirty
+                      ? s.name
+                      : COURIER_CODE_OPTIONS.find((o) => o.code === v)
+                          ?.label || "",
                   }))
                 }
               >
@@ -461,9 +473,10 @@ export function CourierListClient({ initialCouriers }: Props) {
               <Input
                 id="new-courier-name"
                 value={newCourier.name}
-                onChange={(e) =>
-                  setNewCourier((s) => ({ ...s, name: e.target.value }))
-                }
+                onChange={(e) => {
+                  setNewCourierNameDirty(true);
+                  setNewCourier((s) => ({ ...s, name: e.target.value }));
+                }}
                 placeholder="e.g. Steadfast"
               />
             </div>
@@ -548,7 +561,7 @@ export function CourierListClient({ initialCouriers }: Props) {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setAddOpen(false)}
+              onClick={() => handleAddOpenChange(false)}
               disabled={creating}
             >
               Cancel
