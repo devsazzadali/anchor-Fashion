@@ -117,8 +117,8 @@ export function AddTaskDialog({ onTaskCreated, trigger }: AddTaskDialogProps) {
       } else {
         toast.error(res.error || "Failed to create task");
       }
-    } catch (error: any) {
-      toast.error(error.message || "An unexpected error occurred");
+    } catch (error) {
+      toast.error((error as Error).message || "An unexpected error occurred");
     }
   };
 

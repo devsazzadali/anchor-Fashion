@@ -51,7 +51,7 @@ async function setNeonAuthPassword(params: {
     }),
   });
   if (!requestRes.ok) {
-    const body: any = await requestRes.json().catch(() => ({}));
+    const body = await requestRes.json().catch(() => ({}));
     return {
       error: {
         message:
@@ -90,7 +90,7 @@ async function setNeonAuthPassword(params: {
     body: JSON.stringify({ token, newPassword: params.newPassword }),
   });
   if (!resetRes.ok) {
-    const body: any = await resetRes.json().catch(() => ({}));
+    const body = await resetRes.json().catch(() => ({}));
     // Do not leave a live reset token behind after a failed attempt.
     await prisma
       .$executeRawUnsafe(
@@ -240,8 +240,8 @@ export const dbAuth = {
         }
       }
       return { data: { user: updates }, error: null };
-    } catch (e: any) {
-      return { data: null, error: { message: e.message } };
+    } catch (e) {
+      return { data: null, error: { message: (e as Error).message } };
     }
   },
   resetPasswordForEmail: async (email: string, opts?: any) => {
@@ -252,7 +252,7 @@ export const dbAuth = {
       const redirectTo = opts?.redirectTo;
       if (typeof window !== "undefined") {
         const { authClient } = await import("@/lib/auth/client");
-        const client: any = authClient as any;
+        const client = authClient as any;
         const requestReset =
           client.requestPasswordReset || client.forgetPassword;
         if (typeof requestReset !== "function") {
@@ -295,7 +295,7 @@ export const dbAuth = {
         }),
       });
       if (!res.ok) {
-        const body: any = await res.json().catch(() => ({}));
+        const body = await res.json().catch(() => ({}));
         return {
           data: null,
           error: {
@@ -304,10 +304,10 @@ export const dbAuth = {
         };
       }
       return { data: {}, error: null };
-    } catch (e: any) {
+    } catch (e) {
       return {
         data: null,
-        error: { message: e?.message || "Failed to send reset password link" },
+        error: { message: (e as Error)?.message || "Failed to send reset password link" },
       };
     }
   },
@@ -382,8 +382,8 @@ export const dbAuth = {
       try {
         await prisma.profile.delete({ where: { id } });
         return { data: null, error: null };
-      } catch (e: any) {
-        return { data: null, error: { message: e.message } };
+      } catch (e) {
+        return { data: null, error: { message: (e as Error).message } };
       }
     },
     createUser: async (
@@ -431,7 +431,7 @@ export const dbAuth = {
               name: fullName,
             }),
           });
-          const json: any = await res.json().catch(() => ({}));
+          const json = await res.json().catch(() => ({}));
           if (res.ok) {
             authUserId = json?.user?.id || json?.data?.user?.id || null;
           } else {
@@ -563,12 +563,12 @@ export const dbAuth = {
           data: { user: { id: p.id, email: p.email } },
           error: null,
         };
-      } catch (e: any) {
+      } catch (e) {
         // Never fabricate a user id on failure — callers must see the error
         // and no shell profile may be left behind.
         return {
           data: { user: null },
-          error: { message: e?.message || "Failed to create user" },
+          error: { message: (e as Error)?.message || "Failed to create user" },
         };
       }
     },
@@ -657,10 +657,10 @@ export const dbAuth = {
           });
         }
         return { data: { user: { id, ...updates } }, error: null };
-      } catch (e: any) {
+      } catch (e) {
         return {
           data: { user: null },
-          error: { message: e?.message || "Failed to update user" },
+          error: { message: (e as Error)?.message || "Failed to update user" },
         };
       }
     },

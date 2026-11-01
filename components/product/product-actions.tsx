@@ -84,8 +84,8 @@ export function ProductActions({
       } else {
         toast.success(`Added ${quantity > 1 ? `${quantity}x ` : ""}${productName || "item"} to bag`);
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to add to bag.");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to add to bag.");
     }
   };
 
@@ -120,8 +120,8 @@ export function ProductActions({
         storeState.setSheetOpen(false);
         router.push("/checkout");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to proceed to checkout.");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to proceed to checkout.");
     } finally {
       // The pending state ALWAYS resets — on success the component
       // normally unmounts during navigation, but if navigation is
@@ -157,8 +157,8 @@ export function ProductActions({
         await addWishlistItem(productId, selectedVariantId || null);
         toast.success("Saved to wishlist ❤️");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update wishlist.");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to update wishlist.");
     }
   };
 

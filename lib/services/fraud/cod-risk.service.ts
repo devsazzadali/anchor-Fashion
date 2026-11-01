@@ -166,7 +166,6 @@ export class CodRiskService {
         }));
       }
     } catch (dbErr) {
-      console.warn("[CodRiskService] Could not retrieve order history, proceeding cautiously:", dbErr);
     }
 
     // -------------------------------------------------------------

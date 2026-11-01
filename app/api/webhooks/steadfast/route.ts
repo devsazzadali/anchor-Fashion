@@ -22,9 +22,6 @@ export async function POST(req: Request) {
     // webhook URL registered there must carry the token query parameter.)
     const webhookSecret = process.env.STEADFAST_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      console.error(
-        "[SteadfastWebhook] REJECTED: STEADFAST_WEBHOOK_SECRET is not set — refusing to process an unverifiable webhook call. Set the secret and register the webhook URL with the matching token/header to enable courier status updates."
-      );
       return NextResponse.json(
         { success: false, message: "Webhook not configured" },
         { status: 401 }
@@ -92,13 +89,12 @@ export async function POST(req: Request) {
         processed: true,
         processed_at: new Date().toISOString(),
       });
-    } catch (e: any) {
-      console.warn("[SteadfastWebhook] Warning logging webhook event:", e.message);
+    } catch (e) {
     }
 
     // 4. Find matching shipment — bound equality lookups, no filter-string
     // interpolation (try the consignment id, then the tracking number).
-    let shipment: any = null;
+    let shipment = null;
     {
       const byConsignment = await adminDb
         .from("shipments")
@@ -152,10 +148,9 @@ export async function POST(req: Request) {
       success: true,
       message: "Steadfast webhook processed successfully",
     });
-  } catch (err: any) {
-    console.error("[SteadfastWebhook Exception]:", err);
+  } catch (err) {
     return NextResponse.json(
-      { success: false, error: err.message || "Webhook processing error" },
+      { success: false, error: (err as Error).message || "Webhook processing error" },
       { status: 500 }
     );
   }

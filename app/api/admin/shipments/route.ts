@@ -164,7 +164,6 @@ export async function POST(req: Request) {
       },
     });
   } catch (err: any) {
-    console.error("[CreateShipment API Error]:", err);
     // REG-72: auth failures from the manager gate are 401/403, not 500 —
     // the same mapping the sibling tracking route gets from authErrorResponse.
     const authStatus =

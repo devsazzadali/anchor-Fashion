@@ -168,7 +168,6 @@ export const CatalogRepository = {
         updated_at: c.updatedAt ? new Date(c.updatedAt).toISOString() : new Date().toISOString(),
       }));
     } catch (e) {
-      console.error("Error fetching categories from Neon:", e);
       return [];
     }
   },
@@ -212,7 +211,6 @@ export const CatalogRepository = {
       });
       return { sizes: sizeList, colors: [...colors].sort((x, y) => x.localeCompare(y)) };
     } catch (error) {
-      console.error("Error fetching filter facets from Neon:", error);
       return { sizes: [], colors: [] };
     }
   },
@@ -254,7 +252,6 @@ export const CatalogRepository = {
         .map((p) => mapProductToStorefront(p, promoDiscount))
         .filter((p): p is NonNullable<typeof p> => p !== null) as any;
     } catch (e) {
-      console.error("Error fetching featured products from Neon:", e);
       return [];
     }
   },
@@ -292,7 +289,6 @@ export const CatalogRepository = {
         .map((p) => mapProductToStorefront(p, promoDiscount))
         .filter((p): p is NonNullable<typeof p> => p !== null) as any;
     } catch (e) {
-      console.error("Error fetching new arrivals from Neon:", e);
       return [];
     }
   },
@@ -467,7 +463,6 @@ export const CatalogRepository = {
         count: total,
       };
     } catch (error) {
-      console.error("Error fetching products from Neon:", error);
       return { data: [], count: 0 };
     }
   },
@@ -515,7 +510,6 @@ export const CatalogRepository = {
       const promoDiscount = bestPromo?.discount_percentage ?? null;
       return mapProductToStorefront(product, promoDiscount);
     } catch (error) {
-      console.error("Error fetching product by slug from Neon:", error);
       return null;
     }
   },

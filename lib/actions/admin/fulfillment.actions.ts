@@ -19,7 +19,6 @@ export async function getPickListsAction() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("[getPickListsAction error]", error);
       return { success: false, error: error.message };
     }
 
@@ -59,8 +58,8 @@ export async function getPickListsAction() {
     });
 
     return { success: true, data: processed };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to fetch pick lists" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch pick lists" };
   }
 }
 
@@ -84,8 +83,8 @@ export async function getPickersAction() {
         email: p.email,
       })),
     };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to fetch pickers" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch pickers" };
   }
 }
 
@@ -187,7 +186,6 @@ export async function generatePickListFromOrdersAction(warehouseId?: string) {
 
       const { error: itemErr } = await db.from("pick_list_items").insert(formattedItems);
       if (itemErr) {
-        console.warn("Error inserting pick list items:", itemErr);
       }
     }
 
@@ -197,8 +195,8 @@ export async function generatePickListFromOrdersAction(warehouseId?: string) {
     } catch {}
 
     return { success: true, data: newPickList };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to generate pick list" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to generate pick list" };
   }
 }
 
@@ -221,8 +219,8 @@ export async function assignPickerAction(pickListId: string, pickerId: string) {
       revalidatePath("/admin/inventory/fulfillment");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to assign picker" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to assign picker" };
   }
 }
 
@@ -273,7 +271,7 @@ export async function updatePickListStatusAction(
       revalidatePath("/admin/inventory/fulfillment");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to update pick list status" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update pick list status" };
   }
 }

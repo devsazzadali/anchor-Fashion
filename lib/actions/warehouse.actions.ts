@@ -38,8 +38,8 @@ export async function getAllWarehouses(filters?: WarehouseQueryFilters): Promise
       page: result.page,
       totalPages: result.totalPages,
     };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -52,8 +52,8 @@ export async function getWarehouseById(
     const service = new WarehouseService();
     const data = await service.getWarehouseById(id);
     return { data };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -68,8 +68,8 @@ export async function createWarehouse(
     revalidatePath("/admin/inventory/warehouses");
     revalidatePath("/admin/inventory");
     return { data };
-  } catch (error: any) {
-    return { error: error.message || "Failed to create warehouse" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to create warehouse" };
   }
 }
 
@@ -85,8 +85,8 @@ export async function updateWarehouse(
     revalidatePath("/admin/inventory/warehouses");
     revalidatePath(`/admin/inventory/warehouses/${id}`);
     return { data };
-  } catch (error: any) {
-    return { error: error.message || "Failed to update warehouse" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to update warehouse" };
   }
 }
 
@@ -100,8 +100,8 @@ export async function deleteWarehouse(
     const res = await service.deleteWarehouse(id);
     revalidatePath("/admin/inventory/warehouses");
     return { success: true, message: res.message, action: res.action };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -117,8 +117,8 @@ export async function toggleWarehouseStatus(
     revalidatePath("/admin/inventory/warehouses");
     revalidatePath(`/admin/inventory/warehouses/${id}`);
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -129,8 +129,8 @@ export async function getWarehouseStatsAction(warehouseId: string) {
     const service = new WarehouseService();
     const data = await service.getWarehouseStats(warehouseId);
     return { data };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -141,8 +141,8 @@ export async function getOverallWarehouseStatsAction() {
     const service = new WarehouseService();
     const data = await service.getOverallStats();
     return { data };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -153,8 +153,8 @@ export async function getWarehouseInventoryAction(warehouseId: string, filters?:
     const service = new WarehouseService();
     const data = await service.getWarehouseInventory(warehouseId, filters);
     return { data };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -171,8 +171,8 @@ export async function getWarehouseZones(
     const service = new WarehouseService();
     const data = await service.getZones(warehouseId);
     return { data };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -195,8 +195,8 @@ export async function createWarehouseZoneAction(data: {
     });
     revalidatePath(`/admin/inventory/warehouses/${data.warehouse_id}`);
     return { data: zone };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -212,8 +212,8 @@ export async function updateWarehouseZoneAction(
     const zone = await service.updateZone(id, data);
     revalidatePath(`/admin/inventory/warehouses/${warehouseId}`);
     return { data: zone };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -228,8 +228,8 @@ export async function deleteWarehouseZoneAction(
     await service.deleteZone(id);
     revalidatePath(`/admin/inventory/warehouses/${warehouseId}`);
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -246,8 +246,8 @@ export async function getRacksAction(
     const service = new WarehouseService();
     const data = await service.getRacksByZone(zoneId);
     return { data };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -269,8 +269,8 @@ export async function createRackAction(
     const rack = await service.createRack(zoneId, rackData);
     revalidatePath(`/admin/inventory/warehouses/${warehouseId}`);
     return { data: rack };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -286,8 +286,8 @@ export async function deleteRackAction(
     await service.deleteRack(zoneId, rackCode);
     revalidatePath(`/admin/inventory/warehouses/${warehouseId}`);
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -304,8 +304,8 @@ export async function getZoneBins(
     const service = new WarehouseService();
     const data = await service.getBins(zoneId);
     return { data };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -330,8 +330,8 @@ export async function createWarehouseBinAction(
       revalidatePath(`/admin/inventory/warehouses/${targetWhId}`);
     }
     return { data: bin };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -349,8 +349,8 @@ export async function updateWarehouseBinAction(
       revalidatePath(`/admin/inventory/warehouses/${warehouseId}`);
     }
     return { data: bin };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -367,8 +367,8 @@ export async function deleteWarehouseBinAction(
       revalidatePath(`/admin/inventory/warehouses/${warehouseId}`);
     }
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -389,8 +389,8 @@ export async function stockInAction(payload: StockInPayload): Promise<{ success:
     revalidatePath("/admin/inventory/movement");
     revalidatePath("/admin/inventory/stock-movements");
     return { success: true, data: result };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -407,8 +407,8 @@ export async function stockOutAction(payload: StockOutPayload): Promise<{ succes
     revalidatePath("/admin/inventory/movement");
     revalidatePath("/admin/inventory/stock-movements");
     return { success: true, data: result };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -425,8 +425,8 @@ export async function stockAdjustmentAction(payload: StockAdjustmentPayload): Pr
     revalidatePath("/admin/inventory/movement");
     revalidatePath("/admin/inventory/stock-movements");
     return { success: true, data: result };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -451,8 +451,8 @@ export async function stockTransferAction(payload: StockTransferPayload): Promis
     revalidatePath("/admin/inventory/movement");
     revalidatePath("/admin/inventory/stock-movements");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -470,7 +470,7 @@ export async function getDetailedMovementsAction(options?: {
     const repo = new InventoryRepository();
     const result = await repo.getDetailedMovements(options);
     return { data: result };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }

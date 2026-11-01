@@ -88,7 +88,7 @@ export default async function PurchaseOrdersPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              purchaseOrders.map((po: any) => (
+              purchaseOrders.map((po) => (
                 <TableRow key={po.id}>
                   <TableCell className="font-medium text-primary">
                     <Link href={`/manager/inventory/purchase-orders/${po.id}`} className="hover:underline">

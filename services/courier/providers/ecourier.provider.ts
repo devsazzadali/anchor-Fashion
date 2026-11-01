@@ -83,8 +83,8 @@ export class ECourierProvider implements ICourierProvider {
         "API_ERROR",
         data.msg || "Failed to create eCourier parcel"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -109,8 +109,8 @@ export class ECourierProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", data.msg || "Cancel failed");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -153,8 +153,8 @@ export class ECourierProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Tracking not found");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -190,8 +190,8 @@ export class ECourierProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err: any) {
-      return this.errorResponse("WEBHOOK_ERROR", err.message);
+    } catch (err) {
+      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
     }
   }
 

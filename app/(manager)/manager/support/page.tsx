@@ -148,7 +148,7 @@ export default async function SupportPage({
                 </TableCell>
               </TableRow>
             ) : (
-              tickets.map((ticket: any) => {
+              tickets.map((ticket) => {
                 const priorityStr = (ticket.priority || "medium").toLowerCase();
                 const statusStr = (ticket.status || "OPEN").toUpperCase();
                 const customerName = getCustomerDisplayName(ticket);

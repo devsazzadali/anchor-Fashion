@@ -141,8 +141,8 @@ export default function ShipmentDetailPage({
         autoSubmit: true,
       });
       toast.success("Courier assigned and consignment submitted");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
 
@@ -153,8 +153,8 @@ export default function ShipmentDetailPage({
         reason: "Cancelled by admin",
       });
       toast.success("Shipment cancelled");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
 
@@ -163,8 +163,8 @@ export default function ShipmentDetailPage({
       const result = await generateLabel.mutateAsync(id);
       if (result?.labelUrl) window.open(result.labelUrl, "_blank");
       toast.success("Label generated");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
 
@@ -172,8 +172,8 @@ export default function ShipmentDetailPage({
     try {
       await syncTracking.mutateAsync(id);
       toast.success("Tracking synced");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
 

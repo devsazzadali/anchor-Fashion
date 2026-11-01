@@ -78,10 +78,10 @@ export class PaymentRefundService {
       });
 
       return updatedRefund;
-    } catch (error: any) {
+    } catch (error) {
       await paymentRepository.updateRefund(refund.id, {
         status: "failed",
-        gateway_response: { error: error.message },
+        gateway_response: { error: (error as Error).message },
       });
       throw error;
     }

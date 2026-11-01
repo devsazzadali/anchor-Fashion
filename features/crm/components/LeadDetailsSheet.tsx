@@ -75,8 +75,7 @@ export function LeadDetailsSheet({
       ]);
       if (notesRes.data) setNotes(notesRes.data);
       if (logsRes.data) setLogs(logsRes.data);
-    } catch (err: any) {
-      console.error("Failed to load lead history", err);
+    } catch (err) {
     } finally {
       setLoadingHistory(false);
     }
@@ -95,8 +94,8 @@ export function LeadDetailsSheet({
       if (res?.data) {
         onLeadUpdated(res.data);
       }
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to convert lead");
+    } catch (err) {
+      toast.error((err as Error)?.message || "Failed to convert lead");
     } finally {
       setConverting(false);
     }
@@ -117,8 +116,8 @@ export function LeadDetailsSheet({
       if (res.data) {
         setNotes((prev) => [res.data!, ...prev]);
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to add note");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to add note");
     } finally {
       setSubmittingNote(false);
     }

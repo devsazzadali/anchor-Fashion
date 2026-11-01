@@ -40,8 +40,7 @@ export async function POST(req: Request) {
       content: response.text,
       usage: response.usage,
     });
-  } catch (error: any) {
-    console.error("Customer Assistant Error:", error);
+  } catch (error) {
     return NextResponse.json(
       { error: "Failed to process request" },
       { status: 500 }

@@ -52,7 +52,6 @@ export class LoyaltyService {
       .single();
 
     if (error) {
-      console.error("Failed to auto-create loyalty account:", error);
       return {
         id: "",
         customer_id: userId,
@@ -82,7 +81,6 @@ export class LoyaltyService {
       .order("points_cost", { ascending: true });
     
     if (error) {
-      console.error("Failed to fetch reward catalog:", error);
       return [];
     }
     return data;
@@ -142,7 +140,6 @@ export class LoyaltyService {
         .eq("type", "EARN")
         .maybeSingle();
       if (existingEarn) {
-        console.warn(`Idempotency check: Points already earned for ${params.referenceType} ${refId}`);
         return { account, pointsEarned: 0 };
       }
     }
@@ -159,7 +156,6 @@ export class LoyaltyService {
 
     if (insertError) {
       if (insertError.code === "23505") { // unique_violation
-        console.warn(`Idempotency check: Points already earned for ${params.referenceType} ${refId}`);
         return { account, pointsEarned: 0 };
       }
       throw new Error(`Failed to insert loyalty transaction: ${insertError.message}`);
@@ -397,7 +393,7 @@ export class LoyaltyService {
         pointsDeducted: cost,
         newBalance,
       };
-    } catch (deliveryError: any) {
+    } catch (deliveryError) {
       // Compensate: give the points back and mark the redemption reversed.
       await db.from("loyalty_transactions").insert({
         loyalty_account_id: account.id,
@@ -416,7 +412,7 @@ export class LoyaltyService {
         })
         .eq("id", account.id);
       throw new Error(
-        `Redemption failed: ${deliveryError.message || "delivery error"}`
+        `Redemption failed: ${(deliveryError as Error).message || "delivery error"}`
       );
     }
   }

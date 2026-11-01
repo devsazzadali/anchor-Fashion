@@ -43,7 +43,7 @@ export default async function CustomerAnalyticsPage({
     );
   }
 
-  const mappedGrowth = customers.customerGrowth.map((c: any) => ({
+  const mappedGrowth = customers.customerGrowth.map((c) => ({
     date: c.date,
     revenue: c.customers, // reusing the revenue chart for customer growth trend
   }));

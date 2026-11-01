@@ -71,9 +71,6 @@ export class ExpenseRepository {
       if (error) {
         // If table doesn't exist yet in schema cache, log guidance and return empty array
         if (error.code === "PGRST205" || error.message.includes("Could not find the table")) {
-          console.warn(
-            "[ExpenseRepository] Table 'public.expenses' not found in database. Please run the migration: db/migrations/20260910100000_enterprise_finance_expenses.sql"
-          );
           return [];
         }
         throw new Error(`Failed to fetch expenses: ${error.message}`);
@@ -96,8 +93,7 @@ export class ExpenseRepository {
       }
 
       return list;
-    } catch (err: any) {
-      console.error("[ExpenseRepository.getExpenses] Error:", err);
+    } catch (err) {
       throw err;
     }
   }

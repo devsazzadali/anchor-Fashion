@@ -97,7 +97,6 @@ export function AdminBookmarksMenu() {
       try {
         await removeBookmarkAction(pathname);
       } catch (err) {
-        console.warn("Bookmark deletion sync:", err);
       }
     } else {
       // Optimistic add
@@ -111,7 +110,6 @@ export function AdminBookmarksMenu() {
       try {
         await addBookmarkAction(label, pathname);
       } catch (err) {
-        console.warn("Bookmark addition sync:", err);
       }
     }
   }, [bookmarks, pathname]);
@@ -125,7 +123,6 @@ export function AdminBookmarksMenu() {
     try {
       await removeBookmarkAction(href);
     } catch (err) {
-      console.warn("Bookmark removal sync:", err);
     }
   }, [bookmarks]);
 

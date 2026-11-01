@@ -16,7 +16,7 @@ export async function GET(
       return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
     }
     return NextResponse.json(warehouse);
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error);
   }
 }
@@ -32,7 +32,7 @@ export async function PATCH(
     const service = new WarehouseService();
     const updated = await service.updateWarehouse(id, body);
     return NextResponse.json(updated);
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error, 400);
   }
 }
@@ -47,7 +47,7 @@ export async function DELETE(
     const service = new WarehouseService();
     const res = await service.deleteWarehouse(id);
     return NextResponse.json(res);
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error, 400);
   }
 }

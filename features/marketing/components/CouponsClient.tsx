@@ -73,8 +73,8 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
       );
       toast.success(`Coupon "${coupon.code}" ${nextState ? "activated" : "deactivated"}`);
       router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred");
     }
   };
 
@@ -91,8 +91,8 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
       toast.success(`Coupon "${deletingCoupon.code}" deleted`);
       setDeletingCoupon(null);
       router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred");
     } finally {
       setIsDeleting(false);
     }

@@ -22,13 +22,11 @@ export class QueueService {
       });
 
       if (error) {
-        console.error("[QueueService] Failed to push job:", error);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error("[QueueService] Exception pushing job:", error);
       return false;
     }
   }
@@ -61,7 +59,6 @@ export class QueueService {
       .in("id", jobIds);
 
     if (updateError) {
-      console.error("[QueueService] Failed to claim jobs:", updateError);
       return [];
     }
 

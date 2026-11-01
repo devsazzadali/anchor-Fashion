@@ -104,8 +104,7 @@ export async function GET(req: Request) {
         total: Object.values(statusMap).reduce((a, b) => a + b, 0),
       },
     });
-  } catch (err: any) {
-    console.error("[Analytics API]", err);
+  } catch (err) {
     return authErrorResponse(err);
   }
 }

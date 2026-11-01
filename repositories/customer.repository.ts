@@ -26,7 +26,6 @@ export class CustomerRepository {
         updated_at: profile.updatedAt.toISOString(),
       } as CustomerProfile;
     } catch (e) {
-      console.error("Error fetching profile:", e);
       return null;
     }
   }
@@ -96,7 +95,6 @@ export class CustomerRepository {
         updated_at: profile.updatedAt.toISOString(),
       } as CustomerProfile;
     } catch (e) {
-      console.error("Error in updateProfile:", e);
       throw e;
     }
   }
@@ -127,7 +125,6 @@ export class CustomerRepository {
         updated_at: addr.updatedAt.toISOString(),
       })) as CustomerAddress[];
     } catch (error) {
-      console.error("Error fetching addresses:", error);
       return [];
     }
   }
@@ -198,7 +195,6 @@ export class CustomerRepository {
         },
       })) as any[];
     } catch (error) {
-      console.error("Error fetching reviews:", error);
       return [];
     }
   }
@@ -210,9 +206,8 @@ export class CustomerRepository {
         data: { isActive: false },
       });
       return true;
-    } catch (error: any) {
-      console.error("Error deactivating customer profile:", error);
-      throw new Error(error.message);
+    } catch (error) {
+      throw new Error((error as Error).message);
     }
   }
 
@@ -227,9 +222,8 @@ export class CustomerRepository {
         where: { id: userId },
       });
       return true;
-    } catch (error: any) {
-      console.error("Error deleting customer profile:", error);
-      throw new Error(error.message);
+    } catch (error) {
+      throw new Error((error as Error).message);
     }
   }
 
@@ -248,7 +242,6 @@ export class CustomerRepository {
         },
       });
     } catch (error) {
-      console.error("Failed to log customer activity:", error);
     }
   }
 
@@ -283,7 +276,6 @@ export class CustomerRepository {
         segments: customer?.group ? [customer.group] : [],
       };
     } catch (e) {
-      console.error("Failed to get CRM stats:", e);
       return {
         lifetimeValue: 0,
         orderCount: 0,

@@ -44,7 +44,7 @@ export async function getAdminHeaderMessagesAction(): Promise<{
       },
     });
 
-    const messages: AdminMessage[] = logs.map((log: any) => ({
+    const messages: AdminMessage[] = logs.map((log) => ({
       id: log.id,
       profile_id: log.profileId,
       lead_id: log.leadId,
@@ -67,9 +67,8 @@ export async function getAdminHeaderMessagesAction(): Promise<{
     const unreadCount = messages.filter((m) => m.status !== "READ").length;
 
     return { data: messages, unreadCount };
-  } catch (err: any) {
-    console.error("Error fetching messages via Prisma:", err);
-    return { data: [], unreadCount: 0, error: err.message };
+  } catch (err) {
+    return { data: [], unreadCount: 0, error: (err as Error).message };
   }
 }
 
@@ -89,8 +88,8 @@ export async function markMessageAsReadAction(id: string): Promise<{ error?: str
     revalidatePath("/admin/crm/messages");
     revalidatePath("/admin/messages");
     return {};
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: (err as Error).message };
   }
 }
 
@@ -124,8 +123,8 @@ export async function createMessageAction(payload: {
     revalidatePath("/admin/crm/messages");
     revalidatePath("/admin/messages");
     return { success: true, data };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -160,8 +159,8 @@ export async function updateMessageAction(
     revalidatePath("/admin/crm/messages");
     revalidatePath("/admin/messages");
     return { success: true, data };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -180,8 +179,8 @@ export async function deleteMessageAction(
     revalidatePath("/admin/crm/messages");
     revalidatePath("/admin/messages");
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -201,8 +200,8 @@ export async function markAllMessagesAsReadAction(): Promise<{ error?: string }>
     revalidatePath("/admin/crm/messages");
     revalidatePath("/admin/messages");
     return {};
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: (err as Error).message };
   }
 }
 
@@ -218,8 +217,8 @@ export async function deleteAllMessagesAction(): Promise<{ success: boolean; err
     revalidatePath("/admin/crm/messages");
     revalidatePath("/admin/messages");
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 

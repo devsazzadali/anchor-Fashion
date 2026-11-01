@@ -61,8 +61,8 @@ export function PaymentClient({
       } else {
         toast.error(res.error || `Failed to save ${gateway} settings`);
       }
-    } catch (e: any) {
-      toast.error(e.message || "An error occurred while saving");
+    } catch (e) {
+      toast.error((e as Error).message || "An error occurred while saving");
     } finally {
       setSavingGateway(null);
     }

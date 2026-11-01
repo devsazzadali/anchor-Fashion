@@ -255,7 +255,6 @@ export class DeliveryZoneRepository {
     });
 
     if (error) {
-      console.error("calculateCharge RPC failed:", error);
       return 0;
     }
 

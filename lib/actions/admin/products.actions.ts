@@ -77,7 +77,7 @@ export const createAdminProductAction = createAdminAction(
       ...input,
       status: input.status || "DRAFT",
       isFeatured: input.isFeatured || false,
-      media: input.media?.map((m: any) => ({
+      media: input.media?.map((m) => ({
         ...m,
         displayOrder: m.displayOrder || 0,
       })),
@@ -107,7 +107,7 @@ export const updateAdminProductAction = createAdminAction(
   async ({ id, data }) => {
     const payload = {
       ...data,
-      media: data.media?.map((m: any) => ({
+      media: data.media?.map((m) => ({
         ...m,
         displayOrder: m.displayOrder || 0,
       })),

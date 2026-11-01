@@ -249,7 +249,6 @@ export class PaymentRepository {
       .eq("transaction_id", transactionId);
 
     if (error) {
-      console.warn(`Failed to get refunds for transaction ${transactionId}: ${error.message}`);
       return [];
     }
     return (data || []) as PaymentRefund[];

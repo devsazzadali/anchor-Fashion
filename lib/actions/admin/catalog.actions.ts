@@ -165,7 +165,6 @@ export const approveReviewAction = createAdminAction(
           description: 'Reward for verified product review',
         });
       } catch (e) {
-        console.error("Failed to issue loyalty points for review:", e);
       }
     }
     

@@ -35,7 +35,6 @@ export async function POST(req: Request) {
     );
 
     if (error) {
-      console.error("Failed to save push subscription:", error);
       return NextResponse.json(
         { message: "Internal Server Error" },
         { status: 500 }
@@ -47,7 +46,6 @@ export async function POST(req: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Push subscription error:", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
       { status: 500 }
@@ -79,7 +77,6 @@ export async function DELETE(req: Request) {
       .eq("endpoint", endpoint);
 
     if (error) {
-      console.error("Failed to remove push subscription:", error);
       return NextResponse.json(
         { message: "Internal Server Error" },
         { status: 500 }
@@ -91,7 +88,6 @@ export async function DELETE(req: Request) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Push subscription delete error:", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
       { status: 500 }

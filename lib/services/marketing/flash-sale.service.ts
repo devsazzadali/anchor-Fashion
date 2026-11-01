@@ -34,12 +34,10 @@ export class FlashSaleService {
         .gt("end_time", now);
 
       if (error) {
-        console.error("Error fetching active flash sales:", error);
         return [];
       }
       return (data || []) as FlashSaleRecord[];
     } catch (err) {
-      console.error("getActiveFlashSales caught error:", err);
       return [];
     }
   }
@@ -74,7 +72,6 @@ export class FlashSaleService {
     });
 
     if (error) {
-      console.error("Failed to consume flash sale stock:", error);
       return { success: false, error: error.message };
     }
 
@@ -97,7 +94,6 @@ export class FlashSaleService {
     });
 
     if (error) {
-      console.error("Failed to release flash sale stock:", error);
       return { success: false, error: error.message };
     }
 
@@ -115,7 +111,6 @@ export class FlashSaleService {
       .order("start_time", { ascending: false });
 
     if (error) {
-      console.error("Error fetching all flash sales:", error);
       return [];
     }
     return data as FlashSaleRecord[];

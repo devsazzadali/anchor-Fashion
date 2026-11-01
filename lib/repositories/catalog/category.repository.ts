@@ -42,7 +42,6 @@ export class CategoryRepository {
 
       return records.map(toCategory);
     } catch (err) {
-      console.error("Error fetching categories via Prisma:", err);
       return [];
     }
   }
@@ -128,7 +127,6 @@ export class CategoryRepository {
       if (!record) return null;
       return toCategory(record);
     } catch (err) {
-      console.error("Error fetching category by ID:", err);
       return null;
     }
   }

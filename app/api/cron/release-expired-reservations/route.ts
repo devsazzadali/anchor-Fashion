@@ -38,7 +38,6 @@ export async function GET(req: Request) {
       .not("reservation_expires_at", "is", null);
 
     if (fetchError) {
-      console.error("[cron/release-expired-reservations] Fetch error:", fetchError);
       return NextResponse.json({ error: "Failed to fetch expired orders" }, { status: 500 });
     }
 
@@ -72,7 +71,6 @@ export async function GET(req: Request) {
           // Non-fatal: inventory was released, but status update failed.
           // Will be retried on next cron run (release is idempotent).
           errors.push(`Order ${order.order_number}: status update failed — ${cancelError.message}`);
-          console.error(`[cron] Failed to cancel order ${order.id}:`, cancelError);
         } else {
           released++;
         }
@@ -80,7 +78,6 @@ export async function GET(req: Request) {
         failed++;
         const msg = releaseErr instanceof Error ? releaseErr.message : String(releaseErr);
         errors.push(`Order ${order.order_number}: ${msg}`);
-        console.error(`[cron] Failed to release reservation for order ${order.id}:`, releaseErr);
       }
     }
 
@@ -93,7 +90,6 @@ export async function GET(req: Request) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[cron/release-expired-reservations] Unexpected error:", err);
     return NextResponse.json({ error: `Internal error: ${message}` }, { status: 500 });
   }
 }

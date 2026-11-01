@@ -13,7 +13,6 @@ export class AIRecommendationEngine {
       .order("weight", { ascending: false });
 
     if (error || !data) {
-      console.error("Failed to fetch recommendation models:", error);
       return [];
     }
 
@@ -52,7 +51,6 @@ export class AIRecommendationEngine {
     });
 
     if (error) {
-      console.error("Similarity search failed:", error);
       return [];
     }
 

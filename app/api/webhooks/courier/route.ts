@@ -61,8 +61,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ received: true, provider });
-  } catch (err: any) {
-    console.error("[Courier Webhook] Error:", err);
+  } catch (err) {
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

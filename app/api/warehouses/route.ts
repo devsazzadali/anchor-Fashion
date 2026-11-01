@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json(result);
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error);
   }
 }
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const service = new WarehouseService();
     const warehouse = await service.createWarehouse(body);
     return NextResponse.json(warehouse, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error, 400);
   }
 }

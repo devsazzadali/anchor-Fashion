@@ -196,8 +196,8 @@ export class ShipmentRepository {
         .from("shipment_items")
         .insert(itemRows as any);
 
-      if (itemError)
-        console.error("Failed to insert shipment items:", itemError);
+      if (itemError) {
+      }
     }
 
     return shipment as Shipment;
@@ -475,7 +475,7 @@ export class ShipmentRepository {
         onConflict: "shipment_id,timestamp,status",
         ignoreDuplicates: true,
       });
-    if (error) console.error("Upsert tracking event:", error);
+    if (error) {}
   }
 
   async getTrackingEvents(

@@ -37,7 +37,6 @@ export async function POST(req: NextRequest) {
     const status = (payload.status || "").toUpperCase();
 
     if (!valId || !tranId) {
-      console.error("[SSLCommerz IPN] Missing val_id or tran_id in payload:", payload);
       return NextResponse.json(
         { error: "Missing required parameters (val_id, tran_id)" },
         { status: 400 }
@@ -47,8 +46,8 @@ export async function POST(req: NextRequest) {
     const db = createAdminDbClient();
 
     // 1. Locate Order and Payment Session
-    let order: any = null;
-    let paymentSession: any = null;
+    let order = null;
+    let paymentSession = null;
 
     if (payload.value_a) {
       const { data: orderById } = await db
@@ -94,7 +93,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (!order) {
-      console.error(`[SSLCommerz IPN] Order not found for tran_id: ${tranId}`);
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
@@ -126,7 +124,6 @@ export async function POST(req: NextRequest) {
 
     // 3. Handle Failure or Cancellation notifications from IPN
     if (status === "FAILED" || status === "CANCELLED") {
-      console.warn(`[SSLCommerz IPN] Received ${status} notification for order ${order.order_number}`);
 
       await safeRollback();
 
@@ -152,10 +149,6 @@ export async function POST(req: NextRequest) {
     const valRes = await SSLCommerzService.validateTransaction(valId, tranId);
 
     if (valRes.status !== "VALID" && valRes.status !== "VALIDATED") {
-      console.error(
-        `[SSLCommerz IPN] Transaction validation failed for order ${order.order_number}:`,
-        valRes.status
-      );
 
       await safeRollback();
 
@@ -174,9 +167,6 @@ export async function POST(req: NextRequest) {
     const gatewayAmount = parseFloat(valRes.amount);
     const orderAmount = parseFloat(order.total_amount ?? order.grand_total ?? 0);
     if (isNaN(gatewayAmount) || Math.abs(gatewayAmount - orderAmount) > 0.01) {
-      console.error(
-        `[SSLCommerz IPN] Amount mismatch! Gateway: ${valRes.amount}, Order: ${orderAmount}`
-      );
 
       await safeRollback();
 
@@ -196,9 +186,6 @@ export async function POST(req: NextRequest) {
       (verifiedCurrency === "BDT" && (expectedCurrency === "USD" || expectedCurrency === "BDT"));
 
     if (!isCurrencyMatch) {
-      console.error(
-        `[SSLCommerz IPN] Currency mismatch! Gateway: ${verifiedCurrency}, Order: ${expectedCurrency}`
-      );
 
       await safeRollback();
 
@@ -250,9 +237,6 @@ export async function POST(req: NextRequest) {
 
     // Check if order was cancelled while payment was pending (Late Payment Callback Race)
     if ((order.status || "").toLowerCase() === "cancelled") {
-      console.warn(
-        `[SSLCommerz IPN] Payment verified for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
-      );
 
       await db.from("orders").update({
         payment_method: "SSLCOMMERZ",
@@ -315,7 +299,6 @@ export async function POST(req: NextRequest) {
         status: "confirmed",
       });
     } catch (notifErr) {
-      console.warn("[SSLCommerz IPN] Error creating payment notification:", notifErr);
     }
 
     // Clear cart
@@ -341,7 +324,6 @@ export async function POST(req: NextRequest) {
         await CartService.clearCart(cartIdToClear);
       }
     } catch (cartErr) {
-      console.error("[SSLCommerz IPN] Cart clear error:", cartErr);
     }
 
     // Trigger Order Confirmation SMS asynchronously
@@ -349,7 +331,6 @@ export async function POST(req: NextRequest) {
       const { AlphaSmsService } = await import("@/lib/services/sms/alpha-sms.service");
       AlphaSmsService.triggerOrderConfirmationSmsAsync(order.id);
     } catch (smsErr) {
-      console.error("[SSLCommerz IPN] SMS trigger error:", smsErr);
     }
 
     return NextResponse.json({
@@ -357,10 +338,9 @@ export async function POST(req: NextRequest) {
       message: "IPN verified and payment processed successfully",
       trxID: confirmedTrxId,
     });
-  } catch (error: any) {
-    console.error("[SSLCommerz IPN] Unexpected exception:", error);
+  } catch (error) {
     return NextResponse.json(
-      { error: "Internal server error processing IPN", details: error.message },
+      { error: "Internal server error processing IPN", details: (error as Error).message },
       { status: 500 }
     );
   }

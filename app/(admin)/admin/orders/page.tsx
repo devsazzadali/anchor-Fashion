@@ -190,8 +190,8 @@ function AdminOrdersContent({ defaultTab = "all" }: { defaultTab?: TabKey }) {
       } else {
         toast.error(res.error || "Failed to update order status");
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred");
     } finally {
       setIsUpdatingStatus(false);
     }

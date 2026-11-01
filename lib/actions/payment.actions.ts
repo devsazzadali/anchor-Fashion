@@ -180,7 +180,6 @@ async function loadAllPaymentConfigs(): Promise<AllPaymentConfigs> {
       });
     }
   } catch (err) {
-    console.error("Error fetching all payment configs:", err);
   }
 
   return result;
@@ -235,9 +234,8 @@ export async function updatePaymentConfig(
     revalidatePath("/admin/payments/providers");
     revalidatePath("/checkout");
     return { success: true };
-  } catch (error: any) {
-    console.error(`[updatePaymentConfig] ${gateway}`, error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -339,7 +337,6 @@ export async function recordManualPaymentTransaction(
       .single();
 
     if (txErr) {
-      console.error("Error creating payment transaction:", txErr);
     }
 
     // Add note to order_notes
@@ -356,9 +353,8 @@ export async function recordManualPaymentTransaction(
     }
 
     return { success: true, transaction: tx };
-  } catch (err: any) {
-    console.error("Failed to record manual payment:", err);
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -403,7 +399,6 @@ export async function approveManualPaymentAction(
       .eq("order_id", orderId);
 
     if (itemsErr) {
-      console.warn("Could not verify order items:", itemsErr);
     } else if (!items || items.length === 0) {
       return {
         success: false,
@@ -512,10 +507,6 @@ export async function approveManualPaymentAction(
         });
       }
     } catch (payErr) {
-      console.error(
-        `[approveManualPaymentAction] Failed to ensure payment SUCCESS for order ${orderId}:`,
-        payErr
-      );
     }
 
     // 3. Log to order_status_history
@@ -539,7 +530,6 @@ export async function approveManualPaymentAction(
       const { AlphaSmsService } = await import("@/lib/services/sms/alpha-sms.service");
       AlphaSmsService.triggerOrderConfirmationSmsAsync(orderId);
     } catch (smsErr) {
-      console.error("[Manual Payment Approval] SMS trigger error:", smsErr);
     }
 
     try {
@@ -551,9 +541,8 @@ export async function approveManualPaymentAction(
     }
 
     return { success: true };
-  } catch (err: any) {
-    console.error("Error approving manual payment:", err);
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -659,9 +648,8 @@ export async function rejectManualPaymentAction(
     }
 
     return { success: true };
-  } catch (err: any) {
-    console.error("Error rejecting manual payment:", err);
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -697,7 +685,6 @@ export async function getPendingManualPaymentsAction() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching manual payments:", error.message || error);
       return [];
     }
 
@@ -807,8 +794,7 @@ export async function getPendingManualPaymentsAction() {
     }
 
     return enrichedList;
-  } catch (err: any) {
-    console.error("Error in getPendingManualPaymentsAction:", err?.message || err);
+  } catch (err) {
     return [];
   }
 }

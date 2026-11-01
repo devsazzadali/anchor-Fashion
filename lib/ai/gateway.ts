@@ -51,7 +51,7 @@ export class AIGateway {
       return {
         text: result.text,
       };
-    } catch (error: any) {
+    } catch (error) {
       // Log error telemetry
       AITelemetry.logRequest({
         promptName: request.promptName,
@@ -63,7 +63,7 @@ export class AIGateway {
         latencyMs: 0,
         costEstimatedUsd: 0,
         status: "error",
-        errorMessage: error?.message || "Unknown error",
+        errorMessage: (error as Error)?.message || "Unknown error",
       });
 
       throw error;

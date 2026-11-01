@@ -145,7 +145,6 @@ export async function POST(request: Request) {
       logServerError("AUTH_OTP_EMAIL_SEND", emailResult.error, { email });
       // If Resend API key is a dummy or test key in development, allow proceeding while logging
       if (process.env.NODE_ENV !== "production" || process.env.RESEND_API_KEY?.startsWith("re_dummy")) {
-        console.warn(`[OTP DEV FALLBACK] Code for ${email} is ${otp}`);
         return NextResponse.json({
           success: true,
           message: "Verification code generated and dispatched.",
@@ -163,7 +162,7 @@ export async function POST(request: Request) {
       success: true,
       message: "Verification code sent successfully to your email.",
     });
-  } catch (error: any) {
+  } catch (error) {
     logServerError("AUTH_OTP_SEND_FATAL", error);
     return NextResponse.json(
       { error: "Internal server error occurred while processing OTP request." },

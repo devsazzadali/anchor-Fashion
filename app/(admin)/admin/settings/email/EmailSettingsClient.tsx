@@ -30,8 +30,8 @@ export function EmailSettingsClient({ initialConfig }: { initialConfig: EmailSet
       } else {
         toast.error(res.error || "Failed to save email settings");
       }
-    } catch (e: any) {
-      toast.error(e.message || "An error occurred");
+    } catch (e) {
+      toast.error((e as Error).message || "An error occurred");
     } finally {
       setIsSaving(false);
     }

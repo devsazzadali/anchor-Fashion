@@ -676,7 +676,7 @@ function RecordMovementDialog({ allWarehouses = [], allVariants = [] }: RecordMo
                     <FormItem>
                       <FormLabel>Movement Type</FormLabel>
                       <Select
-                        onValueChange={(val: any) => {
+                        onValueChange={(val) => {
                           field.onChange(val);
                           if (val === "IN") form.setValue("reason", "RESTOCK");
                           else if (val === "OUT") form.setValue("reason", "DAMAGE");

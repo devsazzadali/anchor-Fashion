@@ -138,8 +138,8 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
           toast.error(res.error || "Failed to approve review");
         }
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update review status");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to update review status");
     } finally {
       setLoadingRowId(null);
     }

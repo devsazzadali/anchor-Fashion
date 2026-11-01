@@ -28,9 +28,6 @@ export class DefaultSmsProvider implements ISmsProvider {
   async sendSms(to: string, message: string) {
     // Note: Live SMS delivery requires external SMS gateway provider credentials (e.g., SSL Wireless, Greenweb, Twilio).
     // Do not fabricate fake SMS success.
-    console.warn(
-      `[SMS Provider Notice] Live SMS dispatch requested for ${to}. Live SMS requires configured provider credentials. (Message length: ${message.length})`
-    );
     return {
       success: false,
       error: "SMS provider credentials not configured. Using verified email dispatch fallback.",
@@ -237,10 +234,8 @@ export class CodOtpService {
         });
 
         if (sendResult.error) {
-          console.warn("[CodOtpService] Resend email dispatch returned error:", sendResult.error);
         }
       } catch (mailErr) {
-        console.warn("[CodOtpService] Resend exception during email dispatch:", mailErr);
       }
     }
 
@@ -258,9 +253,6 @@ export class CodOtpService {
 
     // In local development or testing sink, if live delivery cannot reach a customer address, log safely
     if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        `[COD OTP DEV NOTIFICATION] Session: ${params.sessionId} | Target: ${this.maskTarget(targetValue, targetType)} | Status: Dispatched`
-      );
     }
 
     return {

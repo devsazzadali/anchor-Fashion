@@ -43,7 +43,6 @@ export function createSafeAction<Input, Output>(
       if (error instanceof DatabaseError) {
         return { success: false, error: error.message };
       }
-      console.error("[Action Error]:", error);
       return { success: false, error: "An unexpected error occurred." };
     }
   };
@@ -79,7 +78,6 @@ export function createProtectedAction<Input, Output>(
       if (error instanceof DatabaseError) {
         return { success: false, error: error.message };
       }
-      console.error("[Protected Action Error]:", error);
       return { success: false, error: "An unexpected error occurred." };
     }
   };
@@ -105,7 +103,6 @@ export function createAdminAction<Input, Output>(
       const isAllowed = STAFF_ROLES.includes(role) || ["OPERATIONS"].includes(role);
 
       if (!isAllowed) {
-        console.warn(`[Admin Action] Access denied for user ${user.id} with role: ${role}`);
         return { success: false, error: "Forbidden. Insufficient permissions." };
       }
 
@@ -125,7 +122,6 @@ export function createAdminAction<Input, Output>(
       if (error instanceof DatabaseError) {
         return { success: false, error: error.message };
       }
-      console.error("[Admin Action Error]:", error);
       const isProd = process.env.NODE_ENV === "production";
       const message =
         isProd && !error?.isOperational

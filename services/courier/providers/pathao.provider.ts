@@ -176,8 +176,8 @@ export class PathaoProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to create Pathao consignment"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -237,8 +237,8 @@ export class PathaoProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Tracking info not found");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -266,8 +266,8 @@ export class PathaoProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Failed to generate Pathao label");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -293,8 +293,8 @@ export class PathaoProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err: any) {
-      return this.errorResponse("WEBHOOK_ERROR", err.message);
+    } catch (err) {
+      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
     }
   }
 

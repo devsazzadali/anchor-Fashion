@@ -29,21 +29,21 @@ export default async function SupportCommandCenterPage() {
   const agents = agentsRes.data || [];
 
   const openTicketsCount = tickets.filter(
-    (t: any) =>
+    (t) =>
       t.status === "open" ||
       t.status === "in_progress" ||
       t.status === "pending"
   ).length;
   const criticalTickets = tickets
     .filter(
-      (t: any) =>
+      (t) =>
         t.priority === "critical" &&
         t.status !== "resolved" &&
         t.status !== "closed"
     )
     .slice(0, 5);
   const onlineAgentsCount = agents.filter(
-    (a: any) => a.current_status === "online"
+    (a) => a.current_status === "online"
   ).length;
   return (
     <div className="space-y-6">
@@ -136,7 +136,7 @@ export default async function SupportCommandCenterPage() {
           <CardContent>
             <div className="space-y-4">
               {criticalTickets.length > 0 ? (
-                criticalTickets.map((t: any) => (
+                criticalTickets.map((t) => (
                   <div
                     key={t.id}
                     className="flex items-center justify-between rounded-lg border border-rose-500/20 bg-rose-500/5 p-3"
@@ -171,7 +171,7 @@ export default async function SupportCommandCenterPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {agents.slice(0, 3).map((a: any) => (
+              {agents.slice(0, 3).map((a) => (
                 <div key={a.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold">

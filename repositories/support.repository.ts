@@ -65,7 +65,6 @@ export class SupportRepository {
       .order("updated_at", { ascending: false });
 
     if (error || !tickets) {
-      console.error("Error fetching support tickets:", error);
       return [];
     }
 
@@ -138,7 +137,6 @@ export class SupportRepository {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("Error fetching ticket messages:", error);
       return [];
     }
     return (data || []).map(normalizeTicketMessage);

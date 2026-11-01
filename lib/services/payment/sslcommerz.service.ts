@@ -210,7 +210,6 @@ export class SSLCommerzService {
         };
       }
     } catch (dbErr) {
-      console.error("[SSLCommerz Service] Database config lookup error:", dbErr);
     }
 
     // 3. Fallback to environment variables (if not placeholder dummy values)

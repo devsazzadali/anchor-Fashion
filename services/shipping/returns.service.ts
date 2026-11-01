@@ -411,7 +411,6 @@ export class ReturnsService {
         notes: `Customer initiated return request ${returnNumber} (${input.reason}). Refund Amount: ৳${finalRefundAmount}.`,
       });
     } catch (histErr) {
-      console.warn("Failed to insert order status history:", histErr);
     }
 
     // 7. Dispatch customer confirmation email via EmailProvider
@@ -477,7 +476,6 @@ export class ReturnsService {
         });
       }
     } catch (mailErr) {
-      console.warn("Could not dispatch confirmation email:", mailErr);
     }
 
     return createdReturn;
@@ -554,7 +552,7 @@ export class ReturnsService {
           .select("id")
           .maybeSingle();
           
-        if (updateErr) console.error("Atomic restock lock error:", updateErr);
+        if (updateErr) {}
 
         if (updatedItem && (item.order_item_id || (item as any).variant_id)) {
           let variantId = (item as any).variant_id;
@@ -641,8 +639,7 @@ export class ReturnsService {
                     createdBy: adminUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(adminUserId) ? adminUserId : null,
                   },
                 });
-              } catch (e: any) {
-                console.warn("Could not insert stock_movements log:", e?.message);
+              } catch (e) {
               }
             }
           }
@@ -740,7 +737,6 @@ export class ReturnsService {
         const { ReferralService } = await import("@/services/referral.service");
         await ReferralService.reverseReferralReward(returnRecord.order_id);
       } catch (err) {
-        console.error("Failed to reverse referral reward:", err);
       }
 
       return { success: true, method: "WALLET", refundRef: returnRecord.return_number };
@@ -795,13 +791,11 @@ export class ReturnsService {
               const { ReferralService } = await import("@/services/referral.service");
               await ReferralService.reverseReferralReward(returnRecord.order_id);
             } catch (err) {
-              console.error("Failed to reverse referral reward:", err);
             }
 
             return { success: true, method: "BKASH", refundRef: res.refundTrxID };
           }
-        } catch (bkErr: any) {
-          console.warn("bKash refund API call failed/unconfigured, marking PENDING:", bkErr.message);
+        } catch (bkErr) {
         }
       }
 
@@ -843,13 +837,11 @@ export class ReturnsService {
               const { ReferralService } = await import("@/services/referral.service");
               await ReferralService.reverseReferralReward(returnRecord.order_id);
             } catch (err) {
-              console.error("Failed to reverse referral reward:", err);
             }
 
             return { success: true, method: "SSLCOMMERZ", refundRef: res.refund_ref_id };
           }
-        } catch (sslErr: any) {
-          console.warn("SSLCommerz refund call failed/unconfigured, marking PENDING:", sslErr.message);
+        } catch (sslErr) {
         }
       }
 
@@ -1021,8 +1013,7 @@ export class ReturnsService {
           paymentRef: returnRecord.return_number,
           description: `Store credit refund for return ${returnRecord.return_number}`,
         });
-      } catch (err: any) {
-        console.warn("[resolveReturnWithRefund] Wallet topup warning:", err.message);
+      } catch (err) {
       }
     }
 
@@ -1048,7 +1039,6 @@ export class ReturnsService {
         const { ReferralService } = await import("@/services/referral.service");
         await ReferralService.reverseReferralReward(returnRecord.order_id);
       } catch (err) {
-        console.warn("[resolveReturnWithRefund] Referral reward reversal skipped:", err);
       }
     }
 

@@ -194,7 +194,6 @@ export function PremiumMobileMenu({
       try {
         await authClient.signOut();
       } catch (authErr) {
-        console.warn("SignOut notice:", authErr);
       }
       try {
         localStorage.removeItem("anchor_user_password");

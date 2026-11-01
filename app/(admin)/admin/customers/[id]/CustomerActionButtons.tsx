@@ -132,8 +132,8 @@ export function CustomerActionButtons({
       setWalletAmount("");
       setWalletReason("");
       router.refresh();
-    } catch (err: any) {
-      toast.error(err?.message || "An unexpected error occurred.");
+    } catch (err) {
+      toast.error((err as Error)?.message || "An unexpected error occurred.");
     } finally {
       setIsAdjustingWallet(false);
     }
@@ -222,8 +222,8 @@ export function CustomerActionButtons({
       setIsEditOpen(false);
       setNewPassword("");
       router.refresh();
-    } catch (err: any) {
-      toast.error(err?.message || "An unexpected error occurred.");
+    } catch (err) {
+      toast.error((err as Error)?.message || "An unexpected error occurred.");
     } finally {
       setIsUpdating(false);
     }
@@ -242,8 +242,8 @@ export function CustomerActionButtons({
       toast.success("Customer account deleted successfully.");
       setIsDeleteOpen(false);
       router.push("/admin/customers");
-    } catch (err: any) {
-      toast.error(err?.message || "An unexpected error occurred.");
+    } catch (err) {
+      toast.error((err as Error)?.message || "An unexpected error occurred.");
     } finally {
       setIsDeleting(false);
     }

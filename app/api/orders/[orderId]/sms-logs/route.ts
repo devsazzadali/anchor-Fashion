@@ -17,7 +17,7 @@ export async function GET(
       return NextResponse.json({ error: "Missing orderId in route" }, { status: 400 });
     }
 
-    let user: any = null;
+    let user = null;
     try {
       const db = await createDbClient();
       const { data, error: authError } = await db.auth.getUser();
@@ -80,10 +80,9 @@ export async function GET(
       count: logs.length,
       logs,
     });
-  } catch (error: any) {
-    console.error("GET /api/orders/:orderId/sms-logs exception:", error);
+  } catch (error) {
     return NextResponse.json(
-      { error: "Internal Server Error", details: error.message },
+      { error: "Internal Server Error", details: (error as Error).message },
       { status: 500 }
     );
   }

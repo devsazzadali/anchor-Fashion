@@ -8,7 +8,6 @@ export class TagRepository {
       });
       return tags;
     } catch (err) {
-      console.error("Error fetching tags via Prisma:", err);
       return [];
     }
   }

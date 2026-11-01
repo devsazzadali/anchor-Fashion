@@ -92,9 +92,8 @@ export const dbStorage = {
           await fs.writeFile(dest, buffer);
         }
         return { data: { path }, error: null };
-      } catch (err: any) {
-        console.error("[polyfill storage.upload error]:", err);
-        return { data: null, error: err };
+      } catch (err) {
+        return { data: null, error: err as Error };
       }
     },
     getPublicUrl: (path: string) => ({

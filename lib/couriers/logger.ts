@@ -61,17 +61,7 @@ export async function logCourierApiCall(entry: CourierApiLogEntry): Promise<void
 
     if (error) {
       // Table may not have been migrated yet; log locally to stdout and fail open
-      console.warn(
-        `[CourierLogger] Warning: Could not persist API log to DB (${error.message}). Log details:`,
-        {
-          courier: entry.courierCode,
-          endpoint: entry.endpoint,
-          statusCode: entry.statusCode,
-          success: entry.success,
-        }
-      );
     }
-  } catch (err: any) {
-    console.warn(`[CourierLogger] Exception logging API call: ${err.message}`);
+  } catch (err) {
   }
 }

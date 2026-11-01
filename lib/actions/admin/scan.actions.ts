@@ -143,9 +143,8 @@ export async function lookupBarcodeAction(query: string) {
         warehouses,
       },
     };
-  } catch (err: any) {
-    console.error("[lookupBarcodeAction]", err);
-    return { success: false, error: err.message || "Failed to lookup barcode" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to lookup barcode" };
   }
 }
 
@@ -229,8 +228,7 @@ export async function adjustScannedStockAction({
         reason_code: movementType,
         reference_id: "SCAN-STATION",
       });
-    } catch (e: any) {
-      console.warn("Could not insert stock_movements log:", e?.message);
+    } catch (e) {
     }
 
     revalidatePath("/admin/operations/scan");
@@ -245,8 +243,7 @@ export async function adjustScannedStockAction({
         delta: actualDelta,
       },
     };
-  } catch (err: any) {
-    console.error("[adjustScannedStockAction]", err);
-    return { success: false, error: err.message || "Failed to adjust stock" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to adjust stock" };
   }
 }

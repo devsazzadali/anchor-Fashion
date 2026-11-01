@@ -93,9 +93,8 @@ export async function updateHomepageLayout(layout: HomepageLayout) {
       "Homepage section visibility and ordering"
     );
     return { success: true };
-  } catch (err: any) {
-    console.error("[updateHomepageLayout]", err);
-    return { success: false, error: err.message || "Failed to save layout" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to save layout" };
   }
 }
 
@@ -134,8 +133,7 @@ export async function updateFeaturesBarConfig(config: FeaturesBarConfig) {
       "Homepage features bar items (icon, title, description)"
     );
     return { success: true };
-  } catch (err: any) {
-    console.error("[updateFeaturesBarConfig]", err);
-    return { success: false, error: err.message || "Failed to save features bar" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to save features bar" };
   }
 }

@@ -107,7 +107,6 @@ export async function GET(req: NextRequest) {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
-    console.error("[internal/exists] check failed, failing open:", err);
     return NextResponse.json({ exists: true, degraded: true });
   }
 }

@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       aggregates,
       recentLogs: data,
     });
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error);
   }
 }

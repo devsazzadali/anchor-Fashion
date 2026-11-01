@@ -66,8 +66,8 @@ export function RegisterForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
 
-    let data: any = null;
-    let error: any = null;
+    let data = null;
+    let error = null;
 
     try {
       // Timeout after 20 seconds
@@ -82,8 +82,8 @@ export function RegisterForm() {
       const result = await Promise.race([signUpPromise, timeoutPromise]) as any;
       data = result.data;
       error = result.error;
-    } catch (e: any) {
-      toast.error(e.message || "Account creation failed. Please try again.");
+    } catch (e) {
+      toast.error((e as Error).message || "Account creation failed. Please try again.");
       setIsLoading(false);
       return;
     }

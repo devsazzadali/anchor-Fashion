@@ -44,10 +44,9 @@ export async function POST(req: NextRequest) {
       },
       { status: result.success ? 200 : 400 }
     );
-  } catch (error: any) {
-    console.error("POST /api/sms/test exception:", error);
+  } catch (error) {
     return NextResponse.json(
-      { error: "Internal Server Error", details: error.message },
+      { error: "Internal Server Error", details: (error as Error).message },
       { status: 500 }
     );
   }

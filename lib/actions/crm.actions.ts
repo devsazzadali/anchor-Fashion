@@ -11,8 +11,8 @@ export async function getCustomersAction() {
   try {
     const customers = await crmService.getCustomers();
     return { data: customers };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -22,8 +22,8 @@ export async function getCustomerTimelineAction(profileId: string) {
   try {
     const timeline = await crmService.getCustomerTimeline(profileId);
     return { data: timeline };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -33,8 +33,8 @@ export async function getLeadsAction() {
   try {
     const leads = await crmService.getLeads();
     return { data: leads };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -44,8 +44,8 @@ export async function getLeadByIdAction(id: string) {
   try {
     const lead = await crmService.getLeadById(id);
     return { data: lead };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -56,8 +56,8 @@ export async function deleteLeadAction(id: string) {
     await crmService.deleteLead(id);
     revalidatePath("/admin/crm/leads");
     return { success: true };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -127,12 +127,10 @@ export async function convertLeadAction(id: string, profileId?: string) {
       revalidatePath("/admin/crm/leads");
       revalidatePath("/admin/customers");
     } catch (revalErr) {
-      console.warn("Revalidation warning:", revalErr);
     }
     return { data: lead };
-  } catch (error: any) {
-    console.error("[convertLeadAction] Error:", error);
-    return { error: error?.message || "Failed to convert lead" };
+  } catch (error) {
+    return { error: (error as Error)?.message || "Failed to convert lead" };
   }
 }
 
@@ -142,8 +140,8 @@ export async function getLeadNotesAction(leadId: string) {
   try {
     const notes = await crmService.getLeadNotes(leadId);
     return { data: notes };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -154,8 +152,8 @@ export async function addLeadNoteAction(leadId: string, content: string) {
     const note = await crmService.addNoteToLead(leadId, content);
     revalidatePath("/admin/crm/leads");
     return { data: note };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -165,8 +163,8 @@ export async function getLeadCommunicationLogsAction(leadId: string) {
   try {
     const logs = await crmService.getLeadCommunicationLogs(leadId);
     return { data: logs };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -179,8 +177,8 @@ export async function addCustomerNoteAction(profileId: string, data: unknown) {
       revalidatePath(`/admin/customers/${profileId}`);
     } catch {}
     return { data: note };
-  } catch (error: any) {
-    return { error: error?.message || "Failed to add customer note" };
+  } catch (error) {
+    return { error: (error as Error)?.message || "Failed to add customer note" };
   }
 }
 
@@ -191,8 +189,8 @@ export async function getCommunicationLogsAction() {
     await cleanupFakeMessages();
     const logs = await crmService.getCommunicationLogs();
     return { data: logs };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -211,8 +209,8 @@ export async function logCommunicationAction(data: {
     const log = await crmService.logCommunication(data);
     revalidatePath("/admin/crm/messages");
     return { data: log };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -234,8 +232,8 @@ export async function updateCommunicationLogAction(
     const log = await crmService.updateCommunicationLog(id, data);
     revalidatePath("/admin/crm/messages");
     return { data: log };
-  } catch (error: any) {
-    return { error: error.message || "Failed to update communication log" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to update communication log" };
   }
 }
 
@@ -246,8 +244,8 @@ export async function deleteCommunicationLogAction(id: string) {
     await crmService.deleteCommunicationLog(id);
     revalidatePath("/admin/crm/messages");
     return { success: true };
-  } catch (error: any) {
-    return { error: error.message || "Failed to delete communication log" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to delete communication log" };
   }
 }
 

@@ -46,7 +46,6 @@ export function GeminiInsightBox({
 
         setInsight(mockInsight);
       } catch (error) {
-        console.error("Failed to fetch AI insight", error);
         setInsight("Unable to generate AI insights at this moment.");
       } finally {
         setLoading(false);

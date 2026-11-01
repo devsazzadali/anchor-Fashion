@@ -96,14 +96,14 @@ export class GeminiProvider implements AIProvider {
             data.error?.message || "Failed to generate text using Gemini",
         },
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
         providerId: this.id,
         timestamp: new Date().toISOString(),
         error: {
           code: "EXCEPTION",
-          message: error.message,
+          message: (error as Error).message,
         },
       };
     }

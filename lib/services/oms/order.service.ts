@@ -56,7 +56,6 @@ export class OrderService {
           }
         }
       } catch (err) {
-        console.error(`[OrderService] Failed to qualify referral or earn loyalty for order ${id}:`, err);
       }
     } else if (lowerStatus === "cancelled" || lowerStatus === "refunded" || lowerStatus === "returned") {
       try {
@@ -75,7 +74,6 @@ export class OrderService {
           }
         }
       } catch (err) {
-        console.error(`[OrderService] Failed to reverse loyalty for order ${id}:`, err);
       }
 
       try {
@@ -84,14 +82,12 @@ export class OrderService {
         const invService = new InventoryService();
         await invService.releaseOrderInventory(id);
       } catch (invErr) {
-        console.error(`[OrderService] Failed to release inventory for order ${id}:`, invErr);
       }
     } else if (lowerStatus === "confirmed") {
       try {
         const { AlphaSmsService } = await import("@/lib/services/sms/alpha-sms.service");
         AlphaSmsService.triggerOrderConfirmationSmsAsync(id);
       } catch (smsErr) {
-        console.error(`[OrderService] Failed to trigger SMS for order ${id}:`, smsErr);
       }
     }
 
@@ -115,10 +111,6 @@ export class OrderService {
             : null,
         });
       } catch (err) {
-        console.error(
-          `[OrderService] Order email notifications failed for order ${id}:`,
-          err
-        );
       }
     })();
 
@@ -224,7 +216,6 @@ export class OrderService {
           };
         }
       } catch (err) {
-        console.error("Error fetching order customer profile:", err);
       }
     }
 
@@ -264,7 +255,6 @@ export class OrderService {
         if (addr) billingAddress = addr;
       }
     } catch (err) {
-      console.error("Error fetching order addresses:", err);
     }
 
     // 3. Fallback to the address JSON persisted on the order itself.
@@ -310,7 +300,6 @@ export class OrderService {
         .maybeSingle();
       manualPayment = tx;
     } catch (err) {
-      console.error("Error fetching manual payment transaction:", err);
     }
 
     return {

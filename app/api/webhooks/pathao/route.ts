@@ -22,9 +22,6 @@ export async function POST(req: Request) {
     // secret is unset or wrong.
     const webhookSecret = process.env.PATHAO_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      console.error(
-        "[PathaoWebhook] REJECTED: PATHAO_WEBHOOK_SECRET is not set — refusing to process an unverifiable webhook call. Set the secret and register the webhook URL with the matching token/header to enable Pathao status updates."
-      );
       return NextResponse.json(
         { success: false, message: "Webhook not configured" },
         { status: 401 }
@@ -95,15 +92,14 @@ export async function POST(req: Request) {
         processed: true,
         processed_at: new Date().toISOString(),
       });
-    } catch (e: any) {
-      console.warn("[PathaoWebhook] Warning logging webhook event:", e.message);
+    } catch (e) {
     }
 
     // 4. Find matching shipment — bound equality lookups only. The raw
     // payload value is never interpolated into a filter string (the old
     // `.or()` template let a crafted consignment id inject extra filter
     // clauses and match shipments it should never have touched).
-    let shipment: any = null;
+    let shipment = null;
     {
       const byConsignment = await adminDb
         .from("shipments")
@@ -157,10 +153,9 @@ export async function POST(req: Request) {
       success: true,
       message: "Pathao webhook processed successfully",
     });
-  } catch (err: any) {
-    console.error("[PathaoWebhook Exception]:", err);
+  } catch (err) {
     return NextResponse.json(
-      { success: false, error: err.message || "Webhook processing error" },
+      { success: false, error: (err as Error).message || "Webhook processing error" },
       { status: 500 }
     );
   }

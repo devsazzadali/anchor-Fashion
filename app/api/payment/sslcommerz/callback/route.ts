@@ -48,7 +48,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         }
       }
     } catch (parseErr) {
-      console.warn("[SSLCommerz Callback] Error reading body:", parseErr);
     }
   }
 
@@ -62,8 +61,8 @@ async function handleSSLCommerzCallback(req: NextRequest) {
   const inventoryService = new InventoryService();
 
   // 1. Locate Order and Payment Session
-  let order: any = null;
-  let paymentSession: any = null;
+  let order = null;
+  let paymentSession = null;
 
   // Try lookup by custom parameter value_a (order.id)
   if (orderIdFromCustom) {
@@ -116,7 +115,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
   }
 
   if (!order) {
-    console.error(`[SSLCommerz Callback] Order not found for tran_id: ${tranId}, value_a: ${orderIdFromCustom}`);
     return NextResponse.redirect(
       new URL("/checkout/failed?reason=order_not_found", appUrl),
       303
@@ -156,7 +154,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
   // 3. Handle Cancellation or Failure from Gateway
   if (action === "cancel" || status === "CANCELLED" || action === "fail" || status === "FAILED") {
     const isCancel = action === "cancel" || status === "CANCELLED";
-    console.warn(`[SSLCommerz Callback] Payment ${isCancel ? "cancelled" : "failed"} for order ${order.order_number}`);
 
     try {
       // Release reserved inventory authoritatively in Neon DB & RPC
@@ -165,7 +162,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
       // Release coupon usage if applied
       await CouponService.releaseCoupon(order.id);
     } catch (releaseErr) {
-      console.error(`[SSLCommerz Callback] Error releasing inventory for order ${order.id}:`, releaseErr);
     }
 
     // Update order status to cancelled
@@ -212,7 +208,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
   // 4. Handle Success -> Authoritative Server-Side Validation
   if (action === "success" || status === "VALID" || status === "VALIDATED") {
     if (!valId) {
-      console.error(`[SSLCommerz Callback] Missing val_id in success callback for order ${order.order_number}`);
       return NextResponse.redirect(
         new URL(`/checkout/failed?order_id=${order.id}&reason=missing_val_id`, appUrl),
         303
@@ -225,11 +220,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
       // Verify Provider Status
       if (valRes.status !== "VALID" && valRes.status !== "VALIDATED") {
-        console.error(
-          `[SSLCommerz Callback] Transaction validation failed for order ${order.order_number}:`,
-          valRes.status,
-          valRes.error
-        );
 
         await inventoryService.releaseOrderInventory(order.id);
         await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
@@ -250,9 +240,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
       const gatewayAmount = parseFloat(valRes.amount);
       const orderAmount = parseFloat(order.total_amount ?? order.grand_total ?? 0);
       if (isNaN(gatewayAmount) || Math.abs(gatewayAmount - orderAmount) > 0.01) {
-        console.error(
-          `[SSLCommerz Callback] Security Alert: Amount mismatch! Gateway: ${valRes.amount}, Order: ${orderAmount}`
-        );
 
         await inventoryService.releaseOrderInventory(order.id);
         await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
@@ -277,9 +264,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         (verifiedCurrency === "BDT" && (expectedCurrency === "USD" || expectedCurrency === "BDT"));
 
       if (!isCurrencyMatch) {
-        console.error(
-          `[SSLCommerz Callback] Security Alert: Currency mismatch! Gateway: ${verifiedCurrency}, Order: ${expectedCurrency}`
-        );
 
         await db.rpc("release_order_inventory", { p_order_id: order.id });
         await CouponService.releaseCoupon(order.id);
@@ -297,9 +281,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
       // Authoritative Transaction ID Verification
       if (valRes.tran_id && tranId && valRes.tran_id !== tranId) {
-        console.warn(
-          `[SSLCommerz Callback] Transaction ID mismatch warning! Gateway: ${valRes.tran_id}, Payload: ${tranId}`
-        );
       }
 
       const confirmedTrxId = valRes.bank_tran_id || valId;
@@ -344,9 +325,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
       // Check if order was cancelled while payment was pending (Late Payment Callback Race)
       if ((order.status || "").toLowerCase() === "cancelled") {
-        console.warn(
-          `[SSLCommerz Callback] Payment succeeded for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
-        );
 
         await db.from("orders").update({
           payment_method: "SSLCOMMERZ",
@@ -408,7 +386,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
           status: "confirmed",
         });
       } catch (notifErr) {
-        console.warn("[SSLCommerz Callback] Error creating payment notification:", notifErr);
       }
 
       // Clear customer cart (Prompt 7 integration)
@@ -435,7 +412,6 @@ async function handleSSLCommerzCallback(req: NextRequest) {
           await CartService.clearCart(cartIdToClear);
         }
       } catch (cartErr) {
-        console.error("[SSLCommerz Callback] Cart clear error:", cartErr);
       }
 
       // Trigger Order Confirmation SMS asynchronously
@@ -443,15 +419,13 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         const { AlphaSmsService } = await import("@/lib/services/sms/alpha-sms.service");
         AlphaSmsService.triggerOrderConfirmationSmsAsync(order.id);
       } catch (smsErr) {
-        console.error("[SSLCommerz Callback] SMS trigger error:", smsErr);
       }
 
       return NextResponse.redirect(
         new URL(`/checkout/success?order_id=${order.id}&trxID=${confirmedTrxId}`, appUrl),
         303
       );
-    } catch (execErr: any) {
-      console.error("[SSLCommerz Callback] Validation execution exception:", execErr);
+    } catch (execErr) {
       return NextResponse.redirect(
         new URL(`/checkout/failed?order_id=${order.id}&reason=internal_error`, appUrl),
         303

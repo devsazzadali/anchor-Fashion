@@ -38,9 +38,8 @@ export async function trackEvent(
     if (error) throw new Error(error.message);
 
     return { success: true };
-  } catch (error: any) {
-    console.error("Error tracking analytics event:", error);
-    return { error: error.message || "Failed to track event" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to track event" };
   }
 }
 
@@ -64,9 +63,8 @@ export async function getDashboardSnapshot(
     if (error && error.code !== "PGRST116") throw new Error(error.message);
 
     return { data: data as DashboardSnapshot | null };
-  } catch (error: any) {
-    console.error(`Error fetching snapshot for ${type}:`, error);
-    return { error: error.message || "Failed to fetch dashboard snapshot" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to fetch dashboard snapshot" };
   }
 }
 
@@ -90,9 +88,8 @@ export async function saveDashboardSnapshot(
 
     revalidatePath(`/dashboard/${parsedData.dashboard_type}`);
     return { success: true };
-  } catch (error: any) {
-    console.error("Error saving dashboard snapshot:", error);
-    return { error: error.message || "Failed to save snapshot" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to save snapshot" };
   }
 }
 
@@ -118,8 +115,7 @@ export async function getAnalyticsEvents(
     if (error) throw new Error(error.message);
 
     return { data: data as AnalyticsEvent[] };
-  } catch (error: any) {
-    console.error("Error fetching analytics events:", error);
-    return { error: error.message || "Failed to fetch events" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to fetch events" };
   }
 }

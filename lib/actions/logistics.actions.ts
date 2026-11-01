@@ -91,8 +91,8 @@ export async function getCourierProvidersAction(): Promise<
     if (error) throw error;
 
     return { success: true, data: (data || []).map(sanitizeProvider) };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -186,8 +186,8 @@ export async function createCourierProviderAction(
     CourierRegistry.getInstance().invalidate();
     revalidatePath("/admin/operations/logistics/couriers");
     return { success: true, data: sanitizeProvider(data) };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to create courier provider" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to create courier provider" };
   }
 }
 
@@ -287,8 +287,8 @@ export async function updateCourierProviderAction(
     revalidatePath("/admin/operations/logistics/couriers");
     revalidatePath("/admin/shipping/couriers");
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -373,14 +373,14 @@ export async function testCourierConnectionAction(
 
     const health = await provider.healthCheck();
     return { success: true, data: health };
-  } catch (err: any) {
+  } catch (err) {
     return {
       success: true,
       data: {
         status: "unhealthy",
         responseTime: 0,
         lastCheckedAt: new Date().toISOString(),
-        message: err.message || "Failed to connect to courier API",
+        message: (err as Error).message || "Failed to connect to courier API",
       },
     };
   }
@@ -410,7 +410,6 @@ export async function getCourierMetricsAction(): Promise<
       .select("courier_provider_code, status, cod_amount, is_cod");
 
     if (shipError) {
-      console.warn("Could not query shipments for metrics:", shipError.message);
     }
 
     const activeStatuses = new Set([
@@ -453,8 +452,8 @@ export async function getCourierMetricsAction(): Promise<
     }
 
     return { success: true, data: metricsMap };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 

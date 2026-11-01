@@ -138,7 +138,6 @@ export function ScanStationClient() {
         toast.info("Native scanner not available in this browser. Point camera or use manual input.");
       }
     } catch (err: any) {
-      console.error("[startCamera]", err);
       setCameraError(
         err.name === "NotAllowedError"
           ? "Camera permission denied. Please grant camera access."

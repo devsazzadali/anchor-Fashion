@@ -30,7 +30,6 @@ export async function getAuditLogsAction() {
       created_at: log.createdAt.toISOString(),
     }));
   } catch (error) {
-    console.error("Failed to fetch audit logs:", error);
     return [];
   }
 }

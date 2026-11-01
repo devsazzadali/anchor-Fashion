@@ -282,11 +282,10 @@ export async function createInventoryMasterIntakeAction(input: InventoryMasterIn
       data: result,
       message: `Successfully created master product "${name}" with ${result.totalCreatedVariants} variants and ${result.totalStockUnits} stock units in Inventory.`,
     };
-  } catch (error: any) {
-    console.error("Error creating inventory master intake:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to create master product intake.",
+      error: (error as Error)?.message || "Failed to create master product intake.",
     };
   }
 }
@@ -544,11 +543,10 @@ export async function getInventoryMasterListAction(params?: {
         categoryCounts,
       },
     };
-  } catch (error: any) {
-    console.error("Error in getInventoryMasterListAction:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to load master inventory list.",
+      error: (error as Error)?.message || "Failed to load master inventory list.",
     };
   }
 }
@@ -679,7 +677,6 @@ export async function dispatchToBranchAction(input: {
       result = await executeTransfer();
     } catch (txErr: any) {
       if (txErr?.code === "P2028" || txErr?.message?.includes("Transaction not found")) {
-        console.warn("[dispatchToBranchAction] Pooler transaction timed out, retrying once...");
         result = await executeTransfer();
       } else {
         throw txErr;
@@ -697,11 +694,10 @@ export async function dispatchToBranchAction(input: {
       data: result,
       message: `Successfully transferred ${quantity} units to ${branch.name} (Transfer #${transferNumber}).`,
     };
-  } catch (error: any) {
-    console.error("Error dispatching branch transfer:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to dispatch branch transfer.",
+      error: (error as Error)?.message || "Failed to dispatch branch transfer.",
     };
   }
 }
@@ -821,11 +817,10 @@ export async function getBranchTransfersReportAction(params?: {
         branches: allBranches,
       },
     };
-  } catch (error: any) {
-    console.error("Error in getBranchTransfersReportAction:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to load branch transfers report.",
+      error: (error as Error)?.message || "Failed to load branch transfers report.",
     };
   }
 }
@@ -1018,11 +1013,10 @@ export async function getInventoryFinancialReportAction() {
         products: productBreakdown.sort((a, b) => b.retailValuation - a.retailValuation),
       },
     };
-  } catch (error: any) {
-    console.error("Error in getInventoryFinancialReportAction:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to generate financial report.",
+      error: (error as Error)?.message || "Failed to generate financial report.",
     };
   }
 }
@@ -1062,10 +1056,10 @@ export async function toggleProductPublishStatusAction(productId: string) {
       status: newStatus,
       message: `Product "${product.name}" is now ${newStatus === "ACTIVE" ? "PUBLISHED (Live on Website)" : "DRAFT (Saved in Inventory)"}.`,
     };
-  } catch (error: any) {
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to update publish status.",
+      error: (error as Error)?.message || "Failed to update publish status.",
     };
   }
 }

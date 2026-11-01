@@ -58,7 +58,6 @@ export class AlphaSmsService {
     // 1. Phone number normalization & validation
     const { valid, normalized, reason } = this.normalizePhoneNumber(to);
     if (!valid) {
-      console.warn(`[Alpha SMS] Phone validation failed: ${reason}`);
       await this.recordSmsLog({
         order_id: orderId || null,
         phone: normalized || to,
@@ -88,7 +87,6 @@ export class AlphaSmsService {
 
     // 2. Check if SMS sending is disabled globally
     if (!isSmsEnabled) {
-      console.warn(`[Alpha SMS] SMS_ENABLED is false. Skipping dispatch to ${normalized}.`);
       return {
         success: true,
         status: "SKIPPED",
@@ -102,9 +100,6 @@ export class AlphaSmsService {
     // 3. Test Mode / Simulated Send (does not consume SMS credits)
     if (isTestMode) {
       const mockRequestId = `TEST-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-      console.warn(
-        `[Alpha SMS] [TEST MODE] Simulated SMS sent to ${normalized}. RequestID: ${mockRequestId}. Message: "${message}"`
-      );
 
       const log = await this.recordSmsLog({
         order_id: orderId || null,
@@ -191,7 +186,6 @@ export class AlphaSmsService {
       });
 
       if (!isSuccess) {
-        console.error(`[Alpha SMS] Delivery failed to ${normalized}:`, errorMessage);
         return {
           success: false,
           status: "FAILED",
@@ -203,9 +197,6 @@ export class AlphaSmsService {
         };
       }
 
-      console.warn(
-        `[Alpha SMS] Delivery successful to ${normalized}. RequestID: ${requestId}`
-      );
 
       return {
         success: true,
@@ -221,7 +212,6 @@ export class AlphaSmsService {
         ? "Request timeout after 12s connecting to Alpha SMS"
         : error.message || "Network connection error";
 
-      console.error("[Alpha SMS] Exception during sendSMS:", errReason);
 
       const log = await this.recordSmsLog({
         order_id: orderId || null,
@@ -269,7 +259,6 @@ export class AlphaSmsService {
 
       if (orderErr || !order) {
         const msg = `Order not found with ID: ${orderId} (${orderErr?.message || "No order record"})`;
-        console.warn(`[Alpha SMS] ${msg}`);
         return {
           success: false,
           status: "FAILED",
@@ -291,14 +280,12 @@ export class AlphaSmsService {
           addresses = addrList;
         }
       } catch (addrErr) {
-        console.warn("[Alpha SMS] Warning fetching order_addresses:", addrErr);
       }
 
       // 2. Strict Confirmation Guard
       const currentStatus = (order.status || "").toLowerCase();
       if (currentStatus !== "confirmed") {
         const msg = `Order ${order.order_number} is in status '${order.status}', NOT 'CONFIRMED'. SMS aborted.`;
-        console.warn(`[Alpha SMS] ${msg}`);
         return {
           success: false,
           status: "SKIPPED",
@@ -312,7 +299,6 @@ export class AlphaSmsService {
       // 3. Duplicate SMS Protection
       if (!options?.force && order.confirmation_sms_sent === true) {
         const msg = `Confirmation SMS already sent for order ${order.order_number} (confirmation_sms_sent = true). Skipping duplicate.`;
-        console.warn(`[Alpha SMS] ${msg}`);
         return {
           success: true,
           status: "SKIPPED",
@@ -328,7 +314,6 @@ export class AlphaSmsService {
         const priorSentLog = await this.checkPriorSentLog(order.id);
         if (priorSentLog) {
           const msg = `Confirmation SMS already logged as SENT for order ${order.order_number}. Skipping duplicate.`;
-          console.warn(`[Alpha SMS] ${msg}`);
           // Sync confirmation_sms_sent flag
           await this.markOrderSmsSent(order.id);
           return {
@@ -345,7 +330,7 @@ export class AlphaSmsService {
 
       // 4. Extract Customer Name and Phone Number
       const shippingAddr =
-        addresses.find((a: any) => (a.address_type || "").toUpperCase() === "SHIPPING") ||
+        addresses.find((a) => (a.address_type || "").toUpperCase() === "SHIPPING") ||
         addresses[0];
 
       // Phase 8: storefront orders carry the address (incl. phone) in the
@@ -378,7 +363,6 @@ export class AlphaSmsService {
 
       if (!phone) {
         const msg = `No phone number found for order ${order.order_number}. Cannot send confirmation SMS.`;
-        console.warn(`[Alpha SMS] ${msg}`);
         await this.recordSmsLog({
           order_id: order.id,
           phone: "UNKNOWN",
@@ -431,7 +415,6 @@ export class AlphaSmsService {
           orderItems = itemsList;
         }
       } catch (itemErr) {
-        console.warn("[Alpha SMS] Warning fetching order_items for SMS:", itemErr);
       }
 
       // 5. Construct Order Confirmation SMS Content with full professional details
@@ -479,14 +462,13 @@ export class AlphaSmsService {
       }
 
       return result;
-    } catch (err: any) {
-      console.error("[Alpha SMS] sendOrderConfirmationSMS exception:", err);
+    } catch (err) {
       return {
         success: false,
         status: "FAILED",
         phone: "",
         message: "",
-        error: err.message || "Unknown error during order confirmation SMS dispatch",
+        error: (err as Error).message || "Unknown error during order confirmation SMS dispatch",
       };
     }
   }
@@ -664,7 +646,6 @@ export class AlphaSmsService {
       try {
         await this.sendCustomOrderConfirmationSMS(payload);
       } catch (err) {
-        console.error("[Alpha SMS] Background custom async SMS dispatch error:", err);
       }
     });
   }
@@ -681,7 +662,6 @@ export class AlphaSmsService {
       try {
         await this.sendOrderConfirmationSMS(orderId, options);
       } catch (err) {
-        console.error("[Alpha SMS] Background async SMS dispatch error:", err);
       }
     });
   }
@@ -761,7 +741,6 @@ export class AlphaSmsService {
         return data;
       }
     } catch (commErr) {
-      console.error("[Alpha SMS] Error recording to communication_logs:", commErr);
     }
 
     return null;
@@ -783,10 +762,8 @@ export class AlphaSmsService {
 
       if (error) {
         // If column does not exist yet, log silently
-        console.warn("[Alpha SMS] Note on updating confirmation_sms_sent:", error.message);
       }
-    } catch (err: any) {
-      console.warn("[Alpha SMS] Exception updating confirmation_sms_sent:", err?.message);
+    } catch (err) {
     }
   }
 

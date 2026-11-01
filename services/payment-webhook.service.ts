@@ -75,10 +75,6 @@ export class PaymentWebhookService {
                   item.quantity
                 );
               } catch (err) {
-                console.error(
-                  `Failed to release stock for variant ${item.variant_id}`,
-                  err
-                );
               }
             }
           }
@@ -86,11 +82,11 @@ export class PaymentWebhookService {
       }
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       // 4. Handle failure and retry logic if needed
       await paymentRepository.updateWebhookEvent(webhook.id, {
         status: "failed",
-        last_error: error.message,
+        last_error: (error as Error).message,
         retry_count: webhook.retry_count + 1,
       });
       throw error;

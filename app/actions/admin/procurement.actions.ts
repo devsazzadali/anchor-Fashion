@@ -126,8 +126,8 @@ export async function createSupplierProfileAction(data: {
     } catch {}
 
     return { success: true, data: mapSupplierRow(supplier) };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to create supplier profile" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to create supplier profile" };
   }
 }
 
@@ -209,8 +209,8 @@ export async function updateSupplierProfileAction(
     } catch {}
 
     return { success: true, data: mapSupplierRow(updated) };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to update supplier profile" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update supplier profile" };
   }
 }
 
@@ -231,8 +231,8 @@ export async function deleteSupplierProfileAction(id: string) {
     } catch {}
 
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to delete supplier profile" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to delete supplier profile" };
   }
 }
 
@@ -423,8 +423,8 @@ export async function createProcurementOrder(
         grandTotal,
       },
     };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to create procurement order" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to create procurement order" };
   }
 }
 
@@ -497,8 +497,8 @@ export async function getProcurementOrderDetails(poId: string) {
         })),
       },
     };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to fetch PO details" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch PO details" };
   }
 }
 
@@ -520,8 +520,8 @@ export async function updateProcurementOrderStatus(
     revalidatePath("/admin/inventory/purchases");
     revalidatePath("/admin/operations/procurement/purchase-orders");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to update PO status" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update PO status" };
   }
 }
 
@@ -617,8 +617,7 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
           notes: notes || `Goods received from PO: ${po.po_number || poId}`,
           created_by: createdBy,
         });
-      } catch (e: any) {
-        console.warn("Could not insert stock_movements log:", e?.message);
+      } catch (e) {
       }
     }
 
@@ -637,8 +636,8 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
     revalidatePath("/admin/inventory/movement");
 
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to receive goods" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to receive goods" };
   }
 }
 

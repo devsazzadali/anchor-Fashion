@@ -64,8 +64,8 @@ export function PhoneLoginForm() {
       setE164(normalized);
       setStep("code");
       toast.success("A code has been sent to your mobile");
-    } catch (err: any) {
-      toast.error(err.message || "Could not send the OTP");
+    } catch (err) {
+      toast.error((err as Error).message || "Could not send the OTP");
     } finally {
       setIsLoading(false);
     }
@@ -100,8 +100,8 @@ export function PhoneLoginForm() {
       } catch {
         window.location.replace("/account/profile");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Verification failed");
+    } catch (err) {
+      toast.error((err as Error).message || "Verification failed");
       setIsLoading(false);
     }
   }

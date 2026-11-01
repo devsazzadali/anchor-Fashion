@@ -49,7 +49,6 @@ export class CouponRepository {
         created_at: row.createdAt.toISOString(),
       }));
     } catch (err) {
-      console.error("Unexpected error in getCoupons:", err);
       return [];
     }
   }

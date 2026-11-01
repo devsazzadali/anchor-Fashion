@@ -609,7 +609,6 @@ export function printGRNChallan(data: GRNPrintData): void {
 
     const doc = iframe.contentWindow?.document;
     if (!doc) {
-      console.error("Unable to access print iframe document");
       return;
     }
 
@@ -628,7 +627,6 @@ export function printGRNChallan(data: GRNPrintData): void {
       }, 2000);
     }, 400);
   } catch (error) {
-    console.error("Print GRN Challan error:", error);
     window.print();
   }
 }

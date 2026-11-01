@@ -41,10 +41,6 @@ export async function POST(
     );
 
     if (!result.success) {
-      console.error(
-        `[Webhook:${providerCode}] Processing failed:`,
-        result.error
-      );
       return NextResponse.json(
         { error: result.error?.message },
         { status: 400 }
@@ -58,8 +54,7 @@ export async function POST(
     }
 
     return NextResponse.json({ received: true, provider: providerCode });
-  } catch (err: any) {
-    console.error(`[Webhook:${providerCode}] Unexpected error:`, err);
+  } catch (err) {
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

@@ -19,7 +19,6 @@ async function getSessionIdentifiers() {
       cookieStore.delete("af_guest_session");
       guestSessionId = undefined;
     } catch (mergeErr) {
-      console.error("Auto-merge guest cart error:", mergeErr);
     }
   }
 
@@ -46,8 +45,8 @@ export async function fetchCartAction() {
     const { userId, sessionId } = await getSessionIdentifiers();
     const cart = await CartService.getOrCreateCart(userId, sessionId);
     return { success: true, cart };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -70,8 +69,8 @@ export async function addToCartAction(
     );
     revalidatePath("/cart");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -86,8 +85,8 @@ export async function updateCartItemQuantityAction(
     await CartService.updateQuantity(itemId, quantity);
     revalidatePath("/cart");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -98,8 +97,8 @@ export async function removeFromCartAction(itemId: string) {
     await CartService.removeItem(itemId, userId, sessionId);
     revalidatePath("/cart");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -112,8 +111,8 @@ export async function clearCartAction(cartId?: string) {
     }
     revalidatePath("/cart");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -132,8 +131,8 @@ export async function mergeGuestCartAction() {
     }
     revalidatePath("/cart");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -144,7 +143,7 @@ export async function logoutCartAction() {
     cookieStore.delete("af_guest_session");
     revalidatePath("/cart");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

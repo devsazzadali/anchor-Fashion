@@ -26,7 +26,6 @@ export class AITelemetry {
       ])
       .then(({ error }) => {
         if (error) {
-          console.error("Failed to log AI telemetry:", error);
         }
       });
   }

@@ -38,9 +38,8 @@ export async function createGroupAction(data: {
 
     revalidatePath("/admin/customers/groups");
     return { success: true, data: newGroup };
-  } catch (error: any) {
-    console.error("[createGroupAction]", error);
-    return { error: error.message || "Failed to create group" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to create group" };
   }
 }
 
@@ -64,9 +63,8 @@ export async function deleteGroupAction(
 
     revalidatePath("/admin/customers/groups");
     return { success: true };
-  } catch (error: any) {
-    console.error("[deleteGroupAction]", error);
-    return { error: error.message || "Failed to delete group" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to delete group" };
   }
 }
 
@@ -95,9 +93,8 @@ export async function updateGroupAction(
 
     revalidatePath("/admin/customers/groups");
     return { success: true, data: updated };
-  } catch (error: any) {
-    console.error("[updateGroupAction]", error);
-    return { success: false, error: error.message || "Failed to update group" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update group" };
   }
 }
 
@@ -242,9 +239,8 @@ export async function getGroupMembersAction(groupId: string): Promise<{
         count: members.length,
       },
     };
-  } catch (error: any) {
-    console.error("[getGroupMembersAction]", error);
-    return { success: false, error: error.message || "Failed to fetch group members" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch group members" };
   }
 }
 
@@ -281,9 +277,8 @@ export async function addMemberToGroupAction(
 
     revalidatePath("/admin/customers/groups");
     return { success: true };
-  } catch (error: any) {
-    console.error("[addMemberToGroupAction]", error);
-    return { success: false, error: error.message || "Failed to add customer to group" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to add customer to group" };
   }
 }
 
@@ -306,9 +301,8 @@ export async function removeMemberFromGroupAction(
 
     revalidatePath("/admin/customers/groups");
     return { success: true };
-  } catch (error: any) {
-    console.error("[removeMemberFromGroupAction]", error);
-    return { success: false, error: error.message || "Failed to remove customer from group" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to remove customer from group" };
   }
 }
 
@@ -337,8 +331,7 @@ export async function searchAvailableCustomersAction(
 
     const filtered = (data || []).filter((c: any) => !excludeIds.includes(c.id));
     return { success: true, data: filtered };
-  } catch (error: any) {
-    console.error("[searchAvailableCustomersAction]", error);
-    return { success: false, data: [], error: error.message || "Search failed" };
+  } catch (error) {
+    return { success: false, data: [], error: (error as Error).message || "Search failed" };
   }
 }

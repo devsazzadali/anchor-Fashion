@@ -54,7 +54,7 @@ export function ExploreCollections({
 
         {/* Collections Grid */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 md:gap-8">
-          {displayItems.slice(0, 4).map((item: any) => {
+          {displayItems.slice(0, 4).map((item) => {
             const linkHref = `/collections/${item.slug}`;
 
             return (

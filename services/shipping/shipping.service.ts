@@ -169,7 +169,6 @@ export class ShippingService {
             item.quantity
           );
         } catch (err) {
-          console.error(`Failed to reduce stock for variant ${item.sku}`, err);
         }
       }
     }
@@ -269,9 +268,6 @@ export class ShippingService {
           shipment.consignment_id
         );
       } catch (err) {
-        console.warn(
-          `[ShippingService] Could not cancel with previous provider: ${err}`
-        );
       }
     }
 
@@ -349,7 +345,6 @@ export class ShippingService {
     // that never happened. Record the failure on the shipment timeline,
     // keep the shipment as a 'created' draft, and surface the provider's
     // message to the operator.
-    console.error(`[ShippingService] Provider submit failed:`, result.error);
     try {
       await this.shipmentRepo.addEvent(
         shipment.id,
@@ -363,10 +358,6 @@ export class ShippingService {
         "admin"
       );
     } catch (eventErr) {
-      console.warn(
-        "[ShippingService] Could not record submission_failed event:",
-        eventErr
-      );
     }
     throw new Error(
       (result.error as any)?.message ||
@@ -397,7 +388,6 @@ export class ShippingService {
           shipment.consignment_id
         );
       } catch (err) {
-        console.warn("[ShippingService] Provider cancel failed:", err);
       }
     }
 
@@ -475,9 +465,6 @@ export class ShippingService {
       event.trackingNumber
     );
     if (!shipment) {
-      console.warn(
-        `[ShippingService] No shipment found for tracking: ${event.trackingNumber}`
-      );
       return;
     }
 
@@ -526,7 +513,6 @@ export class ShippingService {
         await orderService.updateOrderStatus(shipment.order_id, "shipped", undefined, "webhook").catch(() => {});
       }
     } catch (omsErr) {
-      console.error(`[ShippingService] Failed to sync webhook event to OMS for order ${shipment.order_id}:`, omsErr);
     }
   }
 

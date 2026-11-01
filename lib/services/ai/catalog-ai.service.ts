@@ -64,7 +64,6 @@ export class CatalogAIService {
         .trim();
       return JSON.parse(jsonStr);
     } catch (e) {
-      console.error("Failed to parse AI SEO JSON:", e);
       throw new Error("Invalid response from AI");
     }
   }

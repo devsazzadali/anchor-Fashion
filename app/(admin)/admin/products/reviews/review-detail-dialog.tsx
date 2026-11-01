@@ -93,8 +93,8 @@ export function ReviewDetailDialog({
           toast.error(res.error || "Failed to approve review");
         }
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred while updating status");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred while updating status");
     } finally {
       setActionLoading(false);
     }
@@ -111,8 +111,8 @@ export function ReviewDetailDialog({
       } else {
         toast.error(res.error || "Failed to delete review");
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred while deleting");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred while deleting");
     } finally {
       setActionLoading(false);
     }

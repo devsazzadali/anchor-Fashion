@@ -241,8 +241,7 @@ export async function getOperationsAnalyticsAction(timeRange: "7d" | "30d" | "90
         recentTrends,
       } as OperationsMetrics,
     };
-  } catch (err: any) {
-    console.error("[getOperationsAnalyticsAction]", err);
-    return { success: false, error: err.message || "Failed to fetch operations analytics" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to fetch operations analytics" };
   }
 }

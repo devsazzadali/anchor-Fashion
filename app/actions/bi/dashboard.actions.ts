@@ -26,7 +26,7 @@ export async function fetchDashboardRevenueAction(days = 7) {
     const rawData = await dashboardRepo.getDailyRevenue(days);
     const data = rawData || [];
 
-    const formattedData = data.map((d: any) => {
+    const formattedData = data.map((d) => {
       const date = new Date(d.date);
       return {
         name: date.toLocaleDateString("en-US", { weekday: "short" }),
@@ -38,9 +38,8 @@ export async function fetchDashboardRevenueAction(days = 7) {
     });
 
     return { success: true, data: formattedData };
-  } catch (error: any) {
-    console.error("fetchDashboardRevenueAction error:", error);
-    return { success: false, error: error.message, data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }
 
@@ -49,9 +48,8 @@ export async function fetchDashboardKPIsAction() {
     await verifyStaffAccess();
     const data = await dashboardRepo.getDashboardKPIs();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchDashboardKPIsAction error:", error);
-    return { success: false, error: error.message, data: null };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: null };
   }
 }
 
@@ -60,9 +58,8 @@ export async function fetchOperationalMetricsAction() {
     await verifyStaffAccess();
     const data = await dashboardRepo.getOperationalMetrics();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchOperationalMetricsAction error:", error);
-    return { success: false, error: error.message, data: null };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: null };
   }
 }
 
@@ -71,9 +68,8 @@ export async function fetchTopSellersAction() {
     await verifyStaffAccess();
     const data = await dashboardRepo.getTopSellers();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchTopSellersAction error:", error);
-    return { success: false, error: error.message, data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }
 
@@ -82,9 +78,8 @@ export async function fetchRevenueByCategoryAction() {
     await verifyStaffAccess();
     const data = await dashboardRepo.getRevenueByCategory();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchRevenueByCategoryAction error:", error);
-    return { success: false, error: error.message, data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }
 
@@ -93,9 +88,8 @@ export async function fetchRecentCustomersAction() {
     await verifyStaffAccess();
     const data = await dashboardRepo.getRecentCustomers();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchRecentCustomersAction error:", error);
-    return { success: false, error: error.message, data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }
 
@@ -104,9 +98,8 @@ export async function fetchUserLocationsAction() {
     await verifyStaffAccess();
     const data = await dashboardRepo.getUserLocations();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchUserLocationsAction error:", error);
-    return { success: false, error: error.message, data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }
 
@@ -115,9 +108,8 @@ export async function fetchDealOfTheDayAction() {
     await verifyStaffAccess();
     const data = await dashboardRepo.getDealOfTheDay();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchDealOfTheDayAction error:", error);
-    return { success: false, error: error.message, data: null };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: null };
   }
 }
 
@@ -126,8 +118,7 @@ export async function fetchRecentOrdersAction() {
     await verifyStaffAccess();
     const data = await dashboardRepo.getRecentOrders();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchRecentOrdersAction error:", error);
-    return { success: false, error: error.message, data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }

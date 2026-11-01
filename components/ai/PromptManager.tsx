@@ -35,7 +35,6 @@ export function PromptManager() {
       const data = await res.json();
       setPrompts(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -60,7 +59,6 @@ export function PromptManager() {
       setSystemPrompt("");
       setUserTemplate("");
     } catch (e) {
-      console.error(e);
     }
   };
 

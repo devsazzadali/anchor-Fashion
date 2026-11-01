@@ -178,8 +178,8 @@ export function CollectionsClientPage({
       } else {
         toast.error(res.error || "Failed to upload banner image");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to upload banner image");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to upload banner image");
     } finally {
       setIsUploadingImage(false);
       e.target.value = "";

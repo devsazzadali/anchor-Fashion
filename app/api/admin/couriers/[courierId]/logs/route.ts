@@ -48,7 +48,7 @@ export async function GET(
       success: true,
       data: logs || [],
     });
-  } catch (err: any) {
+  } catch (err) {
     return authErrorResponse(err);
   }
 }

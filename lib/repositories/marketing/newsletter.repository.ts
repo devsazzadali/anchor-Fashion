@@ -31,7 +31,6 @@ export class NewsletterRepository {
         subscribed_at: r.created_at ? r.created_at.toISOString() : null,
       }));
     } catch (err) {
-      console.error("Unexpected error in getSubscribers:", err);
       return [];
     }
   }

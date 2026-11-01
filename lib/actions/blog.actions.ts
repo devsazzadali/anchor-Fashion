@@ -18,7 +18,6 @@ export async function getPosts(status?: string): Promise<BlogPost[]> {
     }
     return await blogService.getPosts(status);
   } catch (error) {
-    console.error("[getPosts Error]:", error);
     return [];
   }
 }
@@ -27,7 +26,6 @@ export async function getPostBySlug(slug: string): Promise<BlogPost | null> {
   try {
     return await blogService.getPostBySlug(slug);
   } catch (error) {
-    console.error("[getPostBySlug Error]:", error);
     return null;
   }
 }
@@ -39,7 +37,6 @@ export async function getPostById(id: string): Promise<BlogPost | null> {
     await verifyStaff();
     return await blogService.getPostById(id);
   } catch (error) {
-    console.error("[getPostById Error]:", error);
     return null;
   }
 }
@@ -117,7 +114,6 @@ export async function getCategories(): Promise<BlogCategory[]> {
   try {
     return await blogService.getCategories();
   } catch (error) {
-    console.error("[getCategories Error]:", error);
     return [];
   }
 }
@@ -126,7 +122,6 @@ export async function getTags(): Promise<BlogTag[]> {
   try {
     return await blogService.getTags();
   } catch (error) {
-    console.error("[getTags Error]:", error);
     return [];
   }
 }

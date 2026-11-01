@@ -20,7 +20,7 @@ export async function GET(
     const service = new WarehouseService();
     const inventory = await service.getWarehouseInventory(id, { search, category, status, page, limit });
     return NextResponse.json(inventory);
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error);
   }
 }

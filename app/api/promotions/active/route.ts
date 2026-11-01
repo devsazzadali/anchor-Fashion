@@ -42,7 +42,6 @@ export async function GET() {
     // Never invent a promotion on failure. The previous handler returned a
     // fabricated "ANCHORVIP15 — 15% off" offer with HTTP 200 on ANY error,
     // sending customers to checkout with a code that does not exist.
-    console.error("[API_ACTIVE_PROMOTION_ERROR]", error);
     return NextResponse.json({ promotion: null }, { status: 200 });
   }
 }

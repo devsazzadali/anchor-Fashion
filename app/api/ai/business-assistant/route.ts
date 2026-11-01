@@ -40,8 +40,7 @@ ${query}
       content: response.text,
       usage: response.usage,
     });
-  } catch (error: any) {
-    console.error("Business Assistant Error:", error);
+  } catch (error) {
     return NextResponse.json(
       { error: "Failed to process business request" },
       { status: 500 }

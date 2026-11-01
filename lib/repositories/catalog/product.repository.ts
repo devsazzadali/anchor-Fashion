@@ -326,7 +326,6 @@ export class ProductRepository {
       if (!record) return null;
       return mapToAdminProduct(record);
     } catch (err) {
-      console.error("Error fetching product by ID via Prisma:", err);
       return null;
     }
   });

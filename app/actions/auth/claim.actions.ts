@@ -6,8 +6,8 @@ import { AccountClaimService } from "@/lib/services/auth/account-claim.service";
 export async function requestClaimOtpAction(phone: string) {
   try {
     return await AccountClaimService.requestOtp(phone || "");
-  } catch (error: any) {
-    return { success: false as const, error: error.message || "Could not send the code." };
+  } catch (error) {
+    return { success: false as const, error: (error as Error).message || "Could not send the code." };
   }
 }
 
@@ -15,8 +15,8 @@ export async function requestClaimOtpAction(phone: string) {
 export async function verifyClaimOtpAction(sessionId: string, code: string) {
   try {
     return await AccountClaimService.verifyOtp(sessionId, code || "");
-  } catch (error: any) {
-    return { success: false as const, error: error.message || "Verification failed." };
+  } catch (error) {
+    return { success: false as const, error: (error as Error).message || "Verification failed." };
   }
 }
 
@@ -32,7 +32,7 @@ export async function completeClaimAction(
       password: password || "",
       emailOverride: emailOverride || null,
     });
-  } catch (error: any) {
-    return { success: false as const, error: error.message || "Could not complete the claim." };
+  } catch (error) {
+    return { success: false as const, error: (error as Error).message || "Could not complete the claim." };
   }
 }

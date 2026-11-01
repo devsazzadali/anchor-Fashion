@@ -12,9 +12,8 @@ export async function fetchCustomersAction(limit?: number, search?: string) {
   try {
     const data = await customerRepo.getCustomerProfiles(limit, search);
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchCustomersAction error:", error);
-    return { success: false, error: error.message, data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }
 
@@ -24,9 +23,8 @@ export async function fetchCustomerSegmentsAction() {
   try {
     const data = await customerRepo.getCustomerSegments();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchCustomerSegmentsAction error:", error);
-    return { success: false, error: error.message, data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }
 
@@ -36,9 +34,8 @@ export async function fetchLoyaltyStatsAction() {
   try {
     const data = await customerRepo.getLoyaltyStats();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchLoyaltyStatsAction error:", error?.message || error);
-    return { success: false, error: error?.message || "Failed to fetch loyalty stats", data: [] };
+  } catch (error) {
+    return { success: false, error: (error as Error)?.message || "Failed to fetch loyalty stats", data: [] };
   }
 }
 
@@ -48,12 +45,11 @@ export async function fetchCRMSummaryAction() {
   try {
     const data = await customerRepo.getCRMSummary();
     return { success: true, data };
-  } catch (error: any) {
-    console.error("fetchCRMSummaryAction error:", error);
+  } catch (error) {
     // Return safe fallback
     return {
       success: false,
-      error: error.message,
+      error: (error as Error).message,
       data: {
         totalCustomers: 0,
         newCustomers: 0,
@@ -101,8 +97,7 @@ export async function fetchCustomerDetailsAction(id: string) {
         walletBalance,
       },
     };
-  } catch (error: any) {
-    console.error("fetchCustomerDetailsAction error:", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

@@ -31,7 +31,6 @@ async function handleCallback(req: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   if (!paymentID || !status) {
-    console.error("[bKash Callback] Missing paymentID or status parameter");
     return NextResponse.redirect(
       new URL("/checkout/failed?reason=missing_callback_params", appUrl)
     );
@@ -41,8 +40,8 @@ async function handleCallback(req: NextRequest) {
   const inventoryService = new InventoryService();
 
   // 1. Locate the Order and Payment Session
-  let order: any = null;
-  let paymentSession: any = null;
+  let order = null;
+  let paymentSession = null;
 
   // Check payment_sessions by metadata paymentID.
   // REG-83: the DB builder cannot attach orders(*) on payment_sessions
@@ -84,7 +83,6 @@ async function handleCallback(req: NextRequest) {
   }
 
   if (!order) {
-    console.error(`[bKash Callback] Order not found for paymentID: ${paymentID}`);
     return NextResponse.redirect(
       new URL("/checkout/failed?reason=order_not_found", appUrl)
     );
@@ -107,7 +105,6 @@ async function handleCallback(req: NextRequest) {
 
   // 3. Handle Cancellation or Failure from Gateway
   if (status === "cancel" || status === "failure") {
-    console.warn(`[bKash Callback] Payment was ${status} by customer for order ${order.order_number}`);
 
     try {
       // Release reserved inventory authoritatively in Neon DB & RPC
@@ -116,7 +113,6 @@ async function handleCallback(req: NextRequest) {
       // Release coupon usage if applied
       await CouponService.releaseCoupon(order.id);
     } catch (releaseErr) {
-      console.error(`[bKash Callback] Error releasing inventory for order ${order.id}:`, releaseErr);
     }
 
     // Update order status to cancelled
@@ -164,11 +160,6 @@ async function handleCallback(req: NextRequest) {
 
       // Verify Provider Response Code
       if (executeRes.statusCode !== "0000" || executeRes.transactionStatus !== "Completed") {
-        console.error(
-          `[bKash Callback] Execution unconfirmed for order ${order.order_number}:`,
-          executeRes.statusCode,
-          executeRes.statusMessage
-        );
 
         // Release inventory on unconfirmed execution
         await inventoryService.releaseOrderInventory(order.id);
@@ -193,9 +184,6 @@ async function handleCallback(req: NextRequest) {
       const gatewayAmount = parseFloat(executeRes.amount);
       const orderAmount = parseFloat(order.total_amount ?? order.grand_total ?? 0);
       if (Math.abs(gatewayAmount - orderAmount) > 0.01) {
-        console.error(
-          `[bKash Callback] Amount mismatch! Gateway: ${gatewayAmount}, Order: ${orderAmount}`
-        );
 
         await inventoryService.releaseOrderInventory(order.id);
         await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
@@ -217,9 +205,6 @@ async function handleCallback(req: NextRequest) {
 
       // Authoritative Invoice Verification
       if (executeRes.merchantInvoiceNumber && executeRes.merchantInvoiceNumber !== order.order_number) {
-        console.error(
-          `[bKash Callback] Invoice mismatch! Gateway: ${executeRes.merchantInvoiceNumber}, Order: ${order.order_number}`
-        );
       }
 
       const trxID = executeRes.trxID || paymentID;
@@ -256,9 +241,6 @@ async function handleCallback(req: NextRequest) {
 
       // Check if order was cancelled while payment was pending (Late Payment Callback Race)
       if ((order.status || "").toLowerCase() === "cancelled") {
-        console.warn(
-          `[bKash Callback] Payment succeeded for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
-        );
 
         await db.from("orders").update({
           payment_method: "BKASH",
@@ -318,7 +300,6 @@ async function handleCallback(req: NextRequest) {
           status: "confirmed",
         });
       } catch (notifErr) {
-        console.warn("[bKash Callback] Error creating payment notification:", notifErr);
       }
 
       // Clear customer cart (Prompt 7 integration)
@@ -345,14 +326,12 @@ async function handleCallback(req: NextRequest) {
           await CartService.clearCart(cartIdToClear);
         }
       } catch (cartErr) {
-        console.error("[bKash Callback] Cart clear error:", cartErr);
       }
 
       return NextResponse.redirect(
         new URL(`/checkout/success?order_id=${order.id}&trxID=${trxID}`, appUrl)
       );
-    } catch (execErr: any) {
-      console.error("[bKash Callback] Execution exception:", execErr);
+    } catch (execErr) {
       return NextResponse.redirect(
         new URL(`/checkout/failed?order_id=${order.id}&reason=internal_error`, appUrl)
       );

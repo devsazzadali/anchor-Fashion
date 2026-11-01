@@ -56,11 +56,11 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
   const topSellers = topSellersRes.data || [];
   const totalItemsSold = topSellers.reduce(
-    (sum: number, p: any) => sum + (Number(p.sold) || 0),
+    (sum: number, p) => sum + (Number(p.sold) || 0),
     0
   );
 
-  const revenueChartData = (revenueRes.data || []).map((d: any) => ({
+  const revenueChartData = (revenueRes.data || []).map((d) => ({
     name: d.name,
     total: d.revenue,
   }));
@@ -220,7 +220,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
               </div>
             ) : (
               <div className="space-y-4">
-                {topSellers.map((product: any, i: number) => (
+                {topSellers.map((product, i: number) => (
                   <div
                     key={product.product_id || i}
                     className="flex items-center justify-between rounded-lg border p-4"

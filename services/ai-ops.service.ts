@@ -23,9 +23,8 @@ export async function generateSalesForecast(
       : { rawResponse: text };
 
     return { forecast: parsedData };
-  } catch (error: any) {
-    console.error("Error generating sales forecast:", error);
-    return { error: error.message || "Failed to generate forecast" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to generate forecast" };
   }
 }
 
@@ -46,9 +45,8 @@ export async function generateInventoryInsights(
       : { rawResponse: text };
 
     return { insights: parsedData };
-  } catch (error: any) {
-    console.error("Error generating inventory insights:", error);
-    return { error: error.message || "Failed to generate insights" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to generate insights" };
   }
 }
 
@@ -73,8 +71,7 @@ export async function saveAIPrediction(
     if (error) throw new Error(error.message);
 
     return { success: true };
-  } catch (error: any) {
-    console.error("Error saving AI prediction:", error);
-    return { error: error.message || "Failed to save prediction" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to save prediction" };
   }
 }

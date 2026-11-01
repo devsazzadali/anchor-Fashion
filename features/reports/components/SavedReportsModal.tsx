@@ -42,8 +42,8 @@ export function SavedReportsModal({
       } else {
         toast.error(res.error || "Failed to load saved reports");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to fetch saved reports");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to fetch saved reports");
     } finally {
       setLoading(false);
     }
@@ -66,8 +66,8 @@ export function SavedReportsModal({
       }
       setReports((prev) => prev.filter((r) => r.id !== id));
       toast.success("Saved report removed");
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred");
     } finally {
       setDeletingId(null);
     }

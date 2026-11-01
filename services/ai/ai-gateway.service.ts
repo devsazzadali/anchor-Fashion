@@ -42,14 +42,14 @@ export class AIGatewayService {
     try {
       const provider = await this.getProvider(providerCode);
       return await provider.generateText(request);
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
         providerId: providerCode,
         timestamp: new Date().toISOString(),
         error: {
           code: "GATEWAY_ERROR",
-          message: error.message,
+          message: (error as Error).message,
         },
       };
     }

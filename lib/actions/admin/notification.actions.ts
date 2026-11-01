@@ -53,9 +53,8 @@ export async function getAdminHeaderNotificationsAction(): Promise<{
 
     const unreadCount = notifications.filter((n) => !n.read_at).length;
     return { data: notifications, unreadCount };
-  } catch (err: any) {
-    console.error("Error fetching notifications via Prisma:", err);
-    return { data: [], unreadCount: 0, error: err.message };
+  } catch (err) {
+    return { data: [], unreadCount: 0, error: (err as Error).message };
   }
 }
 
@@ -112,8 +111,8 @@ export async function getAllAdminNotificationsAction(filters?: {
       total,
       unreadCount: unread,
     };
-  } catch (err: any) {
-    return { data: [], total: 0, unreadCount: 0, error: err.message };
+  } catch (err) {
+    return { data: [], total: 0, unreadCount: 0, error: (err as Error).message };
   }
 }
 
@@ -156,8 +155,8 @@ export async function createAdminNotificationAction(payload: {
         created_at: data.createdAt.toISOString(),
       },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -202,8 +201,8 @@ export async function updateAdminNotificationAction(
         created_at: data.createdAt.toISOString(),
       },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -221,8 +220,8 @@ export async function deleteAdminNotificationAction(
 
     safeRevalidate();
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -240,8 +239,8 @@ export async function markNotificationAsReadAction(id: string): Promise<{ error?
 
     safeRevalidate();
     return {};
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: (err as Error).message };
   }
 }
 
@@ -259,8 +258,8 @@ export async function markAllNotificationsAsReadAction(): Promise<{ error?: stri
 
     safeRevalidate();
     return {};
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: (err as Error).message };
   }
 }
 
@@ -280,8 +279,8 @@ export async function toggleNotificationStatusAction(
     });
     safeRevalidate();
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -298,8 +297,8 @@ export async function deleteAllAdminNotificationsAction(): Promise<{
     await prisma.notification.deleteMany({});
     safeRevalidate();
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -358,15 +357,13 @@ export async function createOrderNotificationAction(params: {
         user_id: null,
       });
     } catch (sbErr) {
-      console.warn("Notification broadcast fallback:", sbErr);
     }
 
     safeRevalidate();
 
     return { success: true, id: notif.id };
-  } catch (err: any) {
-    console.error("Failed to create order notification:", err);
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 

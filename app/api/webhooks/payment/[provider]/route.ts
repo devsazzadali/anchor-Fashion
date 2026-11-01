@@ -29,10 +29,9 @@ export async function POST(
     );
 
     return NextResponse.json({ success: true, result });
-  } catch (error: any) {
-    console.error(`Webhook error [${providerCode}]:`, error);
+  } catch (error) {
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: (error as Error).message },
       { status: 400 }
     );
   }

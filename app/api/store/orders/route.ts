@@ -101,8 +101,8 @@ export async function POST(request: Request) {
           : null;
       const sku = typeof it.sku === 'string' ? it.sku : null;
 
-      let variant: any = null;
-      let product: any = null;
+      let variant = null;
+      let product = null;
 
       if (variantId) {
         variant = await prisma.variant.findUnique({
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
           // Match the requested size/color against variant attributes when
           // possible; otherwise fall back to the first active variant.
           variant =
-            product.variants.find((v: any) => {
+            product.variants.find((v) => {
               const flat = Object.values((v.attributes || {}) as Record<string, any>)
                 .join(' ')
                 .toLowerCase();
@@ -179,7 +179,7 @@ export async function POST(request: Request) {
       // for this item, so its availability is honestly zero.
       const availableStock = variant
         ? (variant.inventoryLevels || []).reduce(
-            (sum: number, lvl: any) => sum + Number(lvl.quantityAvailable || 0),
+            (sum: number, lvl) => sum + Number(lvl.quantityAvailable || 0),
             0
           )
         : 0;
@@ -377,11 +377,10 @@ export async function POST(request: Request) {
         }))
       );
     } catch (invErr) {
-      console.error('[Store Orders API] Error deducting inventory stock:', invErr);
       await prisma.order
         .delete({ where: { id: order.id } })
         .catch((delErr) =>
-          console.error('[Store Orders API] Failed to roll back order after deduction failure:', delErr)
+          undefined
         );
       return NextResponse.json(
         { error: 'Could not reserve stock for this order. Please try again.' },
@@ -393,7 +392,6 @@ export async function POST(request: Request) {
     try {
       AlphaSmsService.triggerOrderConfirmationSmsAsync(order.id);
     } catch (smsErr) {
-      console.error('[Store Orders API] SMS trigger error:', smsErr);
     }
 
     return NextResponse.json({
@@ -408,7 +406,6 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error('[Store Orders API] Unexpected error creating order:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

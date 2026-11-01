@@ -63,7 +63,7 @@ export class WebhookService {
       });
 
       return { success: true };
-    } catch (error: any) {
+    } catch (error) {
       // 4. Mark as failed for retry mechanism
       await this.paymentRepo.updateWebhookEvent(webhookRecord.id, {
         status: "failed",
@@ -76,6 +76,5 @@ export class WebhookService {
     // In a real implementation, this would switch on event type (e.g. payment.success, refund.completed)
     // and update the corresponding transactions or orders.
     // For this architecture skeleton, we consider the processing done.
-    console.warn(`Processing event for ${providerCode}`, payload);
   }
 }

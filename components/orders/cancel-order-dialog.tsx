@@ -70,8 +70,8 @@ export function CancelOrderDialog({ orderId, orderNumber }: CancelOrderDialogPro
         // We still refresh to get the latest authoritative state
         router.refresh();
       }
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An unexpected error occurred");
     } finally {
       setLoading(false);
     }

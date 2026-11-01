@@ -40,7 +40,7 @@ export default async function MarketingAnalyticsPage({
     );
   }
 
-  const formattedCoupons = marketing.topCoupons.map((c: any) => ({
+  const formattedCoupons = marketing.topCoupons.map((c) => ({
     name: c.code,
     value: c.uses,
   }));

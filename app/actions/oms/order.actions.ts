@@ -93,7 +93,6 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
           is_customer_visible: false,
         });
       } catch (noteErr) {
-        console.warn("[updateOrderStatusAction] Note recording skipped:", noteErr);
       }
     }
 
@@ -117,15 +116,14 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
           });
         }
       } catch (emailErr) {
-        console.warn("[updateOrderStatusAction] Failed to send order confirmation email:", emailErr);
       }
     }
 
     revalidatePath(`/admin/orders/${validatedData.order_id}`);
     revalidatePath("/admin/orders");
     return { success: true, data: updatedOrder };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -156,8 +154,8 @@ export async function getOrderDetailsAction(id: string) {
     }
 
     return { success: true, data: details };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -200,9 +198,8 @@ export async function fetchOrdersAction(params: {
 
     const orders = await orderRepo.getOrders(params, null);
     return { success: true, data: orders };
-  } catch (error: any) {
-    console.error("[fetchOrdersAction Error]:", error);
-    return { success: false, error: error.message || "Failed to fetch orders" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch orders" };
   }
 }
 
@@ -212,9 +209,8 @@ export async function fetchOrderMetricsAction() {
   try {
     const metrics = await orderRepo.getOrderMetrics(null);
     return { success: true, data: metrics };
-  } catch (error: any) {
-    console.error("[fetchOrderMetricsAction Error]:", error);
-    return { success: false, error: error.message || "Failed to fetch metrics" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch metrics" };
   }
 }
 
@@ -224,8 +220,8 @@ export async function fetchOrdersForFulfillmentAction() {
   try {
     const orders = await orderRepo.getOrdersForFulfillment();
     return { success: true, data: orders };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -298,7 +294,6 @@ export async function cancelCustomerOrderAction(
       const inventoryService = new InventoryService();
       await inventoryService.releaseOrderInventory(order.id);
     } catch (invError) {
-      console.error(`[cancelCustomerOrderAction] Failed to release inventory for order ${order.id}`, invError);
     }
 
     // 6. Handle Payment/Refund State Safely & Idempotently
@@ -324,7 +319,6 @@ export async function cancelCustomerOrderAction(
         }
       }
     } catch (refundError) {
-      console.error(`[cancelCustomerOrderAction] Failed to process refund for order ${order.id}`, refundError);
       refundStatus = "failed/pending";
     }
 
@@ -339,7 +333,6 @@ export async function cancelCustomerOrderAction(
         },
       });
     } catch (histErr) {
-      console.error("[cancelCustomerOrderAction] Failed to write status history", histErr);
     }
 
     // 8. Customer Notification (Notification Idempotency via single winner update)
@@ -355,7 +348,6 @@ export async function cancelCustomerOrderAction(
         },
       });
     } catch (notifErr) {
-      console.error("[cancelCustomerOrderAction] Failed to create notification", notifErr);
     }
 
     revalidatePath("/account/orders");
@@ -363,9 +355,8 @@ export async function cancelCustomerOrderAction(
     if (order.id) revalidatePath(`/account/orders/${order.id}`);
 
     return { success: true, data: updatedOrder };
-  } catch (error: any) {
-    console.error("[cancelCustomerOrderAction Error]:", error);
-    return { success: false, error: error.message || "An unexpected error occurred" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "An unexpected error occurred" };
   }
 }
 

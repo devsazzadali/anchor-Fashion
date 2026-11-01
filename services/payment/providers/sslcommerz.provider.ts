@@ -57,12 +57,12 @@ export class SSLCommerzProvider extends BasePaymentProvider {
         transactionId: tranId,
         status: "pending",
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         sessionId: tranId,
         gatewayUrl: "",
         status: "failed",
-        error: err.message,
+        error: (err as Error).message,
       };
     }
   }
@@ -94,13 +94,13 @@ export class SSLCommerzProvider extends BasePaymentProvider {
         status: "completed",
         gatewayResponse: valRes,
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         isValid: false,
         transactionId,
         status: "failed",
         gatewayResponse: gatewayData,
-        message: err.message,
+        message: (err as Error).message,
       };
     }
   }
@@ -121,11 +121,11 @@ export class SSLCommerzProvider extends BasePaymentProvider {
         gatewayRefundId: refundRes.trans_id || undefined,
         error: isSuccess ? undefined : refundRes.errorReason,
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         refundId: `ref_err_${Date.now()}`,
         status: "failed",
-        error: err.message,
+        error: (err as Error).message,
       };
     }
   }

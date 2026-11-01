@@ -99,10 +99,10 @@ export async function cancelPathaoOrder(
       success: true,
       message: data.message || "Shipment cancelled successfully",
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       success: false,
-      message: err.message || "Failed to cancel Pathao shipment",
+      message: (err as Error).message || "Failed to cancel Pathao shipment",
     };
   }
 }

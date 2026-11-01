@@ -89,8 +89,8 @@ export async function GET(req: Request) {
 
           syncedCount++;
         }
-      } catch (err: any) {
-        errors.push({ shipmentId: shipment.id, error: err.message });
+      } catch (err) {
+        errors.push({ shipmentId: shipment.id, error: (err as Error).message });
       }
     }
 
@@ -100,9 +100,9 @@ export async function GET(req: Request) {
       totalChecked: activeShipments.length,
       errors: errors.length > 0 ? errors : undefined,
     });
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json(
-      { success: false, error: err.message || "Courier sync cron error" },
+      { success: false, error: (err as Error).message || "Courier sync cron error" },
       { status: 500 }
     );
   }

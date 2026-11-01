@@ -239,7 +239,6 @@ export function CheckoutForm({
         updateStep("REVIEW");
       }
     } catch (err) {
-      console.error("Step navigation error:", err);
       updateStep(step);
     }
   };
@@ -247,7 +246,6 @@ export function CheckoutForm({
   const activeCartId = cartId || cart?.id;
 
   const onInvalid = (errors: any) => {
-    console.error("Checkout form validation errors:", errors);
 
     if (errors.information) {
       const firstKey = Object.keys(errors.information)[0];
@@ -322,7 +320,7 @@ export function CheckoutForm({
       } else {
         toast.error(res.error || "Failed to process checkout");
       }
-    } catch (error: any) {
+    } catch (error) {
       toast.error("An unexpected error occurred");
     } finally {
       setIsSubmitting(false);

@@ -58,7 +58,6 @@ export async function getBlogPostBySlug(slug: string): Promise<CmsPost | null> {
     .single();
 
   if (error) {
-    console.error(`Error fetching blog post ${slug}:`, error);
     return null;
   }
   return data;
@@ -89,7 +88,6 @@ export async function getPageBySlug(slug: string): Promise<CmsPage | null> {
     .order("display_order", { ascending: true });
 
   if (blocksError) {
-    console.error(`Error fetching page blocks for ${slug}:`, blocksError);
   }
 
   return {
@@ -123,7 +121,6 @@ export async function getMenuByLocation(
     .order("display_order", { ascending: true });
 
   if (itemsError) {
-    console.error(`Error fetching menu items for ${location}:`, itemsError);
     return null;
   }
 

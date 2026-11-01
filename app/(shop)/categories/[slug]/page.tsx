@@ -91,7 +91,7 @@ export default async function CategoryPage({
     url: `${siteUrl}/categories/${slug}`,
     mainEntity: {
       "@type": "ItemList",
-      itemListElement: products.slice(0, 10).map((p: any, idx: number) => ({
+      itemListElement: products.slice(0, 10).map((p, idx: number) => ({
         "@type": "ListItem",
         position: idx + 1,
         url: `${siteUrl}/products/${p.slug}`,
@@ -271,7 +271,7 @@ export default async function CategoryPage({
           <div className="md:col-span-3 lg:col-span-4">
             {products.length > 0 ? (
               <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
-                {products.map((product: any) => (
+                {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
               </div>

@@ -251,7 +251,7 @@ export function InventoryMasterIntakeDialog({
       });
       setStyleCode(code);
       toast.success(`Generated short style code: ${code}`);
-    } catch (err: any) {
+    } catch (err) {
       toast.error("Failed to generate style code");
     } finally {
       setIsGeneratingCode(false);
@@ -341,8 +341,8 @@ export function InventoryMasterIntakeDialog({
       } else {
         toast.error(res.error || "Failed to create master inventory intake.");
       }
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred.");
+    } catch (err) {
+      toast.error((err as Error).message || "An unexpected error occurred.");
     } finally {
       setIsSubmitting(false);
     }

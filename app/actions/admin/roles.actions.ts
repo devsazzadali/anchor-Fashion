@@ -52,9 +52,8 @@ export async function fetchRolesAction() {
       data: formattedRoles,
       allPermissions: allPermissions 
     };
-  } catch (error: any) {
-    console.error("[fetchRolesAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -77,9 +76,8 @@ export async function toggleRolePermissionAction(roleId: string, permissionId: s
 
     revalidatePath("/admin/users/roles");
     return { success: true };
-  } catch (error: any) {
-    console.error("[toggleRolePermissionAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -97,9 +95,8 @@ export async function createRoleAction(data: { name: string, description: string
     
     revalidatePath("/admin/users/roles");
     return { success: true };
-  } catch (error: any) {
-    console.error("[createRoleAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -120,9 +117,8 @@ export async function updateRoleAction(
 
     revalidatePath("/admin/users/roles");
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateRoleAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -152,8 +148,7 @@ export async function deleteRoleAction(id: string) {
 
     revalidatePath("/admin/users/roles");
     return { success: true };
-  } catch (error: any) {
-    console.error("[deleteRoleAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

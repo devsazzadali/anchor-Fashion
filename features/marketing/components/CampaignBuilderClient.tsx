@@ -88,7 +88,6 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
         setCampaignHistory(res.data);
       }
     } catch (err) {
-      console.error("Error fetching campaigns:", err);
     } finally {
       setLoadingHistory(false);
     }
@@ -162,8 +161,8 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
 
       // Refresh history
       fetchCampaigns();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to send campaign");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to send campaign");
     } finally {
       setIsSending(false);
     }
@@ -203,8 +202,8 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
 
       // Refresh history
       fetchCampaigns();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to schedule campaign");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to schedule campaign");
     } finally {
       setIsScheduling(false);
     }
@@ -247,8 +246,8 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
 
       // Refresh history
       fetchCampaigns();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save draft");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to save draft");
     } finally {
       setIsSavingDraft(false);
     }
@@ -269,8 +268,8 @@ export function CampaignBuilderClient({ backHref = "/manager/marketing" }: Campa
       toast.success("Campaign deleted.");
       setDeleteTarget(null);
       fetchCampaigns();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete campaign");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to delete campaign");
     } finally {
       setIsDeleting(false);
     }

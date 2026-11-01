@@ -20,7 +20,7 @@ export async function GET(
       success: true,
       data: health,
     });
-  } catch (err: any) {
+  } catch (err) {
     return authErrorResponse(err);
   }
 }

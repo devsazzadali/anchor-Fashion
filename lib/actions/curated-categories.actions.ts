@@ -60,8 +60,7 @@ async function verifyStaffSession(): Promise<{ authorized: boolean; error?: stri
     }
 
     return { authorized: true };
-  } catch (err: any) {
-    console.warn("[verifyStaffSession] Session verification exception:", err.message);
+  } catch (err) {
     // In local dev without session cookies, allow fallback gracefully if in development
     if (process.env.NODE_ENV === "development") {
       return { authorized: true };
@@ -97,7 +96,6 @@ export async function getCuratedCategoriesSettings(): Promise<CuratedCategoriesS
 
     return DEFAULT_CURATED_CATEGORIES;
   } catch (err) {
-    console.error("[getCuratedCategoriesSettings] Exception:", err);
     return DEFAULT_CURATED_CATEGORIES;
   }
 }
@@ -175,7 +173,6 @@ export async function getStorefrontCuratedCategories(): Promise<CuratedCategorie
 
     return { settings, items };
   } catch (err) {
-    console.error("[getStorefrontCuratedCategories] Exception:", err);
     return {
       settings: DEFAULT_CURATED_CATEGORIES,
       items: [],
@@ -244,13 +241,11 @@ export async function updateCuratedCategoriesSettings(
       revalidatePath("/admin/cms/curated-categories");
       revalidatePath("/admin/cms");
     } catch (cacheErr) {
-      console.warn("[updateCuratedCategoriesSettings] Cache revalidation warning:", cacheErr);
     }
 
     return { success: true };
-  } catch (err: any) {
-    console.error("[updateCuratedCategoriesSettings] Error:", err);
-    return { success: false, error: err.message || "Failed to save curated categories" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to save curated categories" };
   }
 }
 
@@ -279,8 +274,7 @@ export async function resetCuratedCategoriesSettings(): Promise<{ success: boole
     } catch {}
 
     return { success: true };
-  } catch (err: any) {
-    console.error("[resetCuratedCategoriesSettings] Error:", err);
-    return { success: false, error: err.message || "Failed to reset settings" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to reset settings" };
   }
 }

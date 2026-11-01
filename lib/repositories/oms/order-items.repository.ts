@@ -37,7 +37,6 @@ export class OrderItemsRepository {
         };
       }) as unknown as OrderItem[];
     } catch (e) {
-      console.error("Error fetching order items:", e);
       return [];
     }
   }

@@ -69,8 +69,8 @@ export function FloatingPurchaseCard({
       } else {
         toast.success(`Added ${productName} to bag`);
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to add to bag.");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to add to bag.");
     }
   };
 
@@ -96,8 +96,8 @@ export function FloatingPurchaseCard({
         storeState.setSheetOpen(false);
         router.push("/checkout");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to proceed to checkout.");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to proceed to checkout.");
     } finally {
       setIsBuyNowLoading(false);
     }

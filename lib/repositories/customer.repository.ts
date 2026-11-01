@@ -41,7 +41,6 @@ export class CustomerRepository {
         updated_at: customer.updatedAt.toISOString(),
       } as unknown as CustomerProfile;
     } catch (err) {
-      console.error("Error in CustomerRepository.getProfile:", err);
       return null;
     }
   }
@@ -105,7 +104,6 @@ export class CustomerRepository {
         updated_at: customer.updatedAt.toISOString(),
       } as unknown as CustomerProfile;
     } catch (err) {
-      console.error("Error in CustomerRepository.updateProfile:", err);
       throw err;
     }
   }

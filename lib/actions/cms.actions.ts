@@ -32,7 +32,6 @@ async function persistDataUrlImage(
     );
     return stored.url;
   } catch (err) {
-    console.error("Error persisting base64 banner:", err);
     return dataUrl;
   }
 }
@@ -118,8 +117,8 @@ export async function upsertGlobalSection(data: {
     const section = await cmsRepo.upsertSection(data);
     try { revalidatePath("/admin/cms/sections"); } catch {}
     return { success: true, data: section };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -130,8 +129,8 @@ export async function deleteGlobalSection(id: string): Promise<{ success: boolea
     await cmsRepo.deleteSection(id);
     try { revalidatePath("/admin/cms/sections"); } catch {}
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -163,9 +162,8 @@ export async function saveNavigation(
       revalidatePath("/");
     } catch {}
     return nav;
-  } catch (err: any) {
-    console.error("Error in saveNavigation:", err);
-    throw new Error(err.message || "Failed to save navigation");
+  } catch (err) {
+    throw new Error((err as Error).message || "Failed to save navigation");
   }
 }
 
@@ -175,9 +173,8 @@ export async function deleteNavigation(id: string): Promise<void> {
   try {
     await cmsRepo.deleteNavigation(id);
     try { revalidatePath("/admin/cms/navigation"); } catch {}
-  } catch (err: any) {
-    console.error("Error in deleteNavigation:", err);
-    throw new Error(err.message || "Failed to delete navigation");
+  } catch (err) {
+    throw new Error((err as Error).message || "Failed to delete navigation");
   }
 }
 
@@ -191,7 +188,6 @@ export async function getMedia(): Promise<CMSMediaItem[]> {
   try {
     return await cmsRepo.getMedia();
   } catch (err) {
-    console.error("Failed to fetch media:", err);
     return [];
   }
 }
@@ -299,7 +295,6 @@ export async function deleteMedia(id: string, fileUrl?: string) {
           }
         }
       } catch (storageErr) {
-        console.warn("Storage removal non-fatal:", storageErr);
       }
     }
 
@@ -307,9 +302,8 @@ export async function deleteMedia(id: string, fileUrl?: string) {
     await cmsRepo.deleteMedia(id);
     try { revalidatePath("/admin/cms/media"); } catch {}
     return { success: true };
-  } catch (err: any) {
-    console.error("Delete media error:", err);
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -363,9 +357,8 @@ export async function seedSampleMedia() {
 
     try { revalidatePath("/admin/cms/media"); } catch {}
     return { success: true, count: results.length };
-  } catch (err: any) {
-    console.error("Failed to seed sample media:", err);
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -576,9 +569,8 @@ export async function upsertHeroSlide(
     } catch {}
 
     return { success: true, id: result.id };
-  } catch (error: any) {
-    console.error("upsertHeroSlide error:", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -624,7 +616,6 @@ export async function upsertHeroSlideWithUpload(formData: FormData) {
         );
         image_url = stored.url;
       } catch (writeErr) {
-        console.warn("[upsertHeroSlideWithUpload] Storage driver fallback to dataUri:", writeErr);
         image_url = `data:${mimeType};base64,${buffer.toString("base64")}`;
       }
     }
@@ -676,9 +667,8 @@ export async function upsertHeroSlideWithUpload(formData: FormData) {
     } catch {}
 
     return { success: true, image_url, id: result.id };
-  } catch (error: any) {
-    console.error("upsertHeroSlideWithUpload error:", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -690,7 +680,7 @@ export async function deleteHeroSlide(id: string) {
     // Remove the stored file too (Blob URL or /uploads path) via the driver.
     try {
       const banners = await cmsRepo.getBanners();
-      const existing = banners.find((b: any) => b.id === id);
+      const existing = banners.find((b) => b.id === id);
       if (
         existing?.image_url &&
         (existing.image_url.startsWith("/uploads/") ||
@@ -711,9 +701,8 @@ export async function deleteHeroSlide(id: string) {
     } catch {}
 
     return { success: true };
-  } catch (error: any) {
-    console.error("deleteHeroSlide error:", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -732,9 +721,8 @@ export async function deleteAllHeroSlides() {
     } catch {}
 
     return { success: true };
-  } catch (error: any) {
-    console.error("deleteAllHeroSlides error:", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -775,8 +763,7 @@ export async function updateSeoSettings(data: any) {
     });
     try { revalidatePath("/"); } catch {}
     return { success: true };
-  } catch (err: any) {
-    console.error("updateSeoSettings error:", err);
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }

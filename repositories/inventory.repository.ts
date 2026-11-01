@@ -148,10 +148,8 @@ export class InventoryRepository {
         .from("stock_movements")
         .insert(payload);
       if (error) {
-        console.warn(`Failed to record stock movement: ${error.message}`);
       }
-    } catch (e: any) {
-      console.warn("Could not insert stock_movements log:", e?.message);
+    } catch (e) {
     }
   }
 
@@ -268,7 +266,6 @@ export class InventoryRepository {
         },
       };
     } catch (error) {
-      console.error("Error fetching inventory dashboard via Prisma:", error);
       return {
         items: [],
         stats: {
@@ -582,8 +579,7 @@ export class InventoryRepository {
       if (items.length > 0) {
         await this.createAuditItems(items);
       }
-    } catch (e: any) {
-      console.warn(`Could not snapshot audit items for audit ${data.id}:`, e?.message);
+    } catch (e) {
     }
 
     const [withWh] = await this.attachAuditWarehouses([data]);

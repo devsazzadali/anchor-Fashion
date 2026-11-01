@@ -17,7 +17,6 @@ export function CustomReportBuilder() {
         }
       })
       .catch((err) => {
-        console.error(err);
         setError("Failed to fetch report");
       });
   }, []);
@@ -94,7 +93,7 @@ export function CustomReportBuilder() {
               <tbody className="divide-y divide-gray-100 bg-white">
                 {report.rows.map((row: any[], i: number) => (
                   <tr key={i} className="transition-colors hover:bg-blue-50/30">
-                    {row.map((cell: any, j: number) => (
+                    {row.map((cell, j: number) => (
                       <td
                         key={j}
                         className={`whitespace-nowrap px-6 py-4 text-sm ${j === 0 ? "font-medium text-gray-900" : "text-gray-600"}`}

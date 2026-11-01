@@ -106,8 +106,8 @@ export function AddressBook({ addresses }: AddressBookProps) {
         setEditing(null);
         reset();
         setIsOpen(false);
-      } catch (error: any) {
-        toast.error(error.message || "Failed to save address");
+      } catch (error) {
+        toast.error((error as Error).message || "Failed to save address");
       }
     });
   };

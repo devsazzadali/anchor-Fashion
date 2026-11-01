@@ -43,7 +43,6 @@ export const automationRules: Record<string, ActionFunction[]> = {
           quantityNeeded: "100", // Example logic
         }
       );
-      console.warn("AI Drafted Reorder Email:", aiResponse.text);
     },
   ],
   "order.created": [

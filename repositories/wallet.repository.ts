@@ -15,8 +15,7 @@ export class WalletRepository {
         created_at: data.created_at?.toISOString() ?? new Date().toISOString(),
         updated_at: data.updated_at?.toISOString() ?? new Date().toISOString(),
       } as CustomerWallet;
-    } catch (error: any) {
-      console.error("Error fetching wallet:", error);
+    } catch (error) {
       return null;
     }
   }
@@ -38,8 +37,7 @@ export class WalletRepository {
         description: t.description ?? null,
         created_at: t.created_at?.toISOString() ?? new Date().toISOString(),
       })) as WalletTransaction[];
-    } catch (error: any) {
-      console.error("Error fetching wallet transactions:", error);
+    } catch (error) {
       return [];
     }
   }

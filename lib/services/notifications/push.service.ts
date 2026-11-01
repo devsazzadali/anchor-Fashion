@@ -11,7 +11,6 @@ if (publicVapidKey && privateVapidKey) {
     privateVapidKey
   );
 } else {
-  console.warn("VAPID keys not configured, push notifications disabled.");
 }
 
 export interface PushNotificationPayload {
@@ -45,7 +44,6 @@ export class PushService {
     );
 
     if (error) {
-      console.error("Failed to save push subscription:", error);
       throw new Error("Failed to save push subscription");
     }
   }
@@ -55,7 +53,6 @@ export class PushService {
    */
   static async sendToUser(userId: string, payload: PushNotificationPayload) {
     if (!publicVapidKey || !privateVapidKey) {
-      console.warn("Push notifications are disabled.");
       return;
     }
 
@@ -96,7 +93,6 @@ export class PushService {
             .delete()
             .eq("id", sub.id);
         } else {
-          console.error("Error sending push notification:", err);
         }
       }
     });

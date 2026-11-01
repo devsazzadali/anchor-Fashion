@@ -31,9 +31,6 @@ export class ConfigService {
       .single();
 
     if (error || !data) {
-      console.warn(
-        `[ConfigService] Provider config not found or inactive for ${providerType}:${providerCode}`
-      );
       return null;
     }
 

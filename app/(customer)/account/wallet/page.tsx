@@ -35,7 +35,6 @@ export default async function WalletPage() {
       transactions = await WalletService.getTransactions(wallet.id);
     }
   } catch (err) {
-    console.error("Error loading wallet:", err);
     loadError = true;
   }
 
@@ -92,7 +91,7 @@ export default async function WalletPage() {
           ) : (
             <div className="overflow-hidden rounded-xl border">
               <ul className="divide-y divide-slate-100">
-                {transactions.map((tx: any) => {
+                {transactions.map((tx) => {
                   const isCredit = tx.type === "CREDIT";
                   return (
                     <li

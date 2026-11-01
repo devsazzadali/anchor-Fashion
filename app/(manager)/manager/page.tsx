@@ -73,13 +73,13 @@ export default async function ManagerDashboardPage() {
   };
 
   // Map revenue to expected format for Recharts
-  const revenueData = (revenueRes.data || []).map((d: any) => ({
+  const revenueData = (revenueRes.data || []).map((d) => ({
     name: d.name,
     total: d.revenue,
   }));
 
   // fetchRecentOrdersAction already joins customer profile — use it directly
-  const orders = (recentOrdersRes.data || []).map((o: any) => ({
+  const orders = (recentOrdersRes.data || []).map((o) => ({
     id: o.id,
     orderNumber: o.order_number,
     customer: o.customer_name || "Guest",

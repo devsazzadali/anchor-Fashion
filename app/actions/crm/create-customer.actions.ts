@@ -146,7 +146,6 @@ export async function createCustomerAction(data: {
     revalidatePath("/manager/customers");
     return { success: true, data: newCustomer };
   } catch (error: any) {
-    console.error("[createCustomerAction]", error);
 
     // Handle unique constraint violations gracefully
     if (

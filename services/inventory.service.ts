@@ -71,7 +71,6 @@ export class InventoryService {
         return { available, reserved, status };
       }
     } catch (e) {
-      console.warn("Prisma getStockAvailability error, checking fallback:", e);
     }
 
     const levels = await this.repository.getStockLevel(variantId, warehouseId).catch(() => []);
@@ -419,7 +418,6 @@ export class InventoryService {
           },
         });
       } catch (markErr) {
-        console.warn("Failed to mark order items reserved:", markErr);
       }
     }
 
@@ -523,13 +521,11 @@ export class InventoryService {
                 },
               });
             } catch (movementErr) {
-              console.warn("Stock movement logging on cancellation non-fatal warning:", movementErr);
             }
           }
         }
       }
     } catch (e) {
-      console.warn("Prisma releaseOrderInventory error:", e);
     }
   }
 
@@ -606,13 +602,11 @@ export class InventoryService {
                 });
               }
             } catch (smErr) {
-              console.warn("Prisma confirmOrderInventory stock movement logging error:", smErr);
             }
           }
         }
       }
     } catch (e) {
-      console.warn("Prisma confirmOrderInventory error:", e);
     }
   }
 
@@ -636,7 +630,7 @@ export class InventoryService {
     for (const item of items) {
       try {
         const qty = Math.max(1, Number(item.quantity) || 1);
-        let variant: any = null;
+        let variant = null;
 
         // 1. By variantId
         if (item.variantId) {
@@ -694,13 +688,12 @@ export class InventoryService {
         }
 
         if (!variant) {
-          console.warn(`[Inventory] Could not resolve variant for order item:`, item);
           continue;
         }
 
         // Find inventory level to deduct from
         let targetLevel =
-          variant.inventoryLevels.find((lvl: any) => lvl.quantityAvailable >= qty) ||
+          variant.inventoryLevels.find((lvl) => lvl.quantityAvailable >= qty) ||
           variant.inventoryLevels[0];
 
         if (!targetLevel) {
@@ -752,7 +745,6 @@ export class InventoryService {
           }
         }
       } catch (deductErr) {
-        console.error(`[Inventory] Failed deducting stock for item in order ${orderId}:`, deductErr);
       }
     }
   }

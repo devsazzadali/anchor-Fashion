@@ -20,11 +20,9 @@ export default async function ExpensesManagementPage() {
   // Fetch real data safely in parallel
   const [expenses, warehousesResult, branchesResult] = await Promise.all([
     expenseRepo.getExpenses().catch((err: any) => {
-      console.error("[ExpensesManagementPage] Error fetching expenses:", err);
       return [];
     }),
     warehouseRepo.getAllWarehouses().catch((err: any) => {
-      console.error("[ExpensesManagementPage] Error fetching warehouses:", err);
       return { data: [] };
     }),
     Promise.resolve(
@@ -34,7 +32,6 @@ export default async function ExpensesManagementPage() {
         .eq("status", "active")
         .order("name")
     ).then((res) => res.data || []).catch((err: any) => {
-      console.error("[ExpensesManagementPage] Error fetching branches:", err);
       return [];
     }),
   ]);

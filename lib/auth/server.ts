@@ -99,9 +99,6 @@ export const resolveUserRole = cache(
           (!!user.id && profile.id === user.id) || user.emailVerified === true;
 
         if (isElevated && !identityBound) {
-          console.warn(
-            "[resolveUserRole] Elevated role withheld: profile is not bound to this auth user and the email is unverified."
-          );
           role = "CUSTOMER";
         } else {
           role = resolved;
@@ -110,7 +107,6 @@ export const resolveUserRole = cache(
         role = "CUSTOMER";
       }
     } catch (err) {
-      console.error("[resolveUserRole] Error fetching profile role:", err);
       if (!role || role === "USER") role = "CUSTOMER";
     }
 
@@ -146,7 +142,6 @@ export const getServerSession = cache(
 
       return { user: null, session: null };
     } catch (err) {
-      console.error("[getServerSession] Error fetching auth session:", err);
       return { user: null, session: null };
     }
   }

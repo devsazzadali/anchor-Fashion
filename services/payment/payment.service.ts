@@ -63,9 +63,9 @@ export class PaymentService {
         gatewayUrl: initResult.gatewayUrl,
         provider: providerConfig.code,
       };
-    } catch (error: any) {
+    } catch (error) {
       await this.paymentRepo.updateSession(session.id, { status: "failed" });
-      throw new Error(`Payment initialization failed: ${error.message}`);
+      throw new Error(`Payment initialization failed: ${(error as Error).message}`);
     }
   }
 
@@ -170,8 +170,8 @@ export class PaymentService {
       });
 
       return refundResult;
-    } catch (error: any) {
-      throw new Error(`Refund failed: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Refund failed: ${(error as Error).message}`);
     }
   }
 }

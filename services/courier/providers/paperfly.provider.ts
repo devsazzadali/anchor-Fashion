@@ -78,8 +78,8 @@ export class PaperflyProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to create Paperfly order"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -104,8 +104,8 @@ export class PaperflyProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", data.message || "Cancel failed");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -150,8 +150,8 @@ export class PaperflyProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Tracking not found");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -187,8 +187,8 @@ export class PaperflyProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err: any) {
-      return this.errorResponse("WEBHOOK_ERROR", err.message);
+    } catch (err) {
+      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
     }
   }
 

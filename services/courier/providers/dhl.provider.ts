@@ -128,8 +128,8 @@ export class DHLProvider implements ICourierProvider {
         "API_ERROR",
         data.title || "Failed to create DHL shipment"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -154,8 +154,8 @@ export class DHLProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "DHL cancellation failed");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -196,8 +196,8 @@ export class DHLProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Shipment not found");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -235,8 +235,8 @@ export class DHLProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err: any) {
-      return this.errorResponse("WEBHOOK_ERROR", err.message);
+    } catch (err) {
+      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
     }
   }
 

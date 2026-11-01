@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       message: "Verification successful. OTP has been validated and cleared.",
       verifiedEmail: cleanEmail,
     });
-  } catch (error: any) {
+  } catch (error) {
     logServerError("AUTH_OTP_VERIFY_FATAL", error);
     return NextResponse.json(
       { error: "Internal server error occurred while verifying code." },

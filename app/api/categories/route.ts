@@ -11,8 +11,7 @@ export async function GET() {
         "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
       },
     });
-  } catch (error: any) {
-    console.error("[api/categories] Error fetching categories:", error);
+  } catch (error) {
     return NextResponse.json([], { status: 500 });
   }
 }

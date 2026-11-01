@@ -12,8 +12,8 @@ export async function getTicketsAction() {
   try {
     const tickets = await supportService.getTickets();
     return { success: true, data: tickets };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -23,8 +23,8 @@ export async function getTicketDetailsAction(id: string) {
   try {
     const ticket = await supportService.getTicketDetails(id);
     return { success: true, data: ticket };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -34,8 +34,8 @@ export async function getAvailableAgentsAction() {
   try {
     const agents = await supportService.getAvailableAgents();
     return { success: true, data: agents };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -48,8 +48,8 @@ export async function createTicketAction(data: any) {
     revalidatePath("/admin/support/tickets");
     revalidatePath("/portal/support");
     return { success: true, data: ticket };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -61,8 +61,8 @@ export async function updateTicketAction(id: string, data: any) {
     revalidatePath(`/admin/support/tickets/${id}`);
     revalidatePath("/admin/support/tickets");
     return { success: true, data: ticket };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -91,8 +91,8 @@ export async function replyTicketAction(
     });
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     return { success: true, data: message };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -118,8 +118,8 @@ export async function addInternalNoteAction(
     });
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     return { success: true, data: message };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -131,8 +131,8 @@ export async function assignTicketAction(ticketId: string, agentId: string) {
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     revalidatePath("/admin/support/tickets");
     return { success: true, data: ticket };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -146,8 +146,8 @@ export async function closeTicketAction(ticketId: string) {
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     revalidatePath("/admin/support/tickets");
     return { success: true, data: ticket };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -161,8 +161,8 @@ export async function reopenTicketAction(ticketId: string) {
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     revalidatePath("/admin/support/tickets");
     return { success: true, data: ticket };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -179,8 +179,8 @@ export async function changeTicketStatusAction(
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     revalidatePath("/admin/support/tickets");
     return { success: true, data: ticket };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -197,8 +197,8 @@ export async function changeTicketPriorityAction(
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     revalidatePath("/admin/support/tickets");
     return { success: true, data: ticket };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -219,8 +219,8 @@ export async function addTicketAttachmentAction(
     });
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     return { success: true, data: attachment };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -231,7 +231,7 @@ export async function deleteTicketAction(ticketId: string) {
     await supportService.deleteTicket(ticketId);
     revalidatePath("/admin/support/tickets");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

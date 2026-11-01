@@ -114,8 +114,8 @@ export function CouponDialog({ open, onOpenChange, onSuccess }: CouponDialogProp
       if (res.data) onSuccess?.(res.data);
       form.reset();
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred");
     } finally {
       setSubmitting(false);
     }

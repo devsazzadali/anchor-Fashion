@@ -74,7 +74,6 @@ export function ManagerHeader({
     try {
       await authClient.signOut();
     } catch (e) {
-      console.warn("Logout notice:", e);
     }
     toast.success("Logged out successfully.");
     window.location.href = "/auth/login";

@@ -18,7 +18,6 @@ export class PurchaseOrderRepository {
         created_at: o.createdAt.toISOString(),
       }));
     } catch (err) {
-      console.error("Unexpected error in getPurchaseOrders:", err);
       return [];
     }
   }

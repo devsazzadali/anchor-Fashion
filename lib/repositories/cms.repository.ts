@@ -212,7 +212,6 @@ export class CMSRepository {
         });
       }
     } catch (err) {
-      console.error("[savePageBlocks] Error:", err);
     }
   }
 
@@ -367,8 +366,8 @@ export class CMSRepository {
         orderBy: { sortOrder: "asc" },
       });
       return mapPrismaNavigation({ ...menu, items });
-    } catch (err: any) {
-      throw new Error(`Failed to save navigation: ${err.message}`);
+    } catch (err) {
+      throw new Error(`Failed to save navigation: ${(err as Error).message}`);
     }
   }
 

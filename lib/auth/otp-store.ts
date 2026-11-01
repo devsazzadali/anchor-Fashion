@@ -163,7 +163,6 @@ export const OtpStore = {
       if (error) {
         // If table does not exist in schema cache, log warning and use memory fallback
         if (error.code === "PGRST205" || (error as any).code === "42P01") {
-          console.warn("[OtpStore] registration_otps table not in DB, operating via secure in-memory cache.");
           return true;
         }
         logServerError("OTP_STORE_SAVE", error, { email });

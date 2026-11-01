@@ -96,6 +96,5 @@ export async function deleteUploadedFile(
       await fs.unlink(dest).catch(() => {});
     }
   } catch (err) {
-    console.warn("[storage] deleteUploadedFile failed (non-fatal):", err);
   }
 }

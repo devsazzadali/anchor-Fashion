@@ -72,7 +72,6 @@ export class CRMService {
           content: notes.trim(),
         });
       } catch (noteErr) {
-        console.warn("Failed to create initial lead note:", noteErr);
       }
     }
 
@@ -154,7 +153,6 @@ export class CRMService {
           content: notes.trim(),
         });
       } catch (noteErr) {
-        console.warn("Failed to create update lead note:", noteErr);
       }
     }
 

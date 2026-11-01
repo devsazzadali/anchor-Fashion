@@ -18,7 +18,6 @@ export class ReviewRepository {
       });
       return reviews.map(mapPrismaReview) as unknown as Review[];
     } catch (err) {
-      console.error("Unexpected error in getReviews:", err);
       return [];
     }
   }
@@ -39,7 +38,6 @@ export class ReviewRepository {
       });
       return reviews.map(mapPrismaReview) as unknown as Review[];
     } catch (err) {
-      console.error("Unexpected error in getReviewsByProductId:", err);
       return [];
     }
   }
@@ -58,7 +56,6 @@ export class ReviewRepository {
         average_rating: agg._avg.rating || 0,
       };
     } catch (err) {
-      console.error("Unexpected error in getReviewStatsByProductId:", err);
       return null;
     }
   }
@@ -106,7 +103,6 @@ export class ReviewRepository {
       revalidatePath("/products");
       revalidatePath("/admin/products/reviews");
     } catch (e) {
-      console.error("Failed to recalculate product rating:", e);
     }
   }
 
@@ -131,9 +127,8 @@ export class ReviewRepository {
         select: { helpfulVotes: true },
       });
       return { success: true, helpful_votes: updated.helpfulVotes };
-    } catch (err: any) {
-      console.error("Unexpected error in voteHelpful:", err);
-      return { success: false, helpful_votes: 0, error: err.message };
+    } catch (err) {
+      return { success: false, helpful_votes: 0, error: (err as Error).message };
     }
   }
 }

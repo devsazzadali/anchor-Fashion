@@ -99,8 +99,8 @@ export function ManualPaymentsClient({
       } else {
         toast.error(res.error || "Failed to approve payment");
       }
-    } catch (e: any) {
-      toast.error(e.message || "An error occurred");
+    } catch (e) {
+      toast.error((e as Error).message || "An error occurred");
     } finally {
       setIsApprovingId(null);
     }
@@ -145,8 +145,8 @@ export function ManualPaymentsClient({
       } else {
         toast.error(res.error || "Failed to reject payment");
       }
-    } catch (e: any) {
-      toast.error(e.message || "An error occurred");
+    } catch (e) {
+      toast.error((e as Error).message || "An error occurred");
     } finally {
       setIsRejectingId(null);
     }

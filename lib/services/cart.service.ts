@@ -177,7 +177,7 @@ export class CartService {
       // Check existing quantity in current cart
       const cart = await this.getOrCreateCart(userId, sessionId);
       const existingItem = (cart.items || []).find(
-        (i: any) => i.variant_id === effectiveVariantId
+        (i) => i.variant_id === effectiveVariantId
       );
       const currentInCart = existingItem ? existingItem.quantity : 0;
 
@@ -206,7 +206,7 @@ export class CartService {
       }
       const cart = await this.getOrCreateCart(userId, sessionId);
       const existingItem = (cart.items || []).find(
-        (i: any) => i.variant_id === effectiveVariantId
+        (i) => i.variant_id === effectiveVariantId
       );
       const currentInCart = existingItem ? existingItem.quantity : 0;
       if (currentInCart + quantity > flashRemaining) {
@@ -313,7 +313,7 @@ export class CartService {
       throw new Error("Cart not found");
     }
     const itemBelongsToCart = cart.items?.some(
-      (item: any) => item.id === itemId
+      (item) => item.id === itemId
     );
     if (!itemBelongsToCart) {
       throw new Error("Unauthorized: cart item does not belong to your cart");

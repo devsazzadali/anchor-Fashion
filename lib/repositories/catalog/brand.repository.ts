@@ -26,7 +26,6 @@ export class BrandRepository {
       });
       return records.map(toBrand);
     } catch (err) {
-      console.error("Error fetching brands via Prisma:", err);
       return [];
     }
   }

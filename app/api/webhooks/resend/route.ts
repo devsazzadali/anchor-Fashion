@@ -21,11 +21,9 @@ export async function POST(req: Request) {
     else if (eventType === "email.opened") status = "OPENED";
     else if (eventType === "email.sent") status = "SENT";
 
-    console.warn(`[Resend Webhook] Email ${data.email_id} status changed to ${status}`);
 
     return NextResponse.json({ message: "Webhook received" }, { status: 200 });
   } catch (error) {
-    console.error("Webhook processing error:", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
       { status: 500 }

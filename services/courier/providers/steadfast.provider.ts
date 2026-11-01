@@ -88,8 +88,8 @@ export class SteadfastProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to create consignment"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -118,8 +118,8 @@ export class SteadfastProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to cancel consignment"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -165,8 +165,8 @@ export class SteadfastProvider implements ICourierProvider {
         "API_ERROR",
         "Failed to retrieve tracking info"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -208,8 +208,8 @@ export class SteadfastProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err: any) {
-      return this.errorResponse("WEBHOOK_ERROR", err.message);
+    } catch (err) {
+      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
     }
   }
 

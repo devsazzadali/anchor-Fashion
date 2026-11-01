@@ -87,8 +87,8 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
       await actionFn.mutateAsync(payload ?? id);
       toast.success(successMessage);
       refetch();
-    } catch (err: any) {
-      toast.error(err.message || "Action failed");
+    } catch (err) {
+      toast.error((err as Error).message || "Action failed");
     } finally {
       setIsProcessing(false);
     }

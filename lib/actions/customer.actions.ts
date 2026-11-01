@@ -17,10 +17,10 @@ export async function updateProfileAction(userId: string, formData: FormData) {
     await CustomerService.updateProfile(userId, rawData);
     revalidatePath("/account/profile");
     return { success: true, message: "Profile updated successfully" };
-  } catch (error: any) {
+  } catch (error) {
     return {
       success: false,
-      message: error.message || "Failed to update profile",
+      message: (error as Error).message || "Failed to update profile",
     };
   }
 }
@@ -42,10 +42,10 @@ export async function addAddressAction(userId: string, formData: FormData) {
     await CustomerService.addAddress(userId, rawData);
     revalidatePath("/account/profile");
     return { success: true, message: "Address added successfully" };
-  } catch (error: any) {
+  } catch (error) {
     return {
       success: false,
-      message: error.message || "Failed to add address",
+      message: (error as Error).message || "Failed to add address",
     };
   }
 }

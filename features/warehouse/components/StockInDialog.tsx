@@ -102,7 +102,7 @@ export function StockInDialog({
         ]);
 
         if (varsRes.success && varsRes.data && varsRes.data.length > 0) {
-          const loadedVariants = varsRes.data.map((v: any) => ({
+          const loadedVariants = varsRes.data.map((v) => ({
             id: v.id,
             sku: v.sku,
             name: v.name || v.title || `${v.product_name || "Product"} (${v.sku})`,
@@ -119,7 +119,6 @@ export function StockInDialog({
           setSuppliers(suppRes.data);
         }
       } catch (e) {
-        console.error("Failed to load catalog for stock in:", e);
       }
     }
     loadCatalog();

@@ -258,7 +258,6 @@ export const AdminHeader = ({ user, role, className }: AdminHeaderProps) => {
           setNotifUnread(result.unreadCount);
         }
       } catch (e) {
-        console.warn("Error fetching admin notifications:", e);
       } finally {
         if (!isPolling) setNotifLoading(false);
       }
@@ -275,7 +274,6 @@ export const AdminHeader = ({ user, role, className }: AdminHeaderProps) => {
         setMsgUnread(result.unreadCount);
       }
     } catch (e) {
-      console.warn("Error fetching admin messages:", e);
     } finally {
       setMsgLoading(false);
     }

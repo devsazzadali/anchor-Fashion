@@ -22,10 +22,6 @@ export class FulfillmentService {
       await this.inventoryService.confirmOrderInventory(orderId);
       return true;
     } catch (err) {
-      console.error(
-        `[FulfillmentService] Failed to confirm inventory for order ${orderId}:`,
-        err
-      );
       return false;
     }
   }

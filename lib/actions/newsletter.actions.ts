@@ -47,8 +47,7 @@ export async function subscribeNewsletterAction(email: string): Promise<{
     if (error) throw error;
 
     return { success: true };
-  } catch (error: any) {
-    console.error("[subscribeNewsletterAction]", error);
+  } catch (error) {
     return {
       success: false,
       error: "Could not complete your subscription. Please try again.",

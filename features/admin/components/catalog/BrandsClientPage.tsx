@@ -83,8 +83,8 @@ export function BrandsClientPage({ initialBrands }: BrandsClientPageProps) {
       } else {
         toast.error(res.error || "Failed to upload logo");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to upload logo");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to upload logo");
     } finally {
       setIsUploading(false);
       if (e.target) e.target.value = "";

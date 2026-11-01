@@ -81,7 +81,6 @@ export async function getPostLoginRedirectAction(
 
     return { redirectUrl: "/account/profile", role: resolvedRole };
   } catch (error) {
-    console.error("[getPostLoginRedirectAction] Error:", error);
     return {
       redirectUrl: nextUrl || "/account/profile",
       role: "CUSTOMER",

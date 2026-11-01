@@ -96,8 +96,7 @@ export async function uploadImageAction(formData: FormData): Promise<{
         buffer,
         mimeType
       );
-    } catch (storeErr: any) {
-      console.error("[uploadImageAction] Storage driver failed:", storeErr);
+    } catch (storeErr) {
       return {
         success: false,
         error:
@@ -119,7 +118,6 @@ export async function uploadImageAction(formData: FormData): Promise<{
         },
       });
     } catch (dbErr) {
-      console.warn("[uploadImageAction] Media record save warning:", dbErr);
     }
 
     return {
@@ -127,9 +125,8 @@ export async function uploadImageAction(formData: FormData): Promise<{
       url: resolvedUrl,
       path: filePath,
     };
-  } catch (error: any) {
-    console.error("[uploadImageAction Exception]:", error);
-    return { success: false, error: error.message || "Failed to upload image" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to upload image" };
   }
 }
 
@@ -163,8 +160,7 @@ export async function deleteImageAction(
     });
 
     return { success: true };
-  } catch (error: any) {
-    console.error("[deleteImageAction Error]:", error);
-    return { success: false, error: error.message || "Failed to delete image" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to delete image" };
   }
 }

@@ -182,8 +182,8 @@ export function CuratedCategoriesManagerClient({
       } else {
         toast.error(res.error || "Failed to upload image");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to upload image");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to upload image");
     } finally {
       setUploadingSlot(null);
       if (e.target) e.target.value = "";
@@ -200,8 +200,8 @@ export function CuratedCategoriesManagerClient({
       } else {
         toast.error(res.error || "Failed to save settings");
       }
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An unexpected error occurred");
     } finally {
       setIsSaving(false);
     }
@@ -239,8 +239,8 @@ export function CuratedCategoriesManagerClient({
       } else {
         toast.error(res.error || "Failed to reset settings");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to reset");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to reset");
     } finally {
       setIsResetting(false);
     }

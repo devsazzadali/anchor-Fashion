@@ -16,10 +16,9 @@ export async function GET(req: Request) {
       message: "Scheduled campaigns processed successfully",
       ...result,
     });
-  } catch (error: any) {
-    console.error("[Cron /api/cron/campaigns] Error:", error);
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: (error as Error).message || "Internal Server Error" },
       { status: 500 }
     );
   }

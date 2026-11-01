@@ -40,8 +40,7 @@ export async function getUserBookmarksAction(): Promise<{
         created_at: item.createdAt.toISOString(),
       })),
     };
-  } catch (err: any) {
-    console.warn("[getUserBookmarksAction] warning:", err?.message);
+  } catch (err) {
     return { data: [] };
   }
 }
@@ -91,8 +90,7 @@ export async function addBookmarkAction(
         created_at: saved.createdAt.toISOString(),
       },
     };
-  } catch (err: any) {
-    console.warn("[addBookmarkAction] warning:", err?.message);
+  } catch (err) {
     return { success: true };
   }
 }
@@ -128,8 +126,7 @@ export async function removeBookmarkAction(
 
     revalidatePath("/admin", "layout");
     return { success: true };
-  } catch (err: any) {
-    console.warn("[removeBookmarkAction] warning:", err?.message);
+  } catch (err) {
     return { success: true };
   }
 }

@@ -49,10 +49,8 @@ async function resolveFeaturedImageForWrite(
       return created.id;
     }
     if (insertError) {
-      console.error("[resolveFeaturedImageForWrite insert error]:", insertError);
     }
   } catch (err) {
-    console.error("[resolveFeaturedImageForWrite error]:", err);
   }
 
   return trimmed;
@@ -85,7 +83,6 @@ async function populateMediaUrls(posts: any[]): Promise<void> {
         }
       }
     } catch (err) {
-      console.error("[populateMediaUrls error]:", err);
     }
 
     for (const p of posts) {
@@ -189,7 +186,6 @@ export class BlogRepository {
 
     const { data, error } = await query;
     if (error) {
-      console.error("[BlogRepository.getPosts Error]:", error);
       throw new Error(error.message);
     }
     if (data && data.length > 0) {
@@ -209,7 +205,6 @@ export class BlogRepository {
 
     if (error) {
       if (error.code === "PGRST116") return null;
-      console.error("[BlogRepository.getPostBySlug Error]:", error);
       throw new Error(error.message);
     }
     if (data) {
@@ -229,7 +224,6 @@ export class BlogRepository {
 
     if (error) {
       if (error.code === "PGRST116") return null;
-      console.error("[BlogRepository.getPostById Error]:", error);
       throw new Error(error.message);
     }
     if (data) {
@@ -324,7 +318,6 @@ export class BlogRepository {
       .select("*")
       .order("name");
     if (error) {
-      console.error("[BlogRepository.getCategories Error]:", error);
       throw new Error(error.message);
     }
     return data || [];
@@ -337,7 +330,6 @@ export class BlogRepository {
       .select("*")
       .order("name");
     if (error) {
-      console.error("[BlogRepository.getTags Error]:", error);
       throw new Error(error.message);
     }
     return data || [];

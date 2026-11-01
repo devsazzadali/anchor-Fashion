@@ -56,8 +56,7 @@ export class PushProvider {
 
       await webpush.sendNotification(subscription, data);
       return { success: true };
-    } catch (error: any) {
-      console.error("PushProvider error:", error);
+    } catch (error) {
       // If the subscription is no longer valid (e.g. 410 Gone), we should ideally return a specific error
       // so the caller can remove the subscription from the database.
       return { success: false, error };

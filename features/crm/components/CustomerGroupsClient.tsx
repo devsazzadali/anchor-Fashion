@@ -151,7 +151,6 @@ export function CustomerGroupsClient({ segments }: CustomerGroupsClientProps) {
           setAvailableCustomers(res.data || []);
         }
       } catch (err) {
-        console.error("Error searching customers:", err);
       } finally {
         setSearchingCustomers(false);
       }

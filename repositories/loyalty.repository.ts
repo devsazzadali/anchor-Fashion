@@ -11,7 +11,6 @@ export class LoyaltyRepository {
       .single();
 
     if (error) {
-      console.error("Error fetching loyalty account:", error);
       return null;
     }
     return data;
@@ -28,7 +27,6 @@ export class LoyaltyRepository {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching loyalty transactions:", error);
       return [];
     }
     return data;

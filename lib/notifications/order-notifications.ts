@@ -100,10 +100,6 @@ async function recordOrderEmailLog(entry: {
       },
     });
   } catch (err) {
-    console.error(
-      "[OrderNotifications] Failed to write email audit log:",
-      err
-    );
   }
 }
 
@@ -166,9 +162,6 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
     subject = `Your Anchor Fashion invoice — order #${order.orderNumber} delivered`;
     to = resolveCustomerEmail(order);
     if (!to) {
-      console.warn(
-        `[OrderNotifications] completion invoice skipped for ${order.orderNumber}: no customer email on order`
-      );
       await recordOrderEmailLog({
         event,
         orderId,
@@ -193,10 +186,6 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
     });
 
     if (res.error) {
-      console.error(
-        `[OrderNotifications] completion invoice FAILED for ${order.orderNumber}:`,
-        res.error
-      );
       await recordOrderEmailLog({
         event,
         orderId,
@@ -211,9 +200,6 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
       return { sent: false, reason: "provider_error", error: res.error };
     }
 
-    console.log(
-      `[OrderNotifications] completion invoice sent order=${order.orderNumber} to=${to} id=${res.id}`
-    );
     await recordOrderEmailLog({
       event,
       orderId,
@@ -226,10 +212,6 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
     });
     return { sent: true, id: res.id, to };
   } catch (err: any) {
-    console.error(
-      "[OrderNotifications] completion invoice unexpected error:",
-      err?.message || err
-    );
     await recordOrderEmailLog({
       event,
       orderId,
@@ -295,9 +277,6 @@ export async function notifyStaffOrderEvent(opts: {
         : `Order #${order.orderNumber} is now ${opts.status || order.status}`;
 
     if (recipients.length === 0) {
-      console.warn(
-        `[OrderNotifications] staff ${opts.kind} email skipped for ${order.orderNumber}: no staff recipients`
-      );
       await recordOrderEmailLog({
         event,
         orderId: opts.orderId,
@@ -327,10 +306,6 @@ export async function notifyStaffOrderEvent(opts: {
     });
 
     if (res.error) {
-      console.error(
-        `[OrderNotifications] staff ${opts.kind} email FAILED for ${order.orderNumber}:`,
-        res.error
-      );
       await recordOrderEmailLog({
         event,
         orderId: opts.orderId,
@@ -344,9 +319,6 @@ export async function notifyStaffOrderEvent(opts: {
       return { sent: false, reason: "provider_error", error: res.error };
     }
 
-    console.log(
-      `[OrderNotifications] staff ${opts.kind} email sent order=${order.orderNumber} recipients=${recipients.length} id=${res.id}`
-    );
     await recordOrderEmailLog({
       event,
       orderId: opts.orderId,
@@ -358,10 +330,6 @@ export async function notifyStaffOrderEvent(opts: {
     });
     return { sent: true, id: res.id, recipients: recipients.length };
   } catch (err: any) {
-    console.error(
-      "[OrderNotifications] staff event unexpected error:",
-      err?.message || err
-    );
     await recordOrderEmailLog({
       event,
       orderId: opts.orderId,

@@ -146,7 +146,6 @@ export function WriteReviewButton({
         .upload(filePath, file);
 
       if (error) {
-        console.error("Upload error:", error);
         toast.error(`Failed to upload ${file.name}`);
       } else if (data) {
         const { data: { publicUrl } } = db.storage
@@ -187,8 +186,8 @@ export function WriteReviewButton({
         setFiles([]);
         router.refresh();
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred");
     } finally {
       setLoading(false);
     }

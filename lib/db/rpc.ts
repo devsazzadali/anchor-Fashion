@@ -135,7 +135,6 @@ async function runFallback(fnName: string, args: any): Promise<any> {
           discountApplied
         );
       } catch (usageErr) {
-        console.warn("Coupon usage record warning:", usageErr);
       }
 
       return { data: true, error: null };
@@ -164,7 +163,6 @@ async function runFallback(fnName: string, args: any): Promise<any> {
           );
         }
       } catch (releaseErr) {
-        console.warn("Coupon release notice:", releaseErr);
       }
       return { data: true, error: null };
     }
@@ -275,7 +273,7 @@ export function callRpc(fnName: string, args?: any) {
             ...params
           )) as any[];
           return { data: serializePlain(res), error: null };
-        } catch (dbErr: any) {
+        } catch (dbErr) {
           // If stored function execution failed, evaluate the fallback below.
         }
       }

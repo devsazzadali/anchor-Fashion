@@ -114,8 +114,7 @@ export async function GET(
       { error: "Tracking information not found for this number" },
       { status: 404 }
     );
-  } catch (err: any) {
-    console.error("[Tracking API] Error:", err);
+  } catch (err) {
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

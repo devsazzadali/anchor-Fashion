@@ -130,7 +130,6 @@ export class WalletService {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching wallet transactions:", error);
       return [];
     }
     return data || [];

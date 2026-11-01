@@ -163,8 +163,8 @@ export function ProductCard({ product, className }: ProductCardProps) {
       setAddedSuccess(true);
       toast.success(`${product.name} added to cart!`);
       setTimeout(() => setAddedSuccess(false), 2000);
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to add to cart");
+    } catch (err) {
+      toast.error((err as Error)?.message || "Failed to add to cart");
     } finally {
       setIsAddingToCart(false);
     }

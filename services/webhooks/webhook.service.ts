@@ -26,7 +26,6 @@ export class WebhookService {
 
       return crypto.timingSafeEqual(signatureBuffer, digestBuffer);
     } catch (error) {
-      console.error("[WebhookService] Signature verification error:", error);
       return false;
     }
   }
@@ -66,19 +65,11 @@ export class WebhookService {
       });
 
       if (error) {
-        console.error(
-          "[WebhookService] Failed to queue outgoing webhook:",
-          error
-        );
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error(
-        "[WebhookService] Exception queueing outgoing webhook:",
-        error
-      );
       return false;
     }
   }

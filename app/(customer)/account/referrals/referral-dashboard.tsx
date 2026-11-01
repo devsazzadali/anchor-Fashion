@@ -23,7 +23,7 @@ export function ReferralDashboard({ stats, history, referralCode, appUrl }: any)
         title: "Join Anchor Fashion",
         text: "Get 15% off your first order at Anchor Fashion!",
         url: referralLink,
-      }).catch(console.error);
+      }).catch(() => undefined);
     } else {
       handleCopy();
     }

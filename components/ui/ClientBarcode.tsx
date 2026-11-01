@@ -54,7 +54,6 @@ class BarcodeErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: any) {
-    console.warn("ClientBarcode render warning, falling back:", error);
   }
 
   render() {

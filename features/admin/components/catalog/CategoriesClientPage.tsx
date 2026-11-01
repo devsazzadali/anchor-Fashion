@@ -430,8 +430,8 @@ export function CategoriesClientPage({
       } else {
         toast.error(res.error || "Failed to upload image");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to upload image");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to upload image");
     } finally {
       setIsUploading(false);
       if (e.target) e.target.value = "";

@@ -11,8 +11,8 @@ export async function getExecutiveSummaryAction(dateRange?: DateRange) {
   try {
     const data = await AnalyticsService.getExecutiveSummary(dateRange);
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -22,8 +22,8 @@ export async function getSalesAnalyticsAction(dateRange?: DateRange) {
   try {
     const data = await AnalyticsService.getSalesAnalytics(dateRange);
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -55,8 +55,8 @@ export async function exportSalesReportCsvAction(fromIso?: string, toIso?: strin
       csv,
       filename: `sales-report-${fromLabel}-${toLabel}.csv`,
     };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -66,8 +66,8 @@ export async function getOrderAnalyticsAction(dateRange?: DateRange) {
   try {
     const data = await AnalyticsService.getOrderAnalytics(dateRange);
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -77,8 +77,8 @@ export async function getCustomerAnalyticsAction(dateRange?: DateRange) {
   try {
     const data = await AnalyticsService.getCustomerAnalytics(dateRange);
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -88,8 +88,8 @@ export async function getProductAnalyticsAction() {
   try {
     const data = await AnalyticsService.getProductAnalytics();
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -99,8 +99,8 @@ export async function getInventoryAnalyticsAction() {
   try {
     const data = await AnalyticsService.getInventoryAnalytics();
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -110,8 +110,8 @@ export async function getMarketingAnalyticsAction(dateRange?: DateRange) {
   try {
     const data = await AnalyticsService.getMarketingAnalytics(dateRange);
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -160,8 +160,8 @@ export async function getAiInsightsAction() {
         recommendations
       } 
     };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -172,7 +172,7 @@ export async function getCustomReportAction() {
     const salesData = await AnalyticsService.getSalesAnalytics();
     
     // Transform paymentMethodSales to custom report format
-    const rows = salesData.paymentMethodSales.map((pm: any) => [
+    const rows = salesData.paymentMethodSales.map((pm) => [
       pm.name || "Unknown",
       pm.value
     ]);
@@ -185,7 +185,7 @@ export async function getCustomReportAction() {
         rows: rows
       }
     };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

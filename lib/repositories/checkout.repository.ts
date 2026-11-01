@@ -39,8 +39,7 @@ export class CheckoutRepository {
 
       if (!record) return null;
       return mapToCheckoutSession(record);
-    } catch (error: any) {
-      console.error("CheckoutRepository.getSession error:", error);
+    } catch (error) {
       return null;
     }
   }
@@ -72,9 +71,8 @@ export class CheckoutRepository {
       });
 
       return mapToCheckoutSession(record);
-    } catch (error: any) {
-      console.error("CheckoutRepository.createSession error:", error);
-      throw new Error(`Failed to create checkout session: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to create checkout session: ${(error as Error).message}`);
     }
   }
 
@@ -106,9 +104,8 @@ export class CheckoutRepository {
       });
 
       return mapToCheckoutSession(record);
-    } catch (error: any) {
-      console.error("CheckoutRepository.updateSession error:", error);
-      throw new Error(`Failed to update checkout session: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to update checkout session: ${(error as Error).message}`);
     }
   }
 

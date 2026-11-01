@@ -87,8 +87,8 @@ export default function HomepageManagerClient({
       if (!b.success) throw new Error(b.error || "Features save failed");
       toast.success("Homepage settings saved");
       router.refresh();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to save");
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to save");
     } finally {
       setSaving(false);
     }

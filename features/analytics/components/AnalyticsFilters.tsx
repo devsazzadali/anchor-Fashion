@@ -107,8 +107,8 @@ export function AnalyticsFilters({
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to export the sales report.");
+    } catch (err) {
+      toast.error((err as Error)?.message || "Failed to export the sales report.");
     } finally {
       setIsExporting(false);
     }

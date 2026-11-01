@@ -50,8 +50,8 @@ export class CourierGatewayService {
     try {
       const provider = await this.getProvider(code);
       return await provider.createConsignment(request);
-    } catch (err: any) {
-      return this.buildError(code, err.message);
+    } catch (err) {
+      return this.buildError(code, (err as Error).message);
     }
   }
 
@@ -65,8 +65,8 @@ export class CourierGatewayService {
     try {
       const provider = await this.getProvider(code);
       return provider.cancelConsignment(consignmentId);
-    } catch (err: any) {
-      return this.buildError(code, err.message);
+    } catch (err) {
+      return this.buildError(code, (err as Error).message);
     }
   }
 
@@ -80,8 +80,8 @@ export class CourierGatewayService {
     try {
       const provider = await this.getProvider(code);
       return provider.trackShipment(trackingCode);
-    } catch (err: any) {
-      return this.buildError(code, err.message);
+    } catch (err) {
+      return this.buildError(code, (err as Error).message);
     }
   }
 
@@ -95,8 +95,8 @@ export class CourierGatewayService {
     try {
       const provider = await this.getProvider(code);
       return provider.generateLabel(consignmentId);
-    } catch (err: any) {
-      return this.buildError(code, err.message);
+    } catch (err) {
+      return this.buildError(code, (err as Error).message);
     }
   }
 
@@ -111,8 +111,8 @@ export class CourierGatewayService {
     try {
       const provider = await this.getProvider(code);
       return provider.processWebhook(payload, signature);
-    } catch (err: any) {
-      return this.buildError(code, err.message);
+    } catch (err) {
+      return this.buildError(code, (err as Error).message);
     }
   }
 

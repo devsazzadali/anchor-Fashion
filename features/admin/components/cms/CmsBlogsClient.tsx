@@ -90,8 +90,8 @@ export function CmsBlogsClient({ posts: initialPosts }: CmsBlogsClientProps) {
       toast.success(`Post "${target.title}" deleted successfully`);
       setDeletingPost(null);
       router.refresh();
-    } catch (err: any) {
-      toast.error("Failed to delete blog post", { description: err.message });
+    } catch (err) {
+      toast.error("Failed to delete blog post", { description: (err as Error).message });
       // Revert if failed
       setPosts(initialPosts);
     } finally {
@@ -114,8 +114,8 @@ export function CmsBlogsClient({ posts: initialPosts }: CmsBlogsClientProps) {
         `Post "${post.title}" ${nextStatus === "published" ? "published" : "moved to draft"}`
       );
       router.refresh();
-    } catch (err: any) {
-      toast.error("Failed to update post status", { description: err.message });
+    } catch (err) {
+      toast.error("Failed to update post status", { description: (err as Error).message });
       setPosts(initialPosts);
     }
   };

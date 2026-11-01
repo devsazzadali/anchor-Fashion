@@ -54,7 +54,6 @@ export async function generateContent(
       latencyMs,
     };
   } catch (error) {
-    console.error("Gemini API Error:", error);
     throw error;
   }
 }

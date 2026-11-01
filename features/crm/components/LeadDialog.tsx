@@ -153,12 +153,12 @@ export function LeadDialog({
         if (res.data) onSuccess?.(res.data);
       }
       onOpenChange(false);
-    } catch (err: any) {
+    } catch (err) {
       form.setError("root", {
         type: "server",
-        message: err.message || "An unexpected error occurred",
+        message: (err as Error).message || "An unexpected error occurred",
       });
-      toast.error(err.message || "An unexpected error occurred");
+      toast.error((err as Error).message || "An unexpected error occurred");
     } finally {
       setSubmitting(false);
     }

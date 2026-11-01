@@ -41,7 +41,6 @@ export async function recordAudit(entry: {
       },
     });
   } catch (err) {
-    console.error("[audit] failed to record audit event:", entry.action, err);
   }
 }
 
@@ -80,7 +79,6 @@ export async function recordAuditForSessionUser(entry: {
 
     await recordAudit({ ...entry, userId: profile.id });
   } catch (err) {
-    console.error("[audit] session actor resolution failed:", entry.action, err);
   }
 }
 

@@ -20,7 +20,6 @@ export class TemplateEngine {
       });
       return template(variables);
     } catch (error) {
-      console.error("Template hydration failed:", error);
       return templateString; // Fallback to raw string on error
     }
   }

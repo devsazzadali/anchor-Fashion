@@ -127,7 +127,7 @@ export default async function ProductsPage({
 
   // Clean real categories and brands (remove placeholder/QA records)
   const filteredCategories: any[] = ((rawCategories as any[]) || []).filter(
-    (c: any) =>
+    (c) =>
       c.slug !== "jhkjhkj" &&
       !c.slug?.startsWith("qa-") &&
       !c.slug?.startsWith("test-dummy")
@@ -138,13 +138,13 @@ export default async function ProductsPage({
       : (rawCategories as any[] ?? []);
 
   const filteredBrands: any[] = ((rawBrands as any[]) || []).filter(
-    (b: any) => b.slug !== "jhkjhkj" && !b.slug?.startsWith("qa-")
+    (b) => b.slug !== "jhkjhkj" && !b.slug?.startsWith("qa-")
   );
   const brands: any[] =
     filteredBrands.length > 0 ? filteredBrands : (rawBrands as any[] ?? []);
 
-  const currentCategoryObj = categories.find((c: any) => c.slug === category);
-  const currentBrandObj = brands.find((b: any) => b.slug === brand);
+  const currentCategoryObj = categories.find((c) => c.slug === category);
+  const currentBrandObj = brands.find((b) => b.slug === brand);
 
   const activeFilterCount = [
     category,
@@ -360,7 +360,7 @@ export default async function ProductsPage({
         >
           All
         </Link>
-        {categories.slice(0, 10).map((cat: any) => {
+        {categories.slice(0, 10).map((cat) => {
           const isSelected = category === cat.slug;
           return (
             <Link

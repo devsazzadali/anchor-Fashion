@@ -34,13 +34,12 @@ export class BKashProvider extends BasePaymentProvider {
         gatewayUrl: bkashRes.bkashURL,
         status: "pending",
       };
-    } catch (err: any) {
-      console.error("[BKashProvider] initializePayment failed:", err.message);
+    } catch (err) {
       return {
         sessionId: "",
         gatewayUrl: "",
         status: "failed",
-        error: err.message,
+        error: (err as Error).message,
       };
     }
   }
@@ -90,14 +89,13 @@ export class BKashProvider extends BasePaymentProvider {
         gatewayResponse: executeRes,
         message: executeRes.statusMessage || "bKash transaction verification failed",
       };
-    } catch (err: any) {
-      console.error("[BKashProvider] verifyPayment error:", err.message);
+    } catch (err) {
       return {
         isValid: false,
         transactionId,
         status: "failed",
-        gatewayResponse: { error: err.message },
-        message: err.message,
+        gatewayResponse: { error: (err as Error).message },
+        message: (err as Error).message,
       };
     }
   }
@@ -125,12 +123,11 @@ export class BKashProvider extends BasePaymentProvider {
         status: "failed",
         error: refundRes.statusMessage || "bKash refund failed",
       };
-    } catch (err: any) {
-      console.error("[BKashProvider] processRefund error:", err.message);
+    } catch (err) {
       return {
         refundId: "",
         status: "failed",
-        error: err.message,
+        error: (err as Error).message,
       };
     }
   }

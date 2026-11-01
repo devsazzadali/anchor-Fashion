@@ -42,8 +42,8 @@ export const useWishlistStore = create<WishlistState>()(
             // If unauthorized (guest), keep existing local wishlist items
             set({ error: res.error, isLoading: false });
           }
-        } catch (err: any) {
-          set({ error: err?.message || "Failed to fetch wishlist", isLoading: false });
+        } catch (err) {
+          set({ error: (err as Error)?.message || "Failed to fetch wishlist", isLoading: false });
         }
       },
 
@@ -200,14 +200,14 @@ export const useWishlistStore = create<WishlistState>()(
             }
             throw new Error(res.error || "Failed to move item to cart");
           }
-        } catch (err: any) {
+        } catch (err) {
           if (currentWishlist) {
             set({
               wishlist: {
                 ...currentWishlist,
                 items: previousItems,
               },
-              error: err?.message || "Failed to move item to cart",
+              error: (err as Error)?.message || "Failed to move item to cart",
               isLoading: false,
             });
           }

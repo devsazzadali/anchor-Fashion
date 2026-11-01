@@ -94,9 +94,8 @@ export function LoginForm() {
       } catch {
         window.location.replace(next || "/account/profile");
       }
-    } catch (err: any) {
-      console.error("[LoginForm] Error during sign-in:", err);
-      toast.error(err?.message || "Failed to sign in. Please verify your internet or credentials.");
+    } catch (err) {
+      toast.error((err as Error)?.message || "Failed to sign in. Please verify your internet or credentials.");
       setIsLoading(false);
       setIsRedirecting(false);
     }

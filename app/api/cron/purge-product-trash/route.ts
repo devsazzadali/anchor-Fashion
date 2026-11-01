@@ -20,7 +20,6 @@ export async function GET(request: NextRequest) {
     const purged = await ProductRepository.purgeExpiredTrash();
     return NextResponse.json({ success: true, purged });
   } catch (error) {
-    console.error("[Cron] purge-product-trash error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

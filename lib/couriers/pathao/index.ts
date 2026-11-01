@@ -77,13 +77,13 @@ export class PathaoCourierProvider implements CourierProvider {
             ? `Pathao API reachable with high latency (${responseTime}ms)`
             : "Pathao API is reachable and authenticated",
       };
-    } catch (err: any) {
+    } catch (err) {
       const responseTime = Date.now() - start;
       return {
         status: "unhealthy",
         responseTime,
         lastCheckedAt: new Date().toISOString(),
-        message: `Pathao health check failed: ${err.message}`,
+        message: `Pathao health check failed: ${(err as Error).message}`,
       };
     }
   }

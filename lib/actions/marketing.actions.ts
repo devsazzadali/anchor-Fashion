@@ -36,9 +36,8 @@ export async function getCouponsAction(): Promise<{
     await verifyStaff();
     const coupons = await CouponRepository.getCoupons();
     return { success: true, data: coupons };
-  } catch (error: any) {
-    console.error("[getCouponsAction] Error:", error);
-    return { success: false, error: error.message || "Failed to fetch coupons" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch coupons" };
   }
 }
 
@@ -58,9 +57,8 @@ export async function createCouponAction(
       revalidatePath("/manager/marketing");
     } catch {}
     return { success: true, data: coupon };
-  } catch (error: any) {
-    console.error("[createCouponAction] Error:", error);
-    return { success: false, error: error.message || "Failed to create coupon" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to create coupon" };
   }
 }
 
@@ -79,9 +77,8 @@ export async function toggleCouponStatusAction(
       revalidatePath("/manager/marketing");
     } catch {}
     return { success: true, data: coupon };
-  } catch (error: any) {
-    console.error("[toggleCouponStatusAction] Error:", error);
-    return { success: false, error: error.message || "Failed to toggle coupon status" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to toggle coupon status" };
   }
 }
 
@@ -99,9 +96,8 @@ export async function deleteCouponAction(
       revalidatePath("/manager/marketing");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    console.error("[deleteCouponAction] Error:", error);
-    return { success: false, error: error.message || "Failed to delete coupon" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to delete coupon" };
   }
 }
 
@@ -123,9 +119,8 @@ export async function createPromotionAction(
       revalidatePath("/products");
     } catch {}
     return { success: true, data: promo };
-  } catch (error: any) {
-    console.error("[createPromotionAction] Error:", error);
-    return { success: false, error: error.message || "Failed to create promotion" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to create promotion" };
   }
 }
 
@@ -146,9 +141,8 @@ export async function updatePromotionAction(
       revalidatePath("/products");
     } catch {}
     return { success: true, data: promo };
-  } catch (error: any) {
-    console.error("[updatePromotionAction] Error:", error);
-    return { success: false, error: error.message || "Failed to update promotion" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update promotion" };
   }
 }
 
@@ -166,9 +160,8 @@ export async function deletePromotionAction(
       revalidatePath("/products");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    console.error("[deletePromotionAction] Error:", error);
-    return { success: false, error: error.message || "Failed to delete promotion" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to delete promotion" };
   }
 }
 
@@ -187,9 +180,8 @@ export async function togglePromotionStatusAction(
       revalidatePath("/products");
     } catch {}
     return { success: true, data: promo };
-  } catch (error: any) {
-    console.error("[togglePromotionStatusAction] Error:", error);
-    return { success: false, error: error.message || "Failed to toggle promotion status" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to toggle promotion status" };
   }
 }
 
@@ -201,9 +193,8 @@ export async function getActivePromotionAction(): Promise<{
   try {
     const promo = await PromotionRepository.getBestActivePromotion();
     return { success: true, data: promo };
-  } catch (error: any) {
-    console.error("[getActivePromotionAction] Error:", error);
-    return { success: false, error: error.message || "Failed to fetch active promotion" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch active promotion" };
   }
 }
 
@@ -221,9 +212,8 @@ export async function getCampaignsAction(): Promise<{
   try {
     const campaigns = await marketingService.getCampaigns();
     return { success: true, data: campaigns };
-  } catch (error: any) {
-    console.error("[getCampaignsAction] Error:", error);
-    return { success: false, error: error.message || "Failed to fetch campaigns" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch campaigns" };
   }
 }
 
@@ -318,11 +308,10 @@ export async function saveCampaignDraftAction(payload: {
     revalidatePath("/admin/marketing/campaigns");
     revalidatePath("/manager/marketing/campaigns");
     return { success: true, campaign };
-  } catch (err: any) {
-    console.error("[saveCampaignDraftAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to save campaign draft",
+      error: (err as Error).message || "Failed to save campaign draft",
     };
   }
 }
@@ -337,11 +326,10 @@ export async function deleteCampaignAction(
     await marketingService.deleteCampaign(id);
     revalidatePath("/admin/marketing/campaigns");
     return { success: true };
-  } catch (error: any) {
-    console.error("[deleteCampaignAction] Error:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Failed to delete campaign",
+      error: (error as Error).message || "Failed to delete campaign",
     };
   }
 }
@@ -401,11 +389,10 @@ export async function createAndSendCampaignAction(payload: {
       sentCount: sendResult.sentCount,
       error: sendResult.error,
     };
-  } catch (err: any) {
-    console.error("[createAndSendCampaignAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to create and dispatch campaign",
+      error: (err as Error).message || "Failed to create and dispatch campaign",
     };
   }
 }
@@ -452,11 +439,10 @@ export async function createAndScheduleCampaignAction(payload: {
       success: true,
       campaign: scheduled,
     };
-  } catch (err: any) {
-    console.error("[createAndScheduleCampaignAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to schedule campaign",
+      error: (err as Error).message || "Failed to schedule campaign",
     };
   }
 }

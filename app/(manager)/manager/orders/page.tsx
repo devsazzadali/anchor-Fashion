@@ -86,7 +86,7 @@ export default function ManagerOrdersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.data?.map((order: any) => (
+              {data?.data?.map((order) => (
                 <TableRow key={order.id}>
                   <TableCell className="font-medium">
                     <Link

@@ -108,7 +108,6 @@ export async function updateCustomerByAdminAction(
       authUpdates
     );
     if (authErr) {
-      console.warn("[updateCustomerByAdminAction] Auth update warning:", authErr.message);
     }
 
     // 5. Update customer_profiles table
@@ -171,11 +170,10 @@ export async function updateCustomerByAdminAction(
     revalidatePath("/manager/customers");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateCustomerByAdminAction] Error:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to update customer details.",
+      error: (error as Error)?.message || "Failed to update customer details.",
     };
   }
 }
@@ -238,7 +236,6 @@ export async function deleteCustomerByAdminAction(
     // 5. Delete user from Neon Auth
     const { error: authErr } = await db.auth.admin.deleteUser(cleanId);
     if (authErr) {
-      console.warn("[deleteCustomerByAdminAction] Auth delete warning:", authErr.message);
     }
 
     // 6. Revalidate routes
@@ -246,11 +243,10 @@ export async function deleteCustomerByAdminAction(
     revalidatePath("/manager/customers");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("[deleteCustomerByAdminAction] Error:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to delete customer.",
+      error: (error as Error)?.message || "Failed to delete customer.",
     };
   }
 }
@@ -268,7 +264,7 @@ export async function adjustCustomerWalletAction(data: {
   reason: string;
 }): Promise<{ success: boolean; balance?: number; error?: string }> {
   try {
-    const admin: any = await verifyAdmin();
+    const admin = await verifyAdmin();
 
     const cleanId = data.customerId?.trim();
     const cleanReason = data.reason?.trim();
@@ -295,11 +291,10 @@ export async function adjustCustomerWalletAction(data: {
 
     revalidatePath(`/admin/customers/${cleanId}`);
     return { success: true, balance: Number(wallet.balance) };
-  } catch (error: any) {
-    console.error("[adjustCustomerWalletAction] Error:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to adjust wallet.",
+      error: (error as Error)?.message || "Failed to adjust wallet.",
     };
   }
 }
@@ -318,11 +313,10 @@ export async function getCustomerPasswordAction(
 
     const password = (data.user?.user_metadata as any)?.assigned_password || null;
     return { success: true, password };
-  } catch (error: any) {
-    console.error("[getCustomerPasswordAction] Error:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || "Failed to retrieve customer password.",
+      error: (error as Error)?.message || "Failed to retrieve customer password.",
     };
   }
 }

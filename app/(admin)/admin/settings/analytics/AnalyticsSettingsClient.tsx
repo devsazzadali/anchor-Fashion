@@ -29,8 +29,8 @@ export function AnalyticsSettingsClient({ initialConfig }: { initialConfig: Anal
       } else {
         toast.error(res.error || "Failed to save analytics settings");
       }
-    } catch (e: any) {
-      toast.error(e.message || "An error occurred");
+    } catch (e) {
+      toast.error((e as Error).message || "An error occurred");
     } finally {
       setIsSaving(false);
     }

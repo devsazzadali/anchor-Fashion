@@ -222,8 +222,8 @@ export function MessagesClient({
       setIsDeleteDialogOpen(false);
       setLogToDelete(null);
       router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete communication log");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to delete communication log");
     } finally {
       setDeleting(false);
     }
@@ -301,9 +301,9 @@ export function MessagesClient({
       setContent("");
       setSelectedClient("none");
       router.refresh();
-    } catch (err: any) {
-      setServerError(err.message || "An unexpected error occurred");
-      toast.error(err.message || "An unexpected error occurred");
+    } catch (err) {
+      setServerError((err as Error).message || "An unexpected error occurred");
+      toast.error((err as Error).message || "An unexpected error occurred");
     } finally {
       setSubmitting(false);
     }

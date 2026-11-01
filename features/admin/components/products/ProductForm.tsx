@@ -296,7 +296,6 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
           });
         }
       } catch (err) {
-        console.error("Failed to load imported product:", err);
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -339,8 +338,8 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
       }
 
       toast.success(`Generated unique style code: "${code}"!`);
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to generate style code.");
+    } catch (err) {
+      toast.error((err as Error)?.message || "Failed to generate style code.");
     } finally {
       setIsGeneratingCode(false);
     }
@@ -386,8 +385,8 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
       } else {
         toast.error(res.error || "Failed to upload image");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Failed to upload image");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to upload image");
     } finally {
       setUploadingImage(null);
       if (e.target) e.target.value = "";
@@ -421,8 +420,8 @@ export function ProductForm({ initialData, returnPath = "/admin/products" }: Pro
         }
       }
       toast.success("Image(s) uploaded successfully");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to upload image(s)");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to upload image(s)");
     } finally {
       setUploadingImage(null);
       if (e.target) e.target.value = "";

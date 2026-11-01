@@ -29,11 +29,10 @@ export async function getSavedReportsAction(): Promise<{
 
     const reports = await reportRepository.getSavedReports(user?.id);
     return { success: true, data: reports };
-  } catch (err: any) {
-    console.error("[getSavedReportsAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to load saved reports",
+      error: (err as Error).message || "Failed to load saved reports",
     };
   }
 }
@@ -51,11 +50,10 @@ export async function getSavedReportByIdAction(
     if (!id) return { success: false, error: "Report ID is required" };
     const report = await reportRepository.getReportById(id);
     return { success: true, data: report };
-  } catch (err: any) {
-    console.error("[getSavedReportByIdAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to load report",
+      error: (err as Error).message || "Failed to load report",
     };
   }
 }
@@ -83,11 +81,10 @@ export async function saveReportAction(
     revalidatePath("/admin/reports/builder");
     revalidatePath("/admin/reports");
     return { success: true, data: saved };
-  } catch (err: any) {
-    console.error("[saveReportAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to save report configuration",
+      error: (err as Error).message || "Failed to save report configuration",
     };
   }
 }
@@ -108,11 +105,10 @@ export async function deleteReportAction(
     revalidatePath("/admin/reports/builder");
     revalidatePath("/admin/reports");
     return { success: true };
-  } catch (err: any) {
-    console.error("[deleteReportAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to delete report configuration",
+      error: (err as Error).message || "Failed to delete report configuration",
     };
   }
 }
@@ -132,11 +128,10 @@ export async function runReportQueryAction(
 
     const result = await reportRepository.executeReportQuery(validated);
     return { success: true, data: result };
-  } catch (err: any) {
-    console.error("[runReportQueryAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to execute report query",
+      error: (err as Error).message || "Failed to execute report query",
     };
   }
 }

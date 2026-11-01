@@ -82,9 +82,8 @@ export async function getOperationsReturnsAction(filters: {
     }
 
     return { success: true, data: rows };
-  } catch (err: any) {
-    console.error("[getOperationsReturnsAction]", err);
-    return { success: false, error: err.message || "Failed to fetch returns" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to fetch returns" };
   }
 }
 
@@ -130,7 +129,6 @@ export async function createOperationsReturnAction(payload: CreateReturnPayload)
         .insert(itemsToInsert);
 
       if (itemsError) {
-        console.warn("[createOperationsReturnAction] Warning: Could not insert items", itemsError);
       }
     }
 
@@ -139,9 +137,8 @@ export async function createOperationsReturnAction(payload: CreateReturnPayload)
     revalidatePath("/admin/shipping/returns");
 
     return { success: true, data: ret };
-  } catch (err: any) {
-    console.error("[createOperationsReturnAction]", err);
-    return { success: false, error: err.message || "Failed to create return" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to create return" };
   }
 }
 
@@ -234,8 +231,7 @@ export async function updateOperationsReturnStatusAction(
                 reason_code: "RETURN",
                 reference_id: updated.return_number,
               });
-            } catch (e: any) {
-              console.warn("Could not insert stock_movements log:", e?.message);
+            } catch (e) {
             }
 
             // Mark item as restocked
@@ -253,9 +249,8 @@ export async function updateOperationsReturnStatusAction(
     revalidatePath("/admin/shipping/returns");
 
     return { success: true, data: updated };
-  } catch (err: any) {
-    console.error("[updateOperationsReturnStatusAction]", err);
-    return { success: false, error: err.message || "Failed to update return status" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to update return status" };
   }
 }
 
@@ -320,7 +315,7 @@ export async function getOrdersForReturnAction(search: string = "") {
     }
 
     return { success: true, data: await attachProfiles(orders || []) };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to fetch orders" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to fetch orders" };
   }
 }

@@ -163,7 +163,6 @@ export function logServerError(
   };
 
   // 1. Output structured JSON to console for Docker/Vercel/CloudWatch
-  console.error(`[ERROR] [${context}]`, JSON.stringify(logPayload));
 
   // 2. Forward to Central Observability Service
   try {

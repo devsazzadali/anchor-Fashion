@@ -69,8 +69,8 @@ export async function createShipmentAction(
         shipmentNumber: shipment.shipment_number,
       },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -101,8 +101,8 @@ export async function updateShipmentAction(
     revalidatePath(`/admin/shipping/${shipmentId}`);
 
     return { success: true, data: { shipmentId: updated.id } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -132,8 +132,8 @@ export async function cancelShipmentAction(
     revalidatePath(`/admin/shipping/${parse.data.shipmentId}`);
 
     return { success: true, data: { shipmentId: cancelled.id } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -169,8 +169,8 @@ export async function assignCourierAction(
       success: true,
       data: { shipmentId: updated.id, trackingNumber: updated.tracking_number },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -210,8 +210,8 @@ export async function reassignCourierAction(
       success: true,
       data: { shipmentId: updated.id, trackingNumber: updated.tracking_number },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -234,8 +234,8 @@ export async function generateLabelAction(
 
     revalidatePath(`/admin/shipping/${shipmentId}`);
     return { success: true, data: { labelUrl } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -264,8 +264,8 @@ export async function printManifestAction(
         recipientName: m.recipientName,
       })),
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -280,8 +280,8 @@ export async function syncTrackingAction(
 
     revalidatePath(`/admin/shipping/${shipmentId}`);
     return { success: true, data: { status: updated.status } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -299,8 +299,8 @@ export async function fetchShipmentsAction(
     const service = new ShippingService();
     const result = await service.listShipments(parse.data as any);
     return { success: true, data: result };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -315,8 +315,8 @@ export async function fetchShipmentByIdAction(
 
     if (!shipment) return { success: false, error: "Shipment not found" };
     return { success: true, data: shipment };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -341,8 +341,8 @@ export async function getTrackingTimelineAction(
     if (!timeline)
       return { success: false, error: "Tracking information not found" };
     return { success: true, data: timeline };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -357,7 +357,7 @@ export async function refreshTrackingAction(
 
     revalidatePath(`/admin/shipping/${shipmentId}`);
     return { success: true, data: timeline };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }

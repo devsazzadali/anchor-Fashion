@@ -123,8 +123,8 @@ export function CourierListClient({ initialCouriers }: Props) {
       setCouriers((prev) => [...prev, res.data!]);
       setAddOpen(false);
       resetNewCourierForm();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to add courier");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to add courier");
     } finally {
       setCreating(false);
     }
@@ -176,8 +176,8 @@ export function CourierListClient({ initialCouriers }: Props) {
         }
       }
       setHealthMap(newHealthMap);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to sync status");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to sync status");
     } finally {
       setSyncing(false);
     }
@@ -207,8 +207,8 @@ export function CourierListClient({ initialCouriers }: Props) {
       if (!res.success) throw new Error(res.error);
       toast.success(checked ? "Courier activated" : "Courier deactivated");
       loadMetricsAndHealth(nextCouriers);
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error((err as Error).message);
       // Revert
       setCouriers(couriers);
     }

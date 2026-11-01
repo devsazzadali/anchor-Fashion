@@ -12,7 +12,6 @@ export async function LatestBlogs() {
     const fetched = await getPosts("published");
     posts = fetched ? fetched.slice(0, 3) : [];
   } catch (err) {
-    console.error("[LatestBlogs Error]:", err);
   }
 
   return (

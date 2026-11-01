@@ -39,11 +39,6 @@ export async function GET(req: Request) {
       .single();
 
     if (orderError || !order) {
-      console.error(
-        "[Payment Init] Order not found:",
-        orderId,
-        orderError?.message
-      );
       return NextResponse.redirect(
         new URL("/checkout/failed?reason=order_not_found", req.url)
       );
@@ -82,9 +77,6 @@ export async function GET(req: Request) {
       const isConfigured = await BKashService.isConfigured();
 
       if (!isConfigured) {
-        console.warn(
-          "[Payment Init] bKash credentials not configured in environment or settings. Redirecting to success with notice."
-        );
         return NextResponse.redirect(
           new URL(
             `/checkout/success?order_id=${orderId}&notice=payment_pending`,
@@ -135,8 +127,7 @@ export async function GET(req: Request) {
           .eq("id", order.id);
 
         return NextResponse.redirect(paymentData.bkashURL);
-      } catch (bkashErr: any) {
-        console.error("[Payment Init] bKash createPayment error:", bkashErr.message);
+      } catch (bkashErr) {
         return NextResponse.redirect(
           new URL(`/checkout/failed?order_id=${orderId}&reason=bkash_init_failed`, req.url)
         );
@@ -154,9 +145,6 @@ export async function GET(req: Request) {
       const isConfigured = await SSLCommerzService.isConfigured();
 
       if (!isConfigured) {
-        console.warn(
-          "[Payment Init] SSLCommerz credentials not configured in environment or settings. Redirecting to success with notice."
-        );
         return NextResponse.redirect(
           new URL(
             `/checkout/success?order_id=${orderId}&notice=payment_pending`,
@@ -233,8 +221,7 @@ export async function GET(req: Request) {
         }
 
         return NextResponse.redirect(paymentData.GatewayPageURL!);
-      } catch (sslErr: any) {
-        console.error("[Payment Init] SSLCommerz initiatePayment error:", sslErr.message);
+      } catch (sslErr) {
         return NextResponse.redirect(
           new URL(`/checkout/failed?order_id=${orderId}&reason=ssl_init_failed`, req.url)
         );
@@ -251,9 +238,6 @@ export async function GET(req: Request) {
     const credentials = settingsRow?.value as Record<string, string> | null;
 
     if (!credentials) {
-      console.error(
-        `[Payment Init] No credentials configured for method: ${method}`
-      );
       return NextResponse.redirect(
         new URL(
           `/checkout/success?order_id=${orderId}&notice=payment_pending`,
@@ -363,8 +347,7 @@ export async function GET(req: Request) {
     return NextResponse.redirect(
       new URL(`/checkout/failed?reason=unknown_method`, req.url)
     );
-  } catch (error: any) {
-    console.error("[Payment Init] Unexpected error:", error);
+  } catch (error) {
     return NextResponse.redirect(
       new URL("/checkout/failed?reason=server_error", req.url)
     );

@@ -143,7 +143,7 @@ export default async function InventoryPage({
                 </TableCell>
               </TableRow>
             ) : (
-              inventory.map((item: any) => (
+              inventory.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-medium text-muted-foreground">
                     {item.sku}

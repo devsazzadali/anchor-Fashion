@@ -437,7 +437,7 @@ export class DashboardRepository {
       select: { id: true, profileId: true, status: true, createdAt: true, profile: { select: { firstName: true, lastName: true, email: true, avatarUrl: true } } }
     });
 
-    return latestOrders.map((ord: any) => {
+    return latestOrders.map((ord) => {
       const prof = ord.profile;
       const fullName = prof?.firstName || prof?.lastName
         ? `${prof.firstName || ""} ${prof.lastName || ""}`.trim()

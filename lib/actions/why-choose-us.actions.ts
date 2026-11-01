@@ -27,7 +27,6 @@ export async function getWhyChooseUsSettings(): Promise<WhyChooseUsSettings> {
       .maybeSingle();
 
     if (error) {
-      console.warn("[getWhyChooseUsSettings] Error fetching settings, using defaults:", error.message);
       return DEFAULT_WHY_CHOOSE_US;
     }
 
@@ -47,8 +46,7 @@ export async function getWhyChooseUsSettings(): Promise<WhyChooseUsSettings> {
     }
 
     return DEFAULT_WHY_CHOOSE_US;
-  } catch (err: any) {
-    console.error("[getWhyChooseUsSettings] Exception:", err);
+  } catch (err) {
     return DEFAULT_WHY_CHOOSE_US;
   }
 }
@@ -90,7 +88,6 @@ export async function updateWhyChooseUsSettings(
     );
 
     if (error) {
-      console.error("[updateWhyChooseUsSettings] Upsert error:", error);
       throw error;
     }
 
@@ -111,9 +108,8 @@ export async function updateWhyChooseUsSettings(
     }
 
     return { success: true };
-  } catch (err: any) {
-    console.error("[updateWhyChooseUsSettings] Failed:", err);
-    return { success: false, error: err.message || "Failed to update settings" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to update settings" };
   }
 }
 
@@ -133,7 +129,7 @@ export async function resetWhyChooseUsSettings(): Promise<{
       return { success: false, data: DEFAULT_WHY_CHOOSE_US, error: res.error };
     }
     return { success: true, data: DEFAULT_WHY_CHOOSE_US };
-  } catch (err: any) {
-    return { success: false, data: DEFAULT_WHY_CHOOSE_US, error: err.message };
+  } catch (err) {
+    return { success: false, data: DEFAULT_WHY_CHOOSE_US, error: (err as Error).message };
   }
 }

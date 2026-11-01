@@ -20,7 +20,6 @@ function getAudioContext(): AudioContext | null {
     }
     return sharedAudioCtx;
   } catch (err) {
-    console.warn("AudioContext initialization warning:", err);
     return null;
   }
 }
@@ -49,7 +48,6 @@ export function playOrderNotificationSound(): void {
       playChimeSequence(ctx);
     }
   } catch (err) {
-    console.warn("Could not play order notification chime:", err);
   }
 }
 

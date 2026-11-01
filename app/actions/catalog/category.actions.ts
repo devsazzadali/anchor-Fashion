@@ -6,7 +6,7 @@ export async function fetchCategoriesAction(activeOnly: boolean = true) {
   try {
     const data = await CategoryRepository.getCategories(activeOnly);
     return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

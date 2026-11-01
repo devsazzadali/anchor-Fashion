@@ -74,9 +74,9 @@ export default function AdminTrackingDashboard() {
       try {
         await syncTracking.mutateAsync(s.id);
         synced++;
-      } catch (err: any) {
+      } catch (err) {
         failed++;
-        toast.error(`Sync failed for ${s.shipment_number}: ${err.message}`);
+        toast.error(`Sync failed for ${s.shipment_number}: ${(err as Error).message}`);
       }
     }
     if (synced > 0) {

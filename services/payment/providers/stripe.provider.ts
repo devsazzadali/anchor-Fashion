@@ -67,14 +67,14 @@ export class StripeProvider implements PaymentProvider {
           message: data.error?.message || "Failed to initiate Stripe payment",
         },
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
         providerId: this.id,
         timestamp: new Date().toISOString(),
         error: {
           code: "EXCEPTION",
-          message: error.message,
+          message: (error as Error).message,
         },
       };
     }
@@ -120,14 +120,14 @@ export class StripeProvider implements PaymentProvider {
           message: "Payment not successful",
         },
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
         providerId: this.id,
         timestamp: new Date().toISOString(),
         error: {
           code: "EXCEPTION",
-          message: error.message,
+          message: (error as Error).message,
         },
       };
     }

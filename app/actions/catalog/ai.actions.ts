@@ -17,8 +17,7 @@ export async function generateProductDescriptionAction(
       shortDesc
     );
     return { success: true, data: text };
-  } catch (error: any) {
-    console.error("AI Generation Error:", error);
+  } catch (error) {
     return { success: false, error: "Failed to generate product description" };
   }
 }
@@ -35,8 +34,7 @@ export async function generateSeoMetadataAction(
       description
     );
     return { success: true, data: seoData };
-  } catch (error: any) {
-    console.error("AI SEO Generation Error:", error);
+  } catch (error) {
     return { success: false, error: "Failed to generate SEO metadata" };
   }
 }

@@ -13,7 +13,7 @@ export async function getExecutiveKpis() {
     .limit(1000);
 
   if (error || !orders) {
-    if (error) console.error("Error fetching sales KPIs:", error);
+    if (error) {}
     return null;
   }
 
@@ -77,7 +77,7 @@ export async function getSalesTrends() {
     .limit(200);
 
   if (error || !data) {
-    if (error) console.error("Error fetching sales trends:", error);
+    if (error) {}
     return [];
   }
 
@@ -184,7 +184,6 @@ export async function getCustomerMetrics() {
     .single();
 
   if (error) {
-    console.error("Error fetching customer metrics:", error);
     return null;
   }
 
@@ -201,7 +200,6 @@ export async function getInventoryMetrics() {
     .single();
 
   if (error) {
-    console.error("Error fetching inventory metrics:", error);
     return null;
   }
 

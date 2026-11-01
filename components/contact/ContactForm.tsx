@@ -56,8 +56,8 @@ export function ContactForm() {
         toast.success("Thank you! Your message has been sent successfully.");
         reset();
       }
-    } catch (err: any) {
-      toast.error(err.message || "Something went wrong. Please try again.");
+    } catch (err) {
+      toast.error((err as Error).message || "Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

@@ -162,8 +162,8 @@ export function LeadsClient({ initialLeads }: LeadsClientProps) {
       if (res?.data) {
         handleDialogSuccess(res.data);
       }
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to convert lead");
+    } catch (err) {
+      toast.error((err as Error)?.message || "Failed to convert lead");
     }
   };
 
@@ -190,8 +190,8 @@ export function LeadsClient({ initialLeads }: LeadsClientProps) {
       setDeleteConfirmOpen(false);
       setLeadToDelete(null);
       router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete lead");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to delete lead");
     } finally {
       setDeleting(false);
     }

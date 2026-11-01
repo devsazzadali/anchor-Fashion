@@ -115,7 +115,6 @@ function assertEmbeddedSelectsSupported(tableName: string, selectCols: string): 
       err.code = "REG83_UNSUPPORTED_EMBED";
       throw err;
     }
-    console.error(message);
   }
 }
 
@@ -916,7 +915,6 @@ export class DbQueryBuilder implements PromiseLike<any> {
         }
       }
     } catch (relErr) {
-      console.warn("[attachRelations] Notice:", relErr);
     }
     return rows;
   }
@@ -994,9 +992,6 @@ export class DbQueryBuilder implements PromiseLike<any> {
             take: MAX_UNBOUNDED_ROWS,
           });
           if (rows.length >= MAX_UNBOUNDED_ROWS) {
-            console.error(
-              `[db] REG-84 ceiling hit on ${this.tableName}: post-filtered select reached ${MAX_UNBOUNDED_ROWS} rows; results may be truncated. Add an explicit limit/range at the call site.`
-            );
           }
           for (const pf of this.postFilters) rows = rows.filter(pf);
           if (this.wantCount) count = rows.length;
@@ -1023,9 +1018,6 @@ export class DbQueryBuilder implements PromiseLike<any> {
             this.rangeStart === undefined &&
             rows.length >= MAX_UNBOUNDED_ROWS
           ) {
-            console.error(
-              `[db] REG-84 ceiling hit on ${this.tableName}: unbounded select reached ${MAX_UNBOUNDED_ROWS} rows; results may be truncated. Add an explicit limit/range at the call site.`
-            );
           }
           result = rows.map((r: any) => this.toSnakeRow(r));
           if (this.wantCount) {
@@ -1170,9 +1162,6 @@ export class DbQueryBuilder implements PromiseLike<any> {
           take: MAX_UNBOUNDED_ROWS,
         });
         if (existing.length >= MAX_UNBOUNDED_ROWS) {
-          console.error(
-            `[db] REG-84 ceiling hit on ${this.tableName}: update matched ${MAX_UNBOUNDED_ROWS}+ rows; only the first ${MAX_UNBOUNDED_ROWS} will be updated. Narrow the filters at the call site.`
-          );
         }
         if (existing.length === 0) return this.finish([], null);
 
@@ -1222,9 +1211,6 @@ export class DbQueryBuilder implements PromiseLike<any> {
           take: MAX_UNBOUNDED_ROWS,
         });
         if (existing.length >= MAX_UNBOUNDED_ROWS) {
-          console.error(
-            `[db] REG-84 ceiling hit on ${this.tableName}: delete matched ${MAX_UNBOUNDED_ROWS}+ rows; the delete applies to all of them but only the first ${MAX_UNBOUNDED_ROWS} are returned. Narrow the filters at the call site.`
-          );
         }
         if (existing.length > 0) {
           await delegate.deleteMany({ where });

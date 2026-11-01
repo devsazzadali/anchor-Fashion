@@ -30,14 +30,10 @@ export async function executeWorkflows(event: WorkflowEvent) {
       .eq("is_active", true);
 
     if (error) {
-      console.error("Error fetching workflows:", error);
       throw error;
     }
 
     if (!workflows || workflows.length === 0) {
-      console.warn(
-        `No active workflows found for trigger: ${event.triggerEvent}`
-      );
       return;
     }
 
@@ -56,19 +52,17 @@ export async function executeWorkflows(event: WorkflowEvent) {
             status: "SUCCESS",
             execution_details: actionResult,
           });
-        } catch (actionError: any) {
-          console.error(`Workflow ${workflow.id} failed:`, actionError);
+        } catch (actionError) {
           logs.push({
             workflow_id: workflow.id,
             trigger_event: event.triggerEvent,
             status: "FAILED",
-            error_message: actionError.message,
+            error_message: (actionError as Error).message,
           });
         }
       }
     }
   } catch (err) {
-    console.error("Workflow Engine Error:", err);
     throw err;
   }
 }

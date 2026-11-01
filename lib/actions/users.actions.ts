@@ -81,7 +81,6 @@ export async function getUsersByRoleAction(roleNames: string[]) {
         }
       }
     } catch (err) {
-      console.error("[getUsersByRoleAction] last sign-in lookup failed:", err);
     }
 
     // Merge data
@@ -119,9 +118,8 @@ export async function getUsersByRoleAction(roleNames: string[]) {
     });
 
     return { success: true, data: mappedUsers };
-  } catch (error: any) {
-    console.error("Error fetching users:", error);
-    return { success: false, error: error.message || "Failed to fetch users" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch users" };
   }
 }
 
@@ -244,9 +242,8 @@ export async function createUserAction(data: {
         userId: authData.user.id,
       },
     };
-  } catch (error: any) {
-    console.error("Error creating user:", error);
-    return { success: false, error: error.message || "Failed to create user" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to create user" };
   }
 }
 
@@ -291,9 +288,8 @@ export async function toggleUserStatusAction(userId: string, currentStatus: stri
     revalidatePath("/admin/users");
 
     return { success: true, newStatus: newActiveState ? "Active" : "Inactive" };
-  } catch (error: any) {
-    console.error("[toggleUserStatusAction]", error);
-    return { success: false, error: error.message || "Failed to update user status" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update user status" };
   }
 }
 
@@ -333,9 +329,8 @@ export async function assignUserRoleAction(userId: string, roleName: string) {
     revalidatePath("/admin/users");
 
     return { success: true, role: role.name };
-  } catch (error: any) {
-    console.error("[assignUserRoleAction]", error);
-    return { success: false, error: error.message || "Failed to assign role" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to assign role" };
   }
 }
 
@@ -373,9 +368,8 @@ export async function updateUserProfileAction(
     revalidatePath("/admin/users");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateUserProfileAction]", error);
-    return { success: false, error: error.message || "Failed to update profile" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update profile" };
   }
 }
 
@@ -390,8 +384,8 @@ export async function getAllAvailableRolesAction() {
 
     if (error) throw error;
     return { success: true, data: roles || [] };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to fetch roles" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to fetch roles" };
   }
 }
 
@@ -458,9 +452,8 @@ export async function updateUserPasswordAction(
     revalidatePath("/admin/users");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateUserPasswordAction]", error);
-    return { success: false, error: error.message || "Failed to update password" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update password" };
   }
 }
 

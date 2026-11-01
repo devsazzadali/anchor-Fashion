@@ -34,7 +34,7 @@ export async function withAITelemetry<T>(
     });
 
     return response.result;
-  } catch (error: any) {
+  } catch (error) {
     const latency = Date.now() - startTime;
 
     // Asynchronously record failure telemetry
@@ -44,7 +44,7 @@ export async function withAITelemetry<T>(
       completion_tokens: 0,
       latency_ms: latency,
       status: "error",
-      error_message: error.message || "Unknown AI error",
+      error_message: (error as Error).message || "Unknown AI error",
       trace_id: options.traceId,
     });
 
@@ -53,7 +53,7 @@ export async function withAITelemetry<T>(
     ObservabilityService.log({
       service_id: "SYSTEM_AI_SERVICE", // Assuming a known ID or UUID
       level: "ERROR",
-      message: `AI Model ${options.modelName} failed: ${error.message}`,
+      message: `AI Model ${options.modelName} failed: ${(error as Error).message}`,
       trace_id: options.traceId,
     });
 

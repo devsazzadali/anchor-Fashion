@@ -247,7 +247,6 @@ export class AnalyticsRepository {
 
     const { data: rawOrders, error: ordersError } = await ordersQuery;
     if (ordersError) {
-      console.error("Error fetching orders for sales analytics:", ordersError);
     }
 
     const orders = rawOrders || [];

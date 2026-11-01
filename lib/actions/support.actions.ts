@@ -19,8 +19,8 @@ export async function getSupportTicketsAction(): Promise<{
   try {
     const tickets = await SupportRepository.getTickets();
     return { success: true, data: tickets };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to fetch support tickets" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to fetch support tickets" };
   }
 }
 
@@ -37,8 +37,8 @@ export async function getTicketMessagesAction(ticketId: string): Promise<{
     // Mark customer messages as read
     await SupportRepository.markMessagesRead(ticketId);
     return { success: true, data: messages };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to fetch messages" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to fetch messages" };
   }
 }
 
@@ -68,8 +68,8 @@ export async function sendAgentMessageAction(params: {
 
     revalidatePath("/admin/support/chat");
     return { success: true, data: msg };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to send message" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to send message" };
   }
 }
 
@@ -86,8 +86,8 @@ export async function updateTicketStatusAction(params: {
     await SupportRepository.updateTicketStatus(params.ticketId, params.status);
     revalidatePath("/admin/support/chat");
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to update ticket status" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to update ticket status" };
   }
 }
 
@@ -114,8 +114,8 @@ export async function addTicketMessageAction(
     revalidatePath(`/admin/support/tickets/${ticketId}`);
     revalidatePath("/admin/support/chat");
     return { success: true, data: msg };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to add ticket message" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to add ticket message" };
   }
 }
 
@@ -135,8 +135,8 @@ export async function getKnowledgeBaseAction(): Promise<{
       return { success: true, data: [] };
     }
     return { success: true, data: data || [] };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to fetch knowledge base" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to fetch knowledge base" };
   }
 }
 

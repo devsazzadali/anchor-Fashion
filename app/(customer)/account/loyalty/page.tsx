@@ -31,7 +31,6 @@ export default function LoyaltyPage() {
           setLifetimePoints(res.data.lifetime_points || 0);
         }
       } catch (err) {
-        console.error("Failed to load loyalty:", err);
       } finally {
         setLoading(false);
       }

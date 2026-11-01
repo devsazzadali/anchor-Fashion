@@ -199,8 +199,7 @@ export async function dispatchOrderAction(
     revalidatePath(`/admin/orders/${orderId}`);
     return { success: true, data: assignedShipment };
 
-  } catch (error: any) {
-    console.error("[dispatchOrderAction Error]:", error);
-    return { success: false, error: error.message || "Failed to dispatch order" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to dispatch order" };
   }
 }

@@ -86,8 +86,8 @@ export default function ScheduleAuditPage() {
       } else {
         toast.error(res.error || "Failed to schedule audit");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Something went wrong scheduling audit");
+    } catch (err) {
+      toast.error((err as Error).message || "Something went wrong scheduling audit");
     }
   }
 

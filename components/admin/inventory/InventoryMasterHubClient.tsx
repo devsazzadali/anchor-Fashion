@@ -167,8 +167,8 @@ export function InventoryMasterHubClient({
       } else {
         toast.error(res.error || "Failed to update publish status.");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update.");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to update.");
     } finally {
       setTogglingId(null);
     }

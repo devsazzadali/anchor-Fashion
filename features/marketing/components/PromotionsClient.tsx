@@ -128,8 +128,8 @@ export function PromotionsClient({ initialPromotions }: PromotionsClientProps) {
       toast.success("Promotion deleted");
       setDeletingPromo(null);
       router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An unexpected error occurred");
     } finally {
       setIsDeleting(false);
     }
@@ -151,8 +151,8 @@ export function PromotionsClient({ initialPromotions }: PromotionsClientProps) {
         `Promotion "${promo.name}" ${nextState ? "activated" : "deactivated"}`
       );
       router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An error occurred");
     }
   };
 

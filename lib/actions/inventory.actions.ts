@@ -16,8 +16,8 @@ export async function getAllInventory(
     const service = new InventoryService();
     const result = await service.getAllInventory(page, limit);
     return { data: result.data, total: result.total };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -31,8 +31,8 @@ export async function getStockAvailability(
     const service = new InventoryService();
     const data = await service.getStockAvailability(variantId, warehouseId);
     return { data };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -51,8 +51,8 @@ export async function adjustStock(
     revalidatePath("/admin/inventory/stock");
     revalidatePath("/admin/inventory/movement");
     return { success: true };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -78,8 +78,8 @@ export async function transferStock(
       (user as any)?.id
     );
     return { success: true };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -100,8 +100,8 @@ export async function getInventoryMovements(
       variantId
     );
     return { data: result.data, total: result.total };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -166,8 +166,7 @@ export async function receivePurchase(
               reason_code: "PURCHASE_RECEIPT",
               reference_id: poId,
             });
-          } catch (e: any) {
-            console.warn("Could not insert stock_movements log:", e?.message);
+          } catch (e) {
           }
         }
       } else {
@@ -197,8 +196,8 @@ export async function receivePurchase(
       .eq("id", poId);
 
     return { success: true };
-  } catch (error: any) {
-    return { error: error.message };
+  } catch (error) {
+    return { error: (error as Error).message };
   }
 }
 
@@ -273,15 +272,14 @@ export async function addStockAction(data: {
         reason: data.notes || `Stock added: ${data.reason}`,
         reason_code: data.reason,
       });
-    } catch (e: any) {
-      console.warn("Could not insert stock_movements log:", e?.message);
+    } catch (e) {
     }
 
     revalidatePath("/admin/inventory/stock");
     revalidatePath("/admin/inventory/movement");
     return { success: true, data: { id: inventoryId, quantity_available: newQuantity } };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to add stock" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to add stock" };
   }
 }
 
@@ -361,7 +359,6 @@ export async function createStockInwardAction(
       .maybeSingle();
 
     if (whErr || !warehouse) {
-      console.warn("Warehouse lookup error:", whErr?.message, "for id:", data.warehouseId);
       return { success: false, error: "Destination warehouse not found" };
     }
 
@@ -443,7 +440,6 @@ export async function createStockInwardAction(
               .eq("id", vData.product_id);
           }
         } catch (e) {
-          console.warn(`Could not update cost_price for product of variant ${item.variantId}`, e);
         }
       }
 
@@ -463,8 +459,7 @@ export async function createStockInwardAction(
           reason_code: data.inwardType,
           reference_id: inwardNumber,
         });
-      } catch (e: any) {
-        console.warn("Could not insert stock_movements log for inward item:", e?.message);
+      } catch (e) {
       }
 
       totalQuantity += qty;
@@ -500,10 +495,10 @@ export async function createStockInwardAction(
         items: processedItems,
       },
     };
-  } catch (error: any) {
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Failed to process stock inward",
+      error: (error as Error).message || "Failed to process stock inward",
     };
   }
 }
@@ -604,15 +599,14 @@ export async function recordManualMovementAction(data: {
         reason: data.notes || data.reason,
         reason_code: data.reason,
       });
-    } catch (e: any) {
-      console.warn("Could not insert stock_movements log:", e?.message);
+    } catch (e) {
     }
 
     revalidatePath("/admin/inventory/movement");
     revalidatePath("/admin/inventory/stock");
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to record movement" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to record movement" };
   }
 }
 
@@ -639,8 +633,8 @@ export async function createAuditAction(data: {
       revalidatePath("/admin/inventory/audits");
     } catch {}
     return { success: true, data: audit };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to schedule audit" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to schedule audit" };
   }
 }
 
@@ -658,8 +652,8 @@ export async function updateAuditStatusAction(
       revalidatePath("/admin/inventory/audits");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to update audit status" };
+  } catch (error) {
+    return { success: false, error: (error as Error).message || "Failed to update audit status" };
   }
 }
 

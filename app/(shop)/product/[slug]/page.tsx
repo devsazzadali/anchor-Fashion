@@ -64,7 +64,6 @@ export default async function ProductDetailPage({
   try {
     flashSale = await FlashSaleService.getFlashSaleForProduct(product.id);
   } catch (err) {
-    console.warn("Could not fetch flash sale for product:", err);
   }
 
   // 2. Fetch related products in the same category (safe fallback)
@@ -83,7 +82,6 @@ export default async function ProductDetailPage({
       relatedProducts = (featured || []).filter((p: any) => p.id !== product.id);
     }
   } catch (err) {
-    console.warn("Could not fetch related products:", err);
   }
 
   // 3. Fetch real reviews from database (safe fallback)
@@ -91,7 +89,6 @@ export default async function ProductDetailPage({
   try {
     reviews = await ReviewRepository.getReviewsByProductId(product.id);
   } catch (err) {
-    console.warn("Could not fetch reviews:", err);
   }
 
   // 4. Build JSON-LD structured metadata

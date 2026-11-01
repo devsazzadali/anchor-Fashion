@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     if (error) throw error;
 
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error);
   }
 }
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     if (error) throw error;
 
     return NextResponse.json(data, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error);
   }
 }

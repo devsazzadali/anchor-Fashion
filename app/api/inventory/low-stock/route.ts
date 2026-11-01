@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       total: lowStockItems.length,
       items: lowStockItems,
     });
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error);
   }
 }

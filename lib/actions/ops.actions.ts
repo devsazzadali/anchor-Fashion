@@ -28,9 +28,8 @@ export async function logSystemEvent(
 
     if (error) throw new Error(error.message);
     return { success: true };
-  } catch (error: any) {
-    console.error("Error logging system event:", error);
-    return { error: error.message || "Failed to log event" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to log event" };
   }
 }
 
@@ -52,9 +51,8 @@ export async function recordMetric(
 
     if (error) throw new Error(error.message);
     return { success: true };
-  } catch (error: any) {
-    console.error("Error recording metric:", error);
-    return { error: error.message || "Failed to record metric" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to record metric" };
   }
 }
 
@@ -76,9 +74,8 @@ export async function recordHealthCheck(
 
     if (error) throw new Error(error.message);
     return { success: true };
-  } catch (error: any) {
-    console.error("Error recording health check:", error);
-    return { error: error.message || "Failed to record health check" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to record health check" };
   }
 }
 
@@ -97,8 +94,7 @@ export async function getSystemAlerts(
 
     if (error) throw new Error(error.message);
     return { data };
-  } catch (error: any) {
-    console.error("Error fetching system alerts:", error);
-    return { error: error.message || "Failed to fetch alerts" };
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to fetch alerts" };
   }
 }

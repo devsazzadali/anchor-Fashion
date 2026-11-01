@@ -158,8 +158,8 @@ export class FedExProvider implements ICourierProvider {
         "API_ERROR",
         data.errors?.[0]?.message || "FedEx shipment creation failed"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -191,8 +191,8 @@ export class FedExProvider implements ICourierProvider {
         "API_ERROR",
         data.errors?.[0]?.message || "Cancel failed"
       );
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -242,8 +242,8 @@ export class FedExProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "FedEx tracking not found");
-    } catch (err: any) {
-      return this.errorResponse("EXCEPTION", err.message);
+    } catch (err) {
+      return this.errorResponse("EXCEPTION", (err as Error).message);
     }
   }
 
@@ -282,8 +282,8 @@ export class FedExProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err: any) {
-      return this.errorResponse("WEBHOOK_ERROR", err.message);
+    } catch (err) {
+      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
     }
   }
 

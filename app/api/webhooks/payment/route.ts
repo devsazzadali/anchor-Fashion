@@ -53,8 +53,7 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-  } catch (error: any) {
-    console.error("Payment webhook error:", error);
+  } catch (error) {
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

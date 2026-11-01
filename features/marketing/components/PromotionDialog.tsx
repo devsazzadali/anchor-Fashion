@@ -142,8 +142,8 @@ export function PromotionDialog({
       } else {
         toast.error("Failed to upload image. Please enter an image URL.");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to upload banner photo");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to upload banner photo");
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) {
@@ -173,8 +173,8 @@ export function PromotionDialog({
         if (res.data) onSuccess?.(res.data);
       }
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An unexpected error occurred");
     } finally {
       setSubmitting(false);
     }

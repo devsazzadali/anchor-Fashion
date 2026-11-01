@@ -105,8 +105,8 @@ export default function AdminOrderDetailsPage() {
       }
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
       router.refresh();
-    } catch (e: any) {
-      toast.error(`Failed to update status: ${e.message}`);
+    } catch (e) {
+      toast.error(`Failed to update status: ${(e as Error).message}`);
     }
   };
 
@@ -128,8 +128,8 @@ export default function AdminOrderDetailsPage() {
       } else {
         toast.error(res.error || "Failed to approve payment");
       }
-    } catch (e: any) {
-      toast.error(e.message || "An error occurred");
+    } catch (e) {
+      toast.error((e as Error).message || "An error occurred");
     } finally {
       setIsApproving(false);
     }
@@ -156,8 +156,8 @@ export default function AdminOrderDetailsPage() {
       } else {
         toast.error(res.error || "Failed to reject payment");
       }
-    } catch (e: any) {
-      toast.error(e.message || "An error occurred");
+    } catch (e) {
+      toast.error((e as Error).message || "An error occurred");
     } finally {
       setIsRejecting(false);
     }

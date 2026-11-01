@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: result.updated, variance: result.variance });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 400 });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: (error as Error).message?.includes("Forbidden") ? 403 : 400 });
   }
 }

@@ -19,9 +19,8 @@ export async function getOrderSmsLogsAction(
 
     const logs = await AlphaSmsService.getOrderSmsLogs(orderId);
     return { success: true, logs };
-  } catch (err: any) {
-    console.error("Error in getOrderSmsLogsAction:", err);
-    return { success: false, logs: [], error: err.message };
+  } catch (err) {
+    return { success: false, logs: [], error: (err as Error).message };
   }
 }
 
@@ -50,8 +49,7 @@ export async function resendOrderConfirmationSmsAction(
 
     revalidatePath(`/admin/orders/${orderId}`);
     return { success: true, requestId: result.requestId };
-  } catch (err: any) {
-    console.error("Error in resendOrderConfirmationSmsAction:", err);
-    return { success: false, error: err.message || "Failed to dispatch SMS" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || "Failed to dispatch SMS" };
   }
 }

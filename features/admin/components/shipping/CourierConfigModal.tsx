@@ -80,8 +80,8 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
       } else {
         toast.error("Failed to run health check");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to test connection");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to test connection");
     } finally {
       setTesting(false);
     }
@@ -109,8 +109,8 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
 
       toast.success(`${courier.display_name} credentials removed.`);
       onSaved({ ...courier, credentials: {}, is_active: false });
-    } catch (err: any) {
-      toast.error(err.message || "Failed to remove credentials");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to remove credentials");
     } finally {
       setLoading(false);
     }
@@ -133,8 +133,8 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
 
       toast.success(`${courier.display_name} configuration saved.`);
       onSaved({ ...courier, credentials: payloadCreds, is_sandbox: isSandbox });
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save configuration");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to save configuration");
     } finally {
       setLoading(false);
     }

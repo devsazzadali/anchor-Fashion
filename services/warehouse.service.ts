@@ -39,7 +39,6 @@ export class WarehouseService {
         },
       });
     } catch (e) {
-      console.warn("Could not write to audit_logs:", e);
     }
   }
 

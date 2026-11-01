@@ -133,8 +133,8 @@ export function FulfillmentClient({ orders = [] }: FulfillmentClientProps) {
       if (!res.success) throw new Error(res.error || "Status update failed");
       toast.success(`Order ${order.orderNumber} moved to ${step.to.replace(/_/g, " ")}`);
       router.refresh();
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to update order status");
+    } catch (e) {
+      toast.error((e as Error)?.message || "Failed to update order status");
     } finally {
       setAdvancingId(null);
     }

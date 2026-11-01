@@ -110,8 +110,8 @@ export function SupportTicketThread({
       } else {
         toast.error(res.error || "Failed to send reply");
       }
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An unexpected error occurred");
     } finally {
       setIsSubmitting(false);
     }

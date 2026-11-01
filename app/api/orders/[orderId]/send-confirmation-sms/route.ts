@@ -18,7 +18,7 @@ export async function POST(
       return NextResponse.json({ error: "Missing orderId in route" }, { status: 400 });
     }
 
-    let user: any = null;
+    let user = null;
     try {
       const db = await createDbClient();
       const { data, error: authError } = await db.auth.getUser();
@@ -93,10 +93,9 @@ export async function POST(
       },
       { status: result.success ? 200 : 400 }
     );
-  } catch (error: any) {
-    console.error("POST /api/orders/:orderId/send-confirmation-sms exception:", error);
+  } catch (error) {
     return NextResponse.json(
-      { error: "Internal Server Error", details: error.message },
+      { error: "Internal Server Error", details: (error as Error).message },
       { status: 500 }
     );
   }

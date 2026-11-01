@@ -27,7 +27,6 @@ export function PromotionPopupBanner({ initialPromotion }: PromotionPopupBannerP
             setPromo(res.data);
           }
         } catch (err) {
-          console.warn("[PromotionPopupBanner] Failed to load promotion:", err);
         }
       }
     }

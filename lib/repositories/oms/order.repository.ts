@@ -78,10 +78,6 @@ export class OrderRepository {
         };
       }
     } catch (shipErr) {
-      console.error(
-        `[OrderRepository] Failed to attach shipment for order ${order.id}:`,
-        shipErr
-      );
     }
     return mapped;
   }
@@ -302,7 +298,6 @@ export class OrderRepository {
         paymentStatus: created.paymentStatus,
       });
     } catch (payErr) {
-      console.error("[OrderRepository.createOrder] Payment record failed:", payErr);
     }
 
     return mapPrismaOrderToOms(created);
@@ -441,10 +436,6 @@ export class OrderRepository {
         // The status transition itself has already committed; a shipment
         // failure must not fail the order update, but it must be loud —
         // silent auxiliary failures are how S5-8 went unnoticed.
-        console.error(
-          `[OrderRepository] Failed to create shipment for shipped order ${id}:`,
-          shipErr
-        );
       }
     }
 
@@ -502,10 +493,6 @@ export class OrderRepository {
       } catch (shipSyncErr) {
         // Same rule as the SHIPPED block: the order transition has
         // committed; a shipment-sync failure must be loud, not fatal.
-        console.error(
-          `[OrderRepository] Failed to sync shipment for order ${id} on ${target}:`,
-          shipSyncErr
-        );
       }
     }
 
@@ -523,10 +510,6 @@ export class OrderRepository {
           method: current?.paymentMethod,
         });
       } catch (payErr) {
-        console.error(
-          `[OrderRepository] Failed to ensure payment SUCCESS for order ${id}:`,
-          payErr
-        );
       }
     }
 

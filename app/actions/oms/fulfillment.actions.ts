@@ -18,8 +18,8 @@ export async function assignTrackingAction(input: FulfillShipmentInput) {
     await fulfillmentService.assignShipmentTracking(validatedData);
     revalidatePath(`/admin/orders/${validatedData.order_id}`);
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -31,7 +31,7 @@ export async function reserveInventoryAction(orderId: string) {
     await fulfillmentService.confirmInventoryForShipment(orderId);
     revalidatePath(`/admin/orders/${orderId}`);
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

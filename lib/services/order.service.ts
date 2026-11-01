@@ -421,7 +421,7 @@ export class OrderService {
         const inventoryService = new InventoryService();
         await inventoryService.reserveOrderInventory(order.id, reservationItems);
       }
-    } catch (reserveErr: any) {
+    } catch (reserveErr) {
       // If reservation failed (e.g. out of stock), cancel order immediately to keep DB consistent
       try {
         await OrderRepository.updateOrderStatus(

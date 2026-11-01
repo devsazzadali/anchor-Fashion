@@ -165,7 +165,6 @@ async function seedDefaultFaqs(db: any) {
       }
     }
   } catch (err) {
-    console.error("[seedDefaultFaqs error]:", err);
   }
   return null;
 }
@@ -197,9 +196,8 @@ export async function getFaqsAction(): Promise<{
     }
 
     return { success: true, data: ((data as any[]) || []).map(mapFaqRow) };
-  } catch (error: any) {
-    console.error("[getFaqsAction]", error);
-    return { success: false, data: [], error: error.message };
+  } catch (error) {
+    return { success: false, data: [], error: (error as Error).message };
   }
 }
 
@@ -243,9 +241,8 @@ export async function createFaqAction(payload: {
     revalidatePath("/admin/cms/faqs");
 
     return { success: true, data: mapFaqRow(data) };
-  } catch (error: any) {
-    console.error("[createFaqAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -287,9 +284,8 @@ export async function updateFaqAction(
     revalidatePath("/admin/cms/faqs");
 
     return { success: true, data: mapFaqRow(data) };
-  } catch (error: any) {
-    console.error("[updateFaqAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -309,9 +305,8 @@ export async function deleteFaqAction(id: string): Promise<{
     revalidatePath("/admin/cms/faqs");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("[deleteFaqAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -346,7 +341,6 @@ export async function getStorePoliciesAction(): Promise<{
 
     return { shipping, returns };
   } catch (error) {
-    console.error("[getStorePoliciesAction]", error);
     return { shipping: DEFAULT_SHIPPING_POLICY, returns: DEFAULT_RETURN_POLICY };
   }
 }
@@ -400,7 +394,6 @@ export async function updateStorePoliciesAction(payload: {
           );
         }
       } catch (syncErr) {
-        console.warn("[updateStorePoliciesAction sync store_info warning]:", syncErr);
       }
     }
 
@@ -423,8 +416,7 @@ export async function updateStorePoliciesAction(payload: {
     revalidatePath("/admin/cms/faqs");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateStorePoliciesAction]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

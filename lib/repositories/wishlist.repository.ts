@@ -92,8 +92,7 @@ export class WishlistRepository {
         updated_at: data.updatedAt.toISOString(),
         items,
       } as Wishlist;
-    } catch (error: any) {
-      console.error(`Failed to fetch wishlist for ${userId}:`, error.message);
+    } catch (error) {
       return null;
     }
   }
@@ -120,10 +119,10 @@ export class WishlistRepository {
         updated_at: data.updatedAt.toISOString(),
         items: [],
       } as Wishlist;
-    } catch (err: any) {
+    } catch (err) {
       const existing = await this.getWishlist(userId);
       if (existing) return existing;
-      throw new Error(`Failed to create wishlist: ${err.message}`);
+      throw new Error(`Failed to create wishlist: ${(err as Error).message}`);
     }
   }
 

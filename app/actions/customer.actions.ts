@@ -136,7 +136,6 @@ export async function uploadAvatarAction(formData: FormData) {
       });
 
     if (uploadError) {
-      console.error("Avatar upload error:", uploadError);
       return { success: false, error: uploadError.message };
     }
 
@@ -168,7 +167,6 @@ export async function uploadAvatarAction(formData: FormData) {
     revalidatePath("/account");
     return { success: true, avatarUrl };
   } catch (err: any) {
-    console.error("Upload avatar exception:", err);
     return { success: false, error: err.message || "Failed to upload avatar" };
   }
 }
@@ -835,7 +833,6 @@ export async function voteReviewHelpfulAction(
 
     return { success: true, helpful_votes: nextVotes };
   } catch (error: any) {
-    console.error("Error in voteReviewHelpfulAction:", error);
     return { success: false, error: error.message };
   }
 }

@@ -59,8 +59,8 @@ export async function calculateShippingRateAction(
     );
 
     return { success: true, data: calculation };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -71,8 +71,8 @@ export async function fetchDeliveryZonesAction(): Promise<
     const calculator = new RateCalculatorService();
     const zones = await calculator.getActiveZones();
     return { success: true, data: zones };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -84,8 +84,8 @@ export async function getDeliveryZoneAction(
     const zone = await repo.getZoneById(zoneId);
     if (!zone) return { success: false, error: "Zone not found" };
     return { success: true, data: zone };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -108,8 +108,8 @@ export async function createDeliveryZoneAction(
 
     revalidatePath("/admin/shipping/zones");
     return { success: true, data: { zoneId: zone.id } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -125,8 +125,8 @@ export async function updateDeliveryZoneAction(
 
     revalidatePath("/admin/shipping/zones");
     return { success: true, data: { zoneId: zone.id } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -154,7 +154,7 @@ export async function createShippingRateAction(
 
     revalidatePath("/admin/shipping/zones");
     return { success: true, data: { rateId: rate.id } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }

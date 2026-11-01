@@ -87,16 +87,12 @@ export async function POST(req: Request) {
     // from a forged one, and a forged send.otp reaches the SMS provider
     // with an attacker-chosen phone number — an open, store-paid SMS
     // relay. There is no safe "accept anyway" mode in any environment.
-    console.error(
-      "[NeonAuth Webhook] REJECTED: NEON_AUTH_WEBHOOK_SECRET is not set — refusing to process an unverifiable webhook call. Register the webhook in the Neon Console and set NEON_AUTH_WEBHOOK_SECRET to enable phone-OTP delivery."
-    );
     return NextResponse.json(
       { error: "Webhook not configured" },
       { status: 401 }
     );
   }
   if (!verifyStandardWebhook(rawBody, req.headers, secret)) {
-    console.warn("[NeonAuth Webhook] Signature verification failed");
     return NextResponse.json(
       { error: "Invalid signature" },
       { status: 401 }
@@ -115,14 +111,6 @@ export async function POST(req: Request) {
 
   if (process.env.SMS_TEST_MODE === "true") {
     // Shape-only audit: keys, never values (the payload carries the OTP).
-    console.log(
-      "[NeonAuth Webhook] event:",
-      eventType,
-      "| payload keys:",
-      Object.keys(payload || {}),
-      "| data keys:",
-      Object.keys(data || {})
-    );
   }
 
   if (!eventType || !OTP_EVENTS.has(eventType)) {
@@ -145,10 +133,6 @@ export async function POST(req: Request) {
   );
 
   if (!phone || !code) {
-    console.warn(
-      "[NeonAuth Webhook] send.otp payload missing phone/code. data keys:",
-      Object.keys(data || {})
-    );
     return NextResponse.json(
       { error: "Payload missing phoneNumber or code" },
       { status: 400 }
@@ -162,10 +146,6 @@ export async function POST(req: Request) {
   });
 
   if (!result.success) {
-    console.error(
-      "[NeonAuth Webhook] SMS dispatch failed:",
-      result.error || result.status
-    );
     // Non-2xx so Neon retries delivery of the webhook.
     return NextResponse.json(
       { error: "SMS dispatch failed" },

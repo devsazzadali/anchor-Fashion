@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       reference_id: body.reference_id,
     });
     return NextResponse.json({ success: true, data: result }, { status: 200 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 400 });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: (error as Error).message?.includes("Forbidden") ? 403 : 400 });
   }
 }

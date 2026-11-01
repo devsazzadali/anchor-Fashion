@@ -68,7 +68,7 @@ export class ReturnRepository {
         .from("return_items")
         .insert(items.map((item) => ({ ...item, return_id: ret.id })) as any);
 
-      if (itemError) console.error("Failed to insert return items:", itemError);
+      if (itemError) {}
     }
 
     return this.getReturnWithItems(ret.id) as Promise<ReturnWithItems>;
@@ -138,7 +138,6 @@ export class ReturnRepository {
           is_customer_visible: false,
         });
       } catch (noteErr) {
-        console.warn("[atomicUpdateStatus] Note logging skipped:", noteErr);
       }
     }
 
@@ -444,7 +443,6 @@ export class ReturnRepository {
       .not("status", "in", "('rejected','cancelled')");
 
     if (error) {
-      console.error("Error fetching active return items for order:", error);
       return [];
     }
 
@@ -458,7 +456,6 @@ export class ReturnRepository {
       .in("return_id", rows.map((r) => r.id));
 
     if (itemError) {
-      console.error("Error fetching return items for order:", itemError);
       return [];
     }
 
@@ -540,7 +537,6 @@ export class ReturnRepository {
           is_customer_visible: false,
         });
       } catch (noteErr) {
-        console.warn("[claimRefundProcessing] Note logging skipped:", noteErr);
       }
     }
 

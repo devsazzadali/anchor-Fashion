@@ -587,8 +587,8 @@ export function StockInwardDialog({
         setCsvPreview(parsedRows);
         setCsvErrors(errors);
         setCsvLoading(false);
-      } catch (err: any) {
-        setCsvErrors(["Failed to parse CSV: " + err.message]);
+      } catch (err) {
+        setCsvErrors(["Failed to parse CSV: " + (err as Error).message]);
         setCsvLoading(false);
       }
     };

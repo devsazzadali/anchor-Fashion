@@ -152,7 +152,7 @@ const DEFAULTS: {
 };
 
 const getCachedSetting = unstable_cache(
-  async (key: string, defaultValue: any): Promise<any> => {
+  async (key: string, defaultValue): Promise<any> => {
     try {
       const db = await createDbClient();
       const { data } = await db
@@ -265,9 +265,8 @@ export async function updateInvoiceInfo(info: InvoiceInfo) {
       revalidatePath("/admin/settings/invoice");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateInvoiceInfo]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -300,9 +299,8 @@ export async function updateStoreInfo(info: StoreInfo) {
       revalidatePath("/", "layout");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateStoreInfo]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -331,9 +329,8 @@ export async function updateSocialLinks(links: SocialLinks) {
       revalidatePath("/", "layout");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateSocialLinks]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -394,7 +391,6 @@ export async function updateStoreConfig(config: StoreConfig) {
         );
       }
     } catch (mirrorErr) {
-      console.error("[updateStoreConfig] store_name mirror failed:", mirrorErr);
     }
 
     await auditSettingsChange("store_config");
@@ -404,9 +400,8 @@ export async function updateStoreConfig(config: StoreConfig) {
       revalidatePath("/", "layout");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateStoreConfig]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -440,9 +435,8 @@ export async function updateSeoSettings(settings: SeoSettings) {
       revalidatePath("/admin/settings/seo");
     } catch {}
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateSeoSettings]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -482,9 +476,8 @@ export async function updateSecuritySettings(config: SecuritySettingsConfig) {
 
     revalidatePath("/admin/settings/security");
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateSecuritySettings]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -524,9 +517,8 @@ export async function updateEmailSettings(config: EmailSettingsConfig) {
 
     revalidatePath("/admin/settings/email");
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateEmailSettings]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -567,8 +559,7 @@ export async function updateAnalyticsSettings(config: AnalyticsSettingsConfig) {
     revalidatePath("/admin/settings/analytics");
     revalidatePath("/", "layout");
     return { success: true };
-  } catch (error: any) {
-    console.error("[updateAnalyticsSettings]", error);
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }

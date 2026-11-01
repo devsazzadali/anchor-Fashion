@@ -89,8 +89,8 @@ export function BranchTransferModal({
       } else {
         toast.error(res.error || "Failed to dispatch stock transfer.");
       }
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred.");
+    } catch (err) {
+      toast.error((err as Error).message || "An unexpected error occurred.");
     } finally {
       setIsSubmitting(false);
     }

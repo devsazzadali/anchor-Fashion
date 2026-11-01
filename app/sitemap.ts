@@ -30,7 +30,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Fallback gracefully during build step
   }
 
-  const productUrls = products.map((product: any) => ({
+  const productUrls = products.map((product) => ({
     url: `${baseUrl}/products/${product.slug}`,
     lastModified: new Date(
       product.updated_at || product.created_at || new Date()
@@ -39,7 +39,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  const categoryUrls = categories.map((category: any) => ({
+  const categoryUrls = categories.map((category) => ({
     url: `${baseUrl}/categories/${category.slug}`,
     lastModified: new Date(
       category.updated_at || category.created_at || new Date()
@@ -48,7 +48,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.9,
   }));
 
-  const blogUrls = blogPosts.map((post: any) => ({
+  const blogUrls = blogPosts.map((post) => ({
     url: `${baseUrl}/blog/${post.slug}`,
     lastModified: new Date(
       post.updated_at || post.published_at || new Date()

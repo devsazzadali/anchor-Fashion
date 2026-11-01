@@ -51,8 +51,7 @@ export async function GET(req: Request) {
       { success: true, data: calculation },
       { headers: { "Cache-Control": "public, max-age=300" } }
     );
-  } catch (err: any) {
-    console.error("[Rates API] Error:", err);
+  } catch (err) {
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
@@ -102,7 +101,7 @@ export async function POST(req: Request) {
       isCOD
     );
     return NextResponse.json({ success: true, data: calculation });
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

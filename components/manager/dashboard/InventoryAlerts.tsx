@@ -16,7 +16,7 @@ export async function InventoryAlerts() {
   // Filter to only low-stock and out-of-stock items for the alerts panel
   const alerts = allItems
     .filter(
-      (item: any) => item.status === "Low Stock" || item.status === "Out of Stock"
+      (item) => item.status === "Low Stock" || item.status === "Out of Stock"
     )
     .slice(0, 5); // Show top 5 alerts
 
@@ -45,7 +45,7 @@ export async function InventoryAlerts() {
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        {alerts.map((item: any) => {
+        {alerts.map((item) => {
           const isOut = item.status === "Out of Stock";
           return (
             <div

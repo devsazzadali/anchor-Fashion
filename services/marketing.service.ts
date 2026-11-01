@@ -140,8 +140,8 @@ export class MarketingService {
             status: res.error ? "failed" : "sent",
             error_message: res.error ? JSON.stringify(res.error) : null,
           });
-        } catch (dispatchErr: any) {
-          sendErrors.push(`${recipient.email}: ${dispatchErr.message}`);
+        } catch (dispatchErr) {
+          sendErrors.push(`${recipient.email}: ${(dispatchErr as Error).message}`);
         }
       }
 
@@ -177,10 +177,10 @@ export class MarketingService {
             ? `Sent with ${sendErrors.length} partial errors: ${sendErrors[0]}`
             : undefined,
       };
-    } catch (sendErr: any) {
+    } catch (sendErr) {
       // 7. Mark failed on error
       await this.setCampaignStatusSafely(campaignId, "failed", "paused", {
-        error: sendErr.message,
+        error: (sendErr as Error).message,
         failedAt: new Date().toISOString(),
       });
       throw sendErr;
@@ -258,7 +258,6 @@ export class MarketingService {
         if (result.success) succeeded++;
         else failed++;
       } catch (err) {
-        console.error(`[processScheduledCampaigns] Campaign ${c.id} failed:`, err);
         failed++;
       }
     }
@@ -316,7 +315,6 @@ export class MarketingService {
         }
       });
     } catch (err) {
-      console.warn("[MarketingService.resolveRecipients] Non-fatal lookup error:", err);
     }
 
     return Array.from(recipientsMap.values());

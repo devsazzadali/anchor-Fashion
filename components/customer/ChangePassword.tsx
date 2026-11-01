@@ -90,8 +90,8 @@ export function ChangePassword() {
         setHasSavedPassword(true);
         setValue("new_password", "");
         setValue("confirm_password", "");
-      } catch (err: any) {
-        toast.error(err.message || "Failed to update password");
+      } catch (err) {
+        toast.error((err as Error).message || "Failed to update password");
       }
     });
   };

@@ -63,8 +63,7 @@ export async function GET(
     } catch {
       return new NextResponse("File not found", { status: 404 });
     }
-  } catch (err: any) {
-    console.error("[Uploads Route Error]:", err);
+  } catch (err) {
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }

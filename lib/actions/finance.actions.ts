@@ -17,11 +17,10 @@ export async function getExpensesAction(
   try {
     const expenses = await expenseRepository.getExpenses(filters);
     return { success: true, data: expenses };
-  } catch (err: any) {
-    console.error("[getExpensesAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to load expenses from database",
+      error: (err as Error).message || "Failed to load expenses from database",
     };
   }
 }
@@ -36,11 +35,10 @@ export async function getExpenseSummaryAction(): Promise<{
   try {
     const summary = await expenseRepository.getExpenseSummary();
     return { success: true, data: summary };
-  } catch (err: any) {
-    console.error("[getExpenseSummaryAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to calculate expense summary",
+      error: (err as Error).message || "Failed to calculate expense summary",
     };
   }
 }
@@ -62,11 +60,10 @@ export async function createExpenseAction(
 
     revalidatePath("/admin/finance/expenses");
     return { success: true, data: newExpense };
-  } catch (err: any) {
-    console.error("[createExpenseAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to create expense record",
+      error: (err as Error).message || "Failed to create expense record",
     };
   }
 }
@@ -90,11 +87,10 @@ export async function updateExpenseAction(
 
     revalidatePath("/admin/finance/expenses");
     return { success: true, data: updated };
-  } catch (err: any) {
-    console.error("[updateExpenseAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to update expense record",
+      error: (err as Error).message || "Failed to update expense record",
     };
   }
 }
@@ -113,11 +109,10 @@ export async function deleteExpenseAction(
 
     revalidatePath("/admin/finance/expenses");
     return { success: true };
-  } catch (err: any) {
-    console.error("[deleteExpenseAction] Error:", err);
+  } catch (err) {
     return {
       success: false,
-      error: err.message || "Failed to delete expense record",
+      error: (err as Error).message || "Failed to delete expense record",
     };
   }
 }

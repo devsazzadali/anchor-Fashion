@@ -80,8 +80,7 @@ export async function GET(
             }
           }
         }
-      } catch (syncErr: any) {
-        console.warn(`[TrackingSync] Could not sync with provider: ${syncErr.message}`);
+      } catch (syncErr) {
       }
     }
 
@@ -94,7 +93,7 @@ export async function GET(
         events: events || [],
       },
     });
-  } catch (err: any) {
+  } catch (err) {
     return authErrorResponse(err);
   }
 }

@@ -40,8 +40,8 @@ export async function fetchCheckoutSessionAction(cartId: string) {
       guestEmail
     );
     return { success: true, session };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -53,8 +53,8 @@ export async function updateCheckoutStepAction(
   try {
     const session = await CheckoutService.updateSession(sessionId, step, data);
     return { success: true, session };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -63,8 +63,8 @@ export async function calculateOrderSummaryAction(cartId: string) {
     const { userId } = await getSessionIdentifiers();
     const summary = await OrderService.calculateSummary(cartId, userId);
     return { success: true, summary };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -95,8 +95,8 @@ export async function evaluateCodRiskAction(
     });
 
     return { success: true, evaluation };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -146,8 +146,8 @@ export async function sendCodOtpAction(
     });
 
     return result;
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -165,8 +165,8 @@ export async function verifyCodOtpAction(
 
     const result = await CodOtpService.verifyOtp(checkoutSessionId, otpCode.trim());
     return result;
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -211,9 +211,8 @@ export async function processCheckoutAction(
         if (upperRole && (ADMIN_ROLES as readonly string[]).includes(upperRole)) {
           throw new Error("Admin accounts cannot place customer orders. Please use a customer account.");
         }
-      } catch (err: any) {
-        if (err.message?.includes("Admin accounts")) throw err;
-        console.warn("[processCheckoutAction] Role verification notice:", err);
+      } catch (err) {
+        if ((err as Error).message?.includes("Admin accounts")) throw err;
       }
     }
 
@@ -351,7 +350,6 @@ export async function processCheckoutAction(
         status: order.status,
       });
     } catch (notifErr) {
-      console.warn("[Checkout] Error triggering order notification:", notifErr);
     }
 
     // Phase 8: staff notification EMAIL on the new-order event (the in-app
@@ -364,10 +362,6 @@ export async function processCheckoutAction(
         );
         await notifyStaffOrderEvent({ kind: "new_order", orderId: order.id });
       } catch (staffMailErr) {
-        console.warn(
-          "[Checkout] Staff new-order email failed:",
-          staffMailErr
-        );
       }
     })();
 
@@ -418,8 +412,8 @@ export async function processCheckoutAction(
       orderNumber: order.order_number,
       paymentPayload,
     };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
 

@@ -37,8 +37,8 @@ export function WishlistGrid() {
       await useCartStore.getState().fetchCart();
       useCartStore.getState().setSheetOpen(true);
       toast.success("Moved to shopping cart!", { id: toastId });
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to move to cart", { id: toastId });
+    } catch (err) {
+      toast.error((err as Error)?.message || "Failed to move to cart", { id: toastId });
     } finally {
       setMovingItemId(null);
     }

@@ -16,7 +16,7 @@ export class OrderEventsRepository {
         orderBy: { createdAt: "desc" },
       });
 
-      return history.map((h: any) => ({
+      return history.map((h) => ({
         id: h.id,
         order_id: h.orderId,
         status: h.status,
@@ -25,7 +25,6 @@ export class OrderEventsRepository {
         created_at: h.createdAt.toISOString()
       })) as unknown as OrderStatusHistory[];
     } catch (e) {
-      console.error("Error fetching status history:", e);
       return [];
     }
   }

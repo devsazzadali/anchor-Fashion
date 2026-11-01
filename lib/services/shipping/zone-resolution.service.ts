@@ -74,7 +74,6 @@ export async function resolveZoneForAddress(input: {
       };
     }
   } catch (err) {
-    console.error("[zone-resolution] lookup failed, using legacy rates", err);
   }
   // No zones configured — preserve the historical flat schedule.
   const isDhaka =

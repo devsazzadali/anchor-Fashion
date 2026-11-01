@@ -113,7 +113,6 @@ export class OrderRepository {
           }
         }
       } catch (profileErr) {
-        console.warn("Could not link/create profile for customerId in Neon, setting null:", profileErr);
         validProfileId = null;
       }
     } else if (candidateEmail) {
@@ -156,10 +155,6 @@ export class OrderRepository {
           if (autoProfile) validProfileId = autoProfile.id;
         }
       } catch (profileErr) {
-        console.warn(
-          "[OrderRepository] Guest auto-profile resolution failed (order continues unlinked):",
-          profileErr
-        );
       }
     }
 
@@ -261,7 +256,6 @@ export class OrderRepository {
         paymentStatus: createdPrismaOrder.paymentStatus,
       });
     } catch (payErr) {
-      console.error("[OrderRepository.createOrder] Payment record failed:", payErr);
     }
 
     return mapPrismaOrderToCheckoutOrder(createdPrismaOrder);
@@ -345,7 +339,6 @@ export class OrderRepository {
         const invService = new InventoryService();
         await invService.releaseOrderInventory(id);
       } catch (invErr) {
-        console.warn("[OrderRepository.updateOrderStatus] Inventory release notice:", invErr);
       }
     }
   }

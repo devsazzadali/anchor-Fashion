@@ -19,7 +19,7 @@ export async function GET(
     const bins = await service.getBins(zoneId);
     const filtered = rackCode ? bins.filter((b) => b.code.startsWith(rackCode)) : bins;
     return NextResponse.json(filtered);
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error);
   }
 }
@@ -38,7 +38,7 @@ export async function POST(
     const service = new WarehouseService();
     const bin = await service.createBin({ ...body, zone_id: zoneId });
     return NextResponse.json(bin, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     return authErrorResponse(error, 400);
   }
 }

@@ -33,13 +33,11 @@ export class ReportRepository {
       const { data, error } = await query;
 
       if (error) {
-        console.error("[ReportRepository.getSavedReports] Query error:", error);
         return [];
       }
 
       return (data || []).map(this.mapRowToConfig);
-    } catch (err: any) {
-      console.error("[ReportRepository.getSavedReports] Exception:", err);
+    } catch (err) {
       return [];
     }
   }
@@ -247,7 +245,7 @@ export class ReportRepository {
           continue;
         }
 
-        items.forEach((it: any, idx: number) => {
+        items.forEach((it, idx: number) => {
           const qty = it.quantity || 1;
           const unitPrice = Number(it.unitPrice || 0);
           const cost = Number(it.product?.costPrice || 0);
@@ -268,7 +266,6 @@ export class ReportRepository {
         });
       }
     } catch (orderErr) {
-      console.warn("[ReportRepository] Error querying real orders:", orderErr);
     }
 
     // 3. Dynamic Aggregation by selected Dimensions

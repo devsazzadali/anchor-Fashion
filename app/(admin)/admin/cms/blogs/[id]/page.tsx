@@ -125,8 +125,8 @@ export default function EditBlogPost() {
       } else {
         toast.error(res.error || "Failed to upload image");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to upload image");
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to upload image");
     } finally {
       setUploadingImage(false);
     }
@@ -170,8 +170,8 @@ export default function EditBlogPost() {
       await updatePost(id, payload);
       toast.success("Blog post updated successfully!");
       router.push("/admin/cms/blogs");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update blog post");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to update blog post");
     } finally {
       setLoading(false);
     }

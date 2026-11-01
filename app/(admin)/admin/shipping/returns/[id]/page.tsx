@@ -78,8 +78,8 @@ export default function ReturnDetailPage({
     try {
       await approve.mutateAsync(id);
       toast.success("Return approved");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
   const handleReject = async () => {
@@ -88,32 +88,32 @@ export default function ReturnDetailPage({
     try {
       await reject.mutateAsync({ returnId: id, reason });
       toast.success("Return rejected");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
   const handleReceived = async () => {
     try {
       await markReceived.mutateAsync(id);
       toast.success("Marked as received");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
   const handleSyncInventory = async () => {
     try {
       await syncInventory.mutateAsync(id);
       toast.success("Inventory synced");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
   const handleComplete = async () => {
     try {
       await complete.mutateAsync(id);
       toast.success("Return completed");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
 

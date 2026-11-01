@@ -152,8 +152,8 @@ export function ExpenseDialog({
         if (res.data) onSuccess?.(res.data);
       }
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred");
+    } catch (err) {
+      toast.error((err as Error).message || "An unexpected error occurred");
     } finally {
       setSubmitting(false);
     }

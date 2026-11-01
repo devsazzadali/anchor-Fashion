@@ -199,7 +199,6 @@ export async function generateUniqueProductCode(
 
     return candidate;
   } catch (err) {
-    console.error("Error generating unique product code, falling back to random:", err);
     const fallbackRand = Math.floor(1 + Math.random() * 99);
     return `${prefix}${fallbackRand}`;
   }

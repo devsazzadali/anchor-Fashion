@@ -256,8 +256,8 @@ export function CategoryHierarchySelector({
       } else {
         toast.error(res.error || "Failed to create category");
       }
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to create category");
+    } catch (err) {
+      toast.error((err as Error)?.message || "Failed to create category");
     } finally {
       setIsCreatingCategory(false);
     }
