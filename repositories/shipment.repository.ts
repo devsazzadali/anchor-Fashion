@@ -11,6 +11,106 @@ import {
   ShippingEventType,
 } from "@/types/shipping.types";
 
+// ============================================================================
+// FIX ROUND 23B — real-column guard for every write in this repository.
+//
+// The fluent DB builder (lib/db/query.ts) silently discards an ENTIRE
+// insert / update / upsert when ANY payload key is not a real column of
+// the target table: toCamelData() returns null for the row (insert and
+// upsert executors then resolve gracefulEmpty — success, no write) and
+// the update executor does the same on `keys.some((k) => !fields[k])`.
+// Round 23 cleaned the ShippingService update payloads; this round makes
+// the repository itself enforce the invariant for its remaining tables
+// (events / tracking events / labels / items), whose payloads are built
+// here from caller data. Column sets below mirror prisma/schema.prisma.
+// Data whose concept has NO column is dropped at this boundary (listed
+// per method) — it must never poison the whole write again.
+// ============================================================================
+
+/** Real columns of `shipments` (model Shipment, prisma/schema.prisma). */
+const SHIPMENTS_COLUMNS: ReadonlySet<string> = new Set([
+  "id",
+  "order_id",
+  "shipment_number",
+  "tracking_number",
+  "courier",
+  "courier_provider_code",
+  "status",
+  "recipient_name",
+  "recipient_phone",
+  "recipient_address",
+  "recipient_city",
+  "recipient_district",
+  "delivery_zone_id",
+  "is_cod",
+  "cod_amount",
+  "shipping_charge",
+  "shipping_cost",
+  "weight_kg",
+  "special_instructions",
+  "estimated_delivery",
+  "shipped_at",
+  "delivered_at",
+  "created_by",
+  "created_at",
+  "updated_at",
+]);
+
+/**
+ * Normalize an arbitrary caller payload onto the real `shipments`
+ * columns: camelCase keys are snake_cased, the one renamed column
+ * (`estimated_delivery_date` -> `estimated_delivery`) is translated,
+ * and keys with no column (consignment_id, provider_status, label_url,
+ * label_generated_at, failure_reason, updated_by, ...) are dropped.
+ */
+function toShipmentRow(data: Record<string, any>): Record<string, any> {
+  const row: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data ?? {})) {
+    if (value === undefined) continue;
+    let col = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+    if (col === "estimated_delivery_date") col = "estimated_delivery";
+    if (SHIPMENTS_COLUMNS.has(col)) row[col] = value;
+  }
+  return row;
+}
+
+/**
+ * Map a caller tracking event onto the real `shipment_tracking_events`
+ * columns (shipment_id / status / timestamp / location / notes).
+ * Callers pass the ShipmentTrackingEvent shape: `event_time` is the
+ * real `timestamp`, `status_description` is the real `notes`.
+ * `tracking_number` (already stored on the shipment row) and
+ * `provider_raw` (no JSON column exists) have no home and are dropped.
+ */
+function toTrackingEventRow(
+  shipmentId: string,
+  event: Record<string, any>
+): Record<string, any> {
+  const row: Record<string, any> = {
+    shipment_id: shipmentId,
+    status: event.status,
+    location: event.location ?? null,
+    notes: event.status_description ?? event.notes ?? null,
+  };
+  const ts = event.event_time ?? event.timestamp;
+  if (ts !== undefined && ts !== null) row.timestamp = ts;
+  return row;
+}
+
+/** Keep the courier code / legacy courier and charge / cost pairs in sync. */
+function coupleShipmentRow(payload: Record<string, any>): void {
+  if (payload.courier_provider_code && !payload.courier) {
+    payload.courier = payload.courier_provider_code;
+  } else if (payload.courier && !payload.courier_provider_code) {
+    payload.courier_provider_code = payload.courier;
+  }
+  if (payload.shipping_charge !== undefined && payload.shipping_cost === undefined) {
+    payload.shipping_cost = payload.shipping_charge;
+  } else if (payload.shipping_cost !== undefined && payload.shipping_charge === undefined) {
+    payload.shipping_charge = payload.shipping_cost;
+  }
+}
+
 /**
  * Map a Prisma Shipment row (camelCase, Decimal/Date objects) to the
  * snake_case plain shape the shipping UI renders. Shared by
@@ -65,17 +165,10 @@ export class ShipmentRepository {
   ): Promise<Shipment> {
     const db = this.getAdminClient();
 
-    const payload: any = { ...data };
-    if (payload.courier_provider_code && !payload.courier) {
-      payload.courier = payload.courier_provider_code;
-    } else if (payload.courier && !payload.courier_provider_code) {
-      payload.courier_provider_code = payload.courier;
-    }
-    if (payload.shipping_charge !== undefined && payload.shipping_cost === undefined) {
-      payload.shipping_cost = payload.shipping_charge;
-    } else if (payload.shipping_cost !== undefined && payload.shipping_charge === undefined) {
-      payload.shipping_charge = payload.shipping_cost;
-    }
+    // FIX ROUND 23B: build the insert from real columns only (see the
+    // guard note at the top of this file).
+    const payload: any = toShipmentRow({ ...data });
+    coupleShipmentRow(payload);
 
     const { data: shipment, error } = await db
       .from("shipments")
@@ -86,11 +179,22 @@ export class ShipmentRepository {
     if (error) throw new Error(`Create shipment failed: ${error.message}`);
 
     if (items.length > 0) {
+      // FIX ROUND 23B: `shipment_items` real columns are only
+      // shipment_id / order_item_id / quantity (+ id, created_at).
+      // Callers pass CreateShipmentInput items (camelCase orderItemId
+      // plus sku / productName / variantName / unitPrice); spreading
+      // them verbatim poisoned the insert, so shipment items NEVER
+      // persisted. Map the two persistable fields explicitly — sku,
+      // product name, variant and unit price have no column and are
+      // dropped (they remain on the order's own items).
+      const itemRows = items.map((item: any) => ({
+        shipment_id: shipment.id,
+        order_item_id: item.order_item_id ?? item.orderItemId ?? null,
+        quantity: item.quantity ?? 1,
+      }));
       const { error: itemError } = await db
         .from("shipment_items")
-        .insert(
-          items.map((item) => ({ ...item, shipment_id: shipment.id })) as any
-        );
+        .insert(itemRows as any);
 
       if (itemError)
         console.error("Failed to insert shipment items:", itemError);
@@ -108,16 +212,21 @@ export class ShipmentRepository {
   ): Promise<Shipment> {
     const db = this.getAdminClient();
 
-    const payload: any = { ...data };
-    if (payload.courier_provider_code && !payload.courier) {
-      payload.courier = payload.courier_provider_code;
-    } else if (payload.courier && !payload.courier_provider_code) {
-      payload.courier_provider_code = payload.courier;
-    }
-    if (payload.shipping_charge !== undefined && payload.shipping_cost === undefined) {
-      payload.shipping_cost = payload.shipping_charge;
-    } else if (payload.shipping_cost !== undefined && payload.shipping_charge === undefined) {
-      payload.shipping_charge = payload.shipping_cost;
+    // FIX ROUND 23B: normalize onto real columns (see the guard note at
+    // the top of this file). This also rescues the two caller payloads
+    // Round 23 did not cover: TrackingService.refreshTracking's
+    // estimated_delivery_date now lands on `estimated_delivery`, and
+    // generateLabel's label bookkeeping (label_url / label_generated_at
+    // — no columns on shipments; the label itself persists via
+    // saveLabel) no longer poisons anything.
+    const payload: any = toShipmentRow({ ...data });
+    coupleShipmentRow(payload);
+
+    if (Object.keys(payload).length === 0) {
+      // Nothing persistable — skip the write entirely (the builder
+      // would answer an empty update with a syntax error) and return
+      // the current row, preserving the previous benign behaviour.
+      return this.getShipmentById(id) as Promise<Shipment>;
     }
 
     const { data: updated, error } = await db
@@ -342,9 +451,13 @@ export class ShipmentRepository {
     event: Omit<ShipmentTrackingEvent, "id" | "shipment_id" | "created_at">
   ): Promise<void> {
     const db = this.getAdminClient();
+    // FIX ROUND 23B: persist the mapped real-column row (see
+    // toTrackingEventRow). Spreading the caller's ShipmentTrackingEvent
+    // shape verbatim (tracking_number / status_description / event_time
+    // / provider_raw) made the builder discard every tracking event.
     await db
       .from("shipment_tracking_events")
-      .insert({ ...event, shipment_id: shipmentId } as any);
+      .insert(toTrackingEventRow(shipmentId, event as any) as any);
   }
 
   async upsertTrackingEvent(
@@ -352,11 +465,14 @@ export class ShipmentRepository {
     event: Omit<ShipmentTrackingEvent, "id" | "shipment_id" | "created_at">
   ): Promise<void> {
     const db = this.getAdminClient();
-    // Upsert by (shipment_id, event_time, status) to prevent duplicates
+    // Upsert by (shipment_id, timestamp, status) to prevent duplicates.
+    // FIX ROUND 23B: the conflict key previously named `event_time`,
+    // which is not a column — the builder discarded the whole upsert
+    // before the payload was even examined.
     const { error } = await db
       .from("shipment_tracking_events")
-      .upsert({ ...event, shipment_id: shipmentId } as any, {
-        onConflict: "shipment_id,event_time,status",
+      .upsert(toTrackingEventRow(shipmentId, event as any) as any, {
+        onConflict: "shipment_id,timestamp,status",
         ignoreDuplicates: true,
       });
     if (error) console.error("Upsert tracking event:", error);
@@ -370,7 +486,7 @@ export class ShipmentRepository {
       .from("shipment_tracking_events")
       .select("*")
       .eq("shipment_id", shipmentId)
-      .order("event_time", { ascending: false });
+      .order("timestamp", { ascending: false });
 
     if (error) throw new Error(`Get tracking events failed: ${error.message}`);
     return (data ?? []) as ShipmentTrackingEvent[];
@@ -393,9 +509,20 @@ export class ShipmentRepository {
     >
   ): Promise<ShipmentLabel> {
     const db = this.getAdminClient();
+    // FIX ROUND 23B: `shipment_labels` real columns are shipment_id /
+    // label_url / tracking_number / courier (+ id, created_at,
+    // print_count). Callers pass label_type / label_data, which have no
+    // column — spreading them in discarded the whole insert, so no
+    // label was ever saved. Persist the real fields only.
+    const row: Record<string, any> = {
+      shipment_id: shipmentId,
+      label_url: (label as any).label_url ?? null,
+      tracking_number: (label as any).tracking_number ?? null,
+      courier: (label as any).courier ?? null,
+    };
     const { data, error } = await db
       .from("shipment_labels")
-      .insert({ ...label, shipment_id: shipmentId } as any)
+      .insert(row as any)
       .select()
       .single();
 
@@ -417,12 +544,12 @@ export class ShipmentRepository {
 
   async incrementLabelPrintCount(labelId: string): Promise<void> {
     const db = this.getAdminClient();
-    await db
-      .from("shipment_labels")
-      .update({ printed_at: new Date().toISOString() } as any)
-      .eq("id", labelId);
-
-    // Increment via raw SQL for atomicity
+    // FIX ROUND 23B: the previous `.update({ printed_at })` named a
+    // column `shipment_labels` does not have, so the builder discarded
+    // it (harmlessly, but it never recorded anything). There is no
+    // printed-at column — the print COUNT below is the only record.
+    // Increment via raw SQL for atomicity (lib/db/rpc.ts implements
+    // increment_label_print_count as print_count = print_count + 1).
     await db
       .rpc("increment_label_print_count", { label_id: labelId })
       .maybeSingle();
@@ -440,12 +567,27 @@ export class ShipmentRepository {
     source: "system" | "admin" | "webhook" | "customer" = "system"
   ): Promise<void> {
     const db = this.getAdminClient();
+    // FIX ROUND 23B: `shipment_events` real columns are shipment_id /
+    // status / location / notes (+ id, created_at). This method used to
+    // insert event_type / payload / triggered_by / source as if they
+    // were columns — none exist, so the builder discarded EVERY audit
+    // event and the production table stayed completely empty. Mapping:
+    // the event type goes to `status`; a string payload.location goes
+    // to `location`; the full payload plus provenance (source, who
+    // triggered it) is preserved verbatim as JSON in `notes`, which is
+    // exactly what getShipmentWithDetails surfaces to the detail page.
+    const detail: Record<string, any> = { ...(payload ?? {}) };
+    const location =
+      typeof detail.location === "string" ? detail.location : null;
+    const notesData: Record<string, any> = { ...detail };
+    if (triggeredBy) notesData.triggered_by = triggeredBy;
+    if (source) notesData.source = source;
     await db.from("shipment_events").insert({
       shipment_id: shipmentId,
-      event_type: eventType,
-      payload,
-      triggered_by: triggeredBy ?? null,
-      source,
+      status: eventType,
+      location,
+      notes:
+        Object.keys(notesData).length > 0 ? JSON.stringify(notesData) : null,
     } as any);
   }
 }

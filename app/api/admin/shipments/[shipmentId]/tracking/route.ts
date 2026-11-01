@@ -74,7 +74,6 @@ export async function GET(
                 .from("shipments")
                 .update({
                   status: liveTracking.currentStatusNormalized,
-                  provider_status: liveTracking.currentStatus,
                   updated_at: new Date().toISOString(),
                 })
                 .eq("id", shipment.id);
