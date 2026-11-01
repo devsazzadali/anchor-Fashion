@@ -105,7 +105,7 @@ export default async function OrderDetailsPage({
   const shipmentProviderCodes = [
     ...new Set(
       (rawShipments || [])
-        .map((s: any) => s.courier_provider_code)
+        .map((s: any) => s.courier_provider_code || s.courier)
         .filter(Boolean)
     ),
   ];
@@ -121,8 +121,12 @@ export default async function OrderDetailsPage({
   }
   const shipments = (rawShipments || []).map((s: any) => ({
     ...s,
-    courier_providers: s.courier_provider_code
-      ? { name: providerNameByCode.get(s.courier_provider_code) || null }
+    courier_providers: s.courier_provider_code || s.courier
+      ? {
+          name:
+            providerNameByCode.get(s.courier_provider_code || s.courier) ||
+            null,
+        }
       : null,
   }));
 
@@ -266,7 +270,7 @@ export default async function OrderDetailsPage({
                       <div className="mb-2 flex items-center justify-between">
                         <div>
                           <p className="font-medium">
-                            {shipment.courier_providers?.name || shipment.courier_provider_code || "Courier"}
+                            {shipment.courier_providers?.name || shipment.courier_provider_code || shipment.courier || "Courier"}
                           </p>
                           <p className="text-sm text-slate-500">
                             Tracking: {shipment.tracking_number || "Pending"}

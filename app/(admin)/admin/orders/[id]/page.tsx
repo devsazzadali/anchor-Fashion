@@ -455,7 +455,8 @@ export default function AdminOrderDetailsPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Courier</span>
                   <span className="text-foreground">
-                    {typedOrder.shipment.courier_provider_code ||
+                    {typedOrder.shipment.courier_name ||
+                      typedOrder.shipment.courier_provider_code ||
                       typedOrder.shipment.courier ||
                       "Not assigned yet"}
                   </span>

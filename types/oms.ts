@@ -207,6 +207,9 @@ export interface OrderShipmentSummary {
   tracking_number: string | null;
   courier_provider_code: string | null;
   courier: string | null;
+  // FIX ROUND 23: display name resolved from courier_providers by code
+  // in OrderRepository.getOrderById's shipment attach.
+  courier_name?: string | null;
   recipient_name: string | null;
   recipient_city: string | null;
   is_cod: boolean;

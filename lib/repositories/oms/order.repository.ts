@@ -44,6 +44,21 @@ export class OrderRepository {
         orderBy: { createdAt: "desc" },
       });
       if (shipment) {
+        // FIX ROUND 23 (REG-83 label leg): resolve the courier DISPLAY
+        // name from courier_providers by code — the admin/manager order
+        // pages previously rendered the raw provider code.
+        const courierCode =
+          shipment.courierProviderCode ?? shipment.courier ?? null;
+        let courierName: string | null = null;
+        if (courierCode) {
+          const provider = await prisma.courier_providers
+            .findFirst({
+              where: { code: courierCode },
+              select: { name: true },
+            })
+            .catch(() => null);
+          courierName = provider?.name ?? null;
+        }
         (mapped as any).shipment = {
           id: shipment.id,
           shipment_number: shipment.shipmentNumber,
@@ -51,6 +66,7 @@ export class OrderRepository {
           tracking_number: shipment.trackingNumber,
           courier_provider_code: shipment.courierProviderCode,
           courier: shipment.courier,
+          courier_name: courierName,
           recipient_name: shipment.recipientName,
           recipient_city: shipment.recipientCity,
           is_cod: shipment.isCod ?? false,

@@ -358,7 +358,8 @@ export default async function OrderDetailsPage({
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Courier</span>
                   <span>
-                    {shipment.courier_provider_code ||
+                    {shipment.courier_name ||
+                      shipment.courier_provider_code ||
                       shipment.courier ||
                       "Not assigned yet"}
                   </span>

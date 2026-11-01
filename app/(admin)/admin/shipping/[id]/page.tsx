@@ -66,6 +66,14 @@ export default function ShipmentDetailPage({
   const cancelShipment = useCancelShipment();
   const generateLabel = useGenerateLabel();
   const syncTracking = useSyncTracking();
+  // FIX ROUND 23: this useState previously sat BELOW the isLoading /
+  // error early returns, so the first data-loaded render called one
+  // more hook than the loading render — React threw "Rendered more
+  // hooks than during the previous render" and the page crashed with
+  // "Something went wrong!" on first open (a retry worked because the
+  // query cache made isLoading false from the start). All hooks must
+  // stay above every early return.
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   if (isLoading)
     return <div className="p-8 text-muted-foreground">Loading shipment…</div>;
@@ -92,8 +100,6 @@ export default function ShipmentDetailPage({
       toast.error(e.message);
     }
   };
-
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const handleCancel = async () => {
     try {
@@ -191,7 +197,10 @@ export default function ShipmentDetailPage({
             <div>
               <span className="text-muted-foreground">Courier:</span>{" "}
               <span className="font-medium">
-                {shipment.courier_provider_code ?? "—"}
+                {shipment.courier_name ||
+                  shipment.courier_provider_code ||
+                  shipment.courier ||
+                  "—"}
               </span>
             </div>
             <div>
@@ -216,7 +225,9 @@ export default function ShipmentDetailPage({
             </div>
             <div>
               <span className="text-muted-foreground">Est. Delivery:</span>{" "}
-              {shipment.estimated_delivery_date ?? "—"}
+              {shipment.estimated_delivery
+                ? new Date(shipment.estimated_delivery).toLocaleDateString()
+                : "—"}
             </div>
           </CardContent>
         </Card>

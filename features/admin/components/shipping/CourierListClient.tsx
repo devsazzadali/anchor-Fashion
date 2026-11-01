@@ -82,6 +82,7 @@ export function CourierListClient({ initialCouriers }: Props) {
     name: "",
     apiKey: "",
     secretKey: "",
+    shipperPhone: "",
     isSandbox: false,
     isActive: true,
   });
@@ -94,6 +95,7 @@ export function CourierListClient({ initialCouriers }: Props) {
         name: newCourier.name.trim() || newCourier.code,
         apiKey: newCourier.apiKey,
         secretKey: newCourier.secretKey,
+        shipperPhone: newCourier.shipperPhone,
         isSandbox: newCourier.isSandbox,
         isActive: newCourier.isActive,
       });
@@ -108,6 +110,7 @@ export function CourierListClient({ initialCouriers }: Props) {
         name: "",
         apiKey: "",
         secretKey: "",
+        shipperPhone: "",
         isSandbox: false,
         isActive: true,
       });
@@ -489,6 +492,28 @@ export function CourierListClient({ initialCouriers }: Props) {
                 autoComplete="off"
               />
             </div>
+            {(newCourier.code === "dhl" || newCourier.code === "fedex") && (
+              <div className="space-y-1.5">
+                <Label htmlFor="new-courier-shipper-phone">Shipper phone</Label>
+                <Input
+                  id="new-courier-shipper-phone"
+                  value={newCourier.shipperPhone}
+                  onChange={(e) =>
+                    setNewCourier((s) => ({
+                      ...s,
+                      shipperPhone: e.target.value,
+                    }))
+                  }
+                  placeholder="Store phone the courier calls about pickups"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Required by {newCourier.code === "dhl" ? "DHL" : "FedEx"} —
+                  shipments are rejected without a shipper contact phone. Can
+                  also be set later under Configure Settings.
+                </p>
+              </div>
+            )}
             <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
               <div>
                 <p className="text-sm font-medium">Sandbox mode</p>

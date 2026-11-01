@@ -209,6 +209,20 @@ export class ShipmentRepository {
     });
     if (!row) return null;
 
+    // FIX ROUND 23 (REG-83 label leg): resolve the courier DISPLAY name
+    // from courier_providers by code, the same way the customer order
+    // page does. The detail page previously rendered the raw provider
+    // code (or "—"), so a booked shipment never showed its courier name.
+    const courierCode =
+      (row as any).courierProviderCode ?? (row as any).courier ?? null;
+    let courierName: string | null = null;
+    if (courierCode) {
+      const provider = await prisma.courier_providers
+        .findFirst({ where: { code: courierCode }, select: { name: true } })
+        .catch(() => null);
+      courierName = provider?.name ?? null;
+    }
+
     const [trackingEvents, events] = await Promise.all([
       prisma.shipment_tracking_events
         .findMany({
@@ -226,6 +240,7 @@ export class ShipmentRepository {
 
     return {
       ...mapShipmentRow(row),
+      courier_name: courierName,
       items: (row.items ?? []).map((it: any) => ({
         id: it.id,
         shipment_id: it.shipmentId,

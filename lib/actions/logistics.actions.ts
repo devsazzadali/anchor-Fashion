@@ -101,6 +101,12 @@ export interface CreateCourierProviderInput {
   name: string;
   apiKey?: string;
   secretKey?: string;
+  // FIX ROUND 23 (REG-87): DHL/FedEx read `shipperPhone` from the
+  // provider config and refuse to book without it, but no admin surface
+  // could set it. It rides the same encrypted config.credentials store
+  // as the API keys (CourierRegistry decrypts the whole object into the
+  // provider factory config).
+  shipperPhone?: string;
   isSandbox?: boolean;
   isActive?: boolean;
 }
@@ -155,6 +161,8 @@ export async function createCourierProviderAction(
     const creds: Record<string, string> = {};
     if (input.apiKey?.trim()) creds.apiKey = input.apiKey.trim();
     if (input.secretKey?.trim()) creds.secretKey = input.secretKey.trim();
+    if (input.shipperPhone?.trim())
+      creds.shipperPhone = input.shipperPhone.trim();
 
     const { data, error } = await db
       .from("courier_providers")

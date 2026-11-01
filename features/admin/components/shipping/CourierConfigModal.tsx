@@ -36,6 +36,14 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
   const [testResult, setTestResult] = useState<HealthCheckResult | null>(null);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [isSandbox, setIsSandbox] = useState(false);
+  // FIX ROUND 23: this useState previously sat BELOW the
+  // `if (!courier) return null` early return. Opening the modal flipped
+  // courier null → object, so the render called one more hook than the
+  // previous one and React threw "Rendered more hooks than during the
+  // previous render" — the Configure Settings click crashed with
+  // "Something went wrong!" for every courier. Keep ALL hooks above
+  // every early return.
+  const [showRemoveCredsConfirm, setShowRemoveCredsConfirm] = useState(false);
 
   useEffect(() => {
     if (courier) {
@@ -78,8 +86,6 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
       setTesting(false);
     }
   };
-
-  const [showRemoveCredsConfirm, setShowRemoveCredsConfirm] = useState(false);
 
   const handleRemoveCredentials = async () => {
     setShowRemoveCredsConfirm(false);
@@ -213,6 +219,90 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
                 onChange={(e) => handleChange("storeId", e.target.value)}
                 placeholder="e.g. 1"
               />
+            </div>
+          </>
+        );
+      case "dhl":
+        return (
+          <>
+            <div className="grid gap-2">
+              <Label htmlFor="apiKey">API Key</Label>
+              <Input
+                id="apiKey"
+                value={credentials.apiKey || ""}
+                onChange={(e) => handleChange("apiKey", e.target.value)}
+                placeholder="Enter DHL API Key"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="accountNumber">Account Number</Label>
+              <Input
+                id="accountNumber"
+                value={credentials.accountNumber || ""}
+                onChange={(e) => handleChange("accountNumber", e.target.value)}
+                placeholder="DHL shipper account number"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="shipperPhone">Shipper Phone</Label>
+              <Input
+                id="shipperPhone"
+                value={credentials.shipperPhone || ""}
+                onChange={(e) => handleChange("shipperPhone", e.target.value)}
+                placeholder="e.g. +880 1XXX-XXXXXX"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required — DHL rejects shipments without a shipper contact
+                phone. Stored with the provider credentials; leave empty to
+                keep the courier unconfigured.
+              </p>
+            </div>
+          </>
+        );
+      case "fedex":
+        return (
+          <>
+            <div className="grid gap-2">
+              <Label htmlFor="clientId">Client ID</Label>
+              <Input
+                id="clientId"
+                value={credentials.clientId || ""}
+                onChange={(e) => handleChange("clientId", e.target.value)}
+                placeholder="FedEx API Client ID"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="clientSecret">Client Secret</Label>
+              <Input
+                id="clientSecret"
+                type="password"
+                value={credentials.clientSecret || ""}
+                onChange={(e) => handleChange("clientSecret", e.target.value)}
+                placeholder="FedEx API Client Secret"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="accountNumber">Account Number</Label>
+              <Input
+                id="accountNumber"
+                value={credentials.accountNumber || ""}
+                onChange={(e) => handleChange("accountNumber", e.target.value)}
+                placeholder="FedEx shipper account number"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="shipperPhone">Shipper Phone</Label>
+              <Input
+                id="shipperPhone"
+                value={credentials.shipperPhone || ""}
+                onChange={(e) => handleChange("shipperPhone", e.target.value)}
+                placeholder="e.g. +880 1XXX-XXXXXX"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required — FedEx rejects shipments without a shipper contact
+                phone. Stored with the provider credentials; leave empty to
+                keep the courier unconfigured.
+              </p>
             </div>
           </>
         );
