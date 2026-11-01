@@ -58,8 +58,8 @@ const MAX_UNBOUNDED_ROWS = 10000;
 const EMBEDDED_SELECT_SUPPORT: Record<string, ReadonlySet<string>> = {
   profiles: new Set(["roles"]),
   customer_profiles: new Set(["roles"]),
-  orders: new Set(["order_items"]),
-  customer_orders: new Set(["order_items"]),
+  orders: new Set(["order_items", "order_status_history"]),
+  customer_orders: new Set(["order_items", "order_status_history"]),
   products: new Set(["variants", "product_media"]),
   store_products: new Set(["variants", "product_media"]),
 };
@@ -863,6 +863,39 @@ export class DbQueryBuilder implements PromiseLike<any> {
           }
           for (const row of rows) {
             row.order_items = itemMap.get(row.id) || [];
+          }
+        }
+      }
+
+      // FIX ROUND 27: order_status_history embed on orders — the R25
+      // cancellation panel (and the order Timeline) read this relation,
+      // but it was missing from EMBEDDED_SELECT_SUPPORT and had no attach
+      // branch, so in production the embed vanished silently and the
+      // panel always showed "Not specified" / "Unknown" even though the
+      // CANCELLED history row carries the customer's reason. Mirrors the
+      // order_items attach above.
+      if (
+        (this.tableName === "orders" || this.tableName === "customer_orders") &&
+        this.selectCols.includes("order_status_history")
+      ) {
+        const orderIds = rows.map((r) => r.id).filter(Boolean);
+        if (orderIds.length > 0) {
+          const history = await prisma.orderStatusHistory.findMany({
+            where: { orderId: { in: orderIds } },
+          });
+          const histMeta = DB_TABLES["order_status_history"];
+          const histMap = new Map<string, any[]>();
+          for (const h of history as any[]) {
+            const snake: Record<string, any> = {};
+            for (const col of Object.keys(histMeta.fields)) {
+              const f = histMeta.fields[col].field;
+              if (f in h) snake[col] = serializePlain(h[f]);
+            }
+            if (!histMap.has(snake.order_id)) histMap.set(snake.order_id, []);
+            histMap.get(snake.order_id)!.push(snake);
+          }
+          for (const row of rows) {
+            row.order_status_history = histMap.get(row.id) || [];
           }
         }
       }
