@@ -14,6 +14,7 @@ import { formatCurrency } from "@/lib/utils";
 import { CustomerOrderInvoiceButton } from "@/features/orders/components/CustomerOrderInvoiceButton";
 import { ReturnRequestDialog } from "@/components/returns/return-request-dialog";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
+import { deriveCancellationDisplay } from "@/lib/orders/cancellation-display";
 
 export const metadata: Metadata = {
   title: "Order Details | Anchor Fashion",
@@ -163,6 +164,14 @@ export default async function OrderDetailsPage({
     statusLower === "completed" ||
     statusLower === "delivered";
   const isCancelled = statusLower === "cancelled";
+  // FIX ROUND 25: orders has no cancellation_reason / cancellation_note
+  // columns — the panel used to read those phantom fields and always
+  // showed "Not specified" / "Unknown". Derive the panel from the real
+  // sources (orders.cancelled_at + the CANCELLED order_status_history
+  // row, which carries the customer's chosen reason).
+  const cancellation = isCancelled
+    ? deriveCancellationDisplay(order)
+    : { reason: null, note: null, cancelledAt: null };
   const canCancel = [
     "pending",
     "processing",
@@ -217,9 +226,9 @@ export default async function OrderDetailsPage({
                 <CardTitle className="text-destructive">Cancellation Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <p><span className="font-medium text-slate-500">Reason:</span> {order.cancellation_reason || "Not specified"}</p>
-                {order.cancellation_note && <p><span className="font-medium text-slate-500">Note:</span> {order.cancellation_note}</p>}
-                <p><span className="font-medium text-slate-500">Cancelled At:</span> {order.cancelled_at ? new Date(order.cancelled_at).toLocaleString() : "Unknown"}</p>
+                <p><span className="font-medium text-slate-500">Reason:</span> {cancellation.reason || "Not specified"}</p>
+                {cancellation.note && <p><span className="font-medium text-slate-500">Note:</span> {cancellation.note}</p>}
+                <p><span className="font-medium text-slate-500">Cancelled At:</span> {cancellation.cancelledAt ? new Date(cancellation.cancelledAt).toLocaleString() : "Unknown"}</p>
               </CardContent>
             </Card>
           )}

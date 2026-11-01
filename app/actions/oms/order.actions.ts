@@ -276,6 +276,14 @@ export async function cancelCustomerOrderAction(
         where: { id: orderId, status: order.status },
         data: {
           status: "CANCELLED",
+          // FIX ROUND 25: stamp the real cancelled_at column — this path
+          // never wrote it, so the customer's Cancellation Details panel
+          // showed "Cancelled At: Unknown" for every customer-cancelled
+          // order. The chosen reason has no column on orders
+          // (schema-verified); it is recorded in order_status_history
+          // (step 7 below) and the panel derives it from there — see
+          // lib/orders/cancellation-display.ts.
+          cancelledAt: new Date(),
         }
       });
     } catch (updateError) {

@@ -344,11 +344,19 @@ export class OrderRepository {
     const lifecycle: {
       shippedAt?: Date;
       deliveredAt?: Date;
+      cancelledAt?: Date;
       paymentStatus?: string;
       paidAt?: Date;
     } = {};
     if (target === "SHIPPED") {
       lifecycle.shippedAt = now;
+    }
+    if (target === "CANCELLED") {
+      // FIX ROUND 25: same lifecycle-stamping rule as SHIPPED/DELIVERED —
+      // a staff-side cancellation must stamp cancelled_at too, otherwise
+      // the customer's Cancellation Details panel shows "Cancelled At:
+      // Unknown" for staff-cancelled orders.
+      lifecycle.cancelledAt = now;
     }
     if (target === "DELIVERED" || target === "COMPLETED") {
       lifecycle.deliveredAt = now;

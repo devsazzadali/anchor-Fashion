@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { CourierGatewayService } from "@/services/courier/courier-gateway.service";
+import { CourierRegistry } from "@/services/courier/courier-registry";
 import { ShipmentRepository } from "@/repositories/shipment.repository";
 import { DeliveryZoneRepository } from "@/repositories/delivery-zone.repository";
 import {
@@ -177,6 +178,25 @@ export class ShippingService {
   }
 
   /**
+   * FIX ROUND 25: a courier code is assignable only when CourierRegistry
+   * has it registered — i.e. an ACTIVE courier_providers row exists for
+   * it (the registry's Phase-8 rule; the sandbox test provider included:
+   * it registers only when an operator has added it under Shipping →
+   * Couriers). Throws an operator-facing message instead of letting the
+   * registry's raw internal error surface after a partial write.
+   */
+  private async assertProviderAssignable(
+    courierCode: CourierProviderCode
+  ): Promise<void> {
+    const registered = await CourierRegistry.getInstance().has(courierCode);
+    if (!registered) {
+      throw new Error(
+        `Courier "${courierCode}" is not registered or is inactive. Add it under Shipping → Couriers first. No changes were made.`
+      );
+    }
+  }
+
+  /**
    * Assign a courier provider and submit the consignment to the provider API.
    */
   async assignCourier(
@@ -195,6 +215,14 @@ export class ShippingService {
         `Cannot assign courier: shipment is in terminal state '${shipment.status}'`
       );
     }
+
+    // FIX ROUND 25: refuse unregistered/inactive couriers BEFORE any
+    // write. Previously the assignment persisted and the failure only
+    // surfaced afterwards as the registry's raw "[CourierRegistry]
+    // Provider '…' is not registered or inactive." throw from inside
+    // the provider submission — an operator-facing dead end (the
+    // shipment page offered every provider TYPE, registered or not).
+    await this.assertProviderAssignable(courierCode);
 
     // Update courier assignment (real columns only — FIX ROUND 23: the
     // phantom `updated_by` key made the builder discard this write, so
@@ -228,6 +256,10 @@ export class ShippingService {
   ): Promise<Shipment> {
     const shipment = await this.shipmentRepo.getShipmentById(shipmentId);
     if (!shipment) throw new Error(`Shipment ${shipmentId} not found`);
+
+    // FIX ROUND 25: same registration guard as assignCourier — refuse
+    // before cancelling the existing consignment or writing anything.
+    await this.assertProviderAssignable(newCourierCode);
 
     // Cancel with previous provider if possible
     if (shipment.courier_provider_code && shipment.consignment_id) {
