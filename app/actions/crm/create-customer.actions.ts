@@ -24,7 +24,7 @@ export async function createCustomerAction(data: {
 
     // 1. Check if customer profile already exists with this email
     const { data: existingEmail } = await db
-      .from("customer_profiles")
+      .from("profiles")
       .select("id, email, first_name, last_name")
       .ilike("email", cleanEmail)
       .maybeSingle();
@@ -38,7 +38,7 @@ export async function createCustomerAction(data: {
     // 2. Check if customer profile already exists with this phone number (unique constraint)
     if (cleanPhone) {
       const { data: existingPhone } = await db
-        .from("customer_profiles")
+        .from("profiles")
         .select("id, email, first_name, last_name")
         .eq("phone", cleanPhone)
         .maybeSingle();
@@ -91,6 +91,8 @@ export async function createCustomerAction(data: {
     }
 
     // 4. Sync with profiles table if present
+    // (FIX ROUND 28: profiles has no `role` column — role lives in
+    // role_id; the phantom key is dropped.)
     try {
       await db.from("profiles").upsert(
         {
@@ -99,7 +101,6 @@ export async function createCustomerAction(data: {
           first_name: data.firstName.trim(),
           last_name: data.lastName.trim(),
           phone: cleanPhone,
-          role: "customer",
           is_active: true,
         },
         { onConflict: "id" }
@@ -110,7 +111,7 @@ export async function createCustomerAction(data: {
 
     // 5. Create customer profile with valid primary key id
     const { data: newCustomer, error: profileError } = await db
-      .from("customer_profiles")
+      .from("profiles")
       .upsert(
         {
           id: userId,
@@ -127,18 +128,16 @@ export async function createCustomerAction(data: {
 
     if (profileError) throw profileError;
 
-    // 6. Initialize CRM customer metadata
+    // 6. Initialize CRM customer metadata.
+    // FIX ROUND 28 (M-2, PROPOSAL): the crm_customers table does NOT
+    // exist in this schema — the upsert that stood here was silently
+    // discarded on every call. The table is specified in the Round-28
+    // DDL proposal; until it lands, CRM metadata is NOT persisted and
+    // the gap is logged loudly instead of faked. The customer profile
+    // itself (step 5) is real and unaffected.
     if (newCustomer?.id) {
-      await db.from("crm_customers").upsert(
-        {
-          profile_id: newCustomer.id,
-          customer_lifecycle_stage: data.lifecycleStage || "PROSPECT",
-          is_vip: false,
-          health_score: 80,
-          total_support_tickets: 0,
-          last_interaction_at: new Date().toISOString(),
-        },
-        { onConflict: "profile_id" }
+      console.error(
+        `[crm] crm_customers table missing — CRM metadata NOT persisted for profile ${newCustomer.id} (lifecycle ${data.lifecycleStage || "PROSPECT"}). See Round-28 DDL proposal.`
       );
     }
 

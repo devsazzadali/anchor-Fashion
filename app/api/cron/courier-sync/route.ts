@@ -18,9 +18,11 @@ export async function GET(req: Request) {
     const adminDb = createAdminDbClient();
 
     // 2. Fetch active shipments needing synchronization
+    // FIX ROUND 28 (B-1 class): shipments has no consignment_id column
+    // — the courier consignment id is stored as tracking_number.
     const { data: activeShipments, error: fetchError } = await adminDb
       .from("shipments")
-      .select("id, courier_provider_code, consignment_id, tracking_number, status, order_id")
+      .select("id, courier_provider_code, tracking_number, status, order_id")
       .in("status", ["pickup_requested", "picked_up", "in_transit", "out_for_delivery"])
       .not("courier_provider_code", "is", null)
       .limit(25);
@@ -41,7 +43,7 @@ export async function GET(req: Request) {
 
     for (const shipment of activeShipments) {
       const code = shipment.courier_provider_code;
-      const trackingIdentifier = shipment.consignment_id || shipment.tracking_number;
+      const trackingIdentifier = shipment.tracking_number;
 
       if (!code || !trackingIdentifier) continue;
 
@@ -60,23 +62,28 @@ export async function GET(req: Request) {
           liveTracking.currentStatusNormalized !== "unknown" &&
           liveTracking.currentStatusNormalized !== shipment.status
         ) {
-          // Update DB status
+          // Update DB status.
+          // FIX ROUND 28 (sweep, B-1 class): shipments has no
+          // provider_status column — the normalized status is the
+          // record; the provider's raw status string goes into the
+          // tracking event's notes below.
           await adminDb
             .from("shipments")
             .update({
               status: liveTracking.currentStatusNormalized,
-              provider_status: liveTracking.currentStatus,
               updated_at: new Date().toISOString(),
             })
             .eq("id", shipment.id);
 
-          // Add tracking event
+          // Add tracking event (real columns: shipment_id, status,
+          // timestamp, location, notes — tracking_number /
+          // status_description / created_at do not exist here).
           await adminDb.from("shipment_tracking_events").insert({
             shipment_id: shipment.id,
-            tracking_number: trackingIdentifier,
             status: liveTracking.currentStatusNormalized,
-            status_description: `Status updated via scheduled courier sync: ${liveTracking.currentStatus}`,
-            created_at: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
+            location: null,
+            notes: `Status updated via scheduled courier sync: ${liveTracking.currentStatus}`,
           });
 
           // Update order if delivered

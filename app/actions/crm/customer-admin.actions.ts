@@ -50,7 +50,7 @@ export async function updateCustomerByAdminAction(
 
     // 2. Check for duplicate email across other customer profiles
     const { data: existingEmail } = await db
-      .from("customer_profiles")
+      .from("profiles")
       .select("id, email")
       .ilike("email", cleanEmail)
       .neq("id", cleanId)
@@ -66,7 +66,7 @@ export async function updateCustomerByAdminAction(
     // 3. Check for duplicate phone across other customer profiles if phone provided
     if (cleanPhone) {
       const { data: existingPhone } = await db
-        .from("customer_profiles")
+        .from("profiles")
         .select("id, phone")
         .eq("phone", cleanPhone)
         .neq("id", cleanId)
@@ -112,7 +112,7 @@ export async function updateCustomerByAdminAction(
 
     // 5. Update customer_profiles table
     const { error: custErr } = await db
-      .from("customer_profiles")
+      .from("profiles")
       .update({
         first_name: cleanFirstName,
         last_name: cleanLastName,
@@ -141,27 +141,18 @@ export async function updateCustomerByAdminAction(
       // non-fatal if profiles table row does not exist
     }
 
-    // 7. Update or upsert CRM customer metadata (lifecycleStage, isVip)
+    // 7. CRM customer metadata (lifecycleStage, isVip)
     if (data.lifecycleStage || data.isVip !== undefined) {
-      const crmPayload: {
-        profile_id: string;
-        customer_lifecycle_stage?: string;
-        is_vip?: boolean;
-        last_interaction_at: string;
-      } = {
-        profile_id: cleanId,
-        last_interaction_at: new Date().toISOString(),
+      // FIX ROUND 28 (M-2, PROPOSAL): the crm_customers table does NOT
+      // exist in this schema — the upsert that stood here was silently
+      // discarded, so lifecycle/VIP edits never persisted while the UI
+      // reported success. The table is specified in the Round-28 DDL
+      // proposal; until it lands, fail honestly.
+      return {
+        success: false,
+        error:
+          "CRM metadata (lifecycle stage / VIP) cannot be saved yet — the crm_customers table is pending a schema update. Profile details were saved.",
       };
-      if (data.lifecycleStage) {
-        crmPayload.customer_lifecycle_stage = data.lifecycleStage;
-      }
-      if (data.isVip !== undefined) {
-        crmPayload.is_vip = data.isVip;
-      }
-
-      await db
-        .from("crm_customers")
-        .upsert(crmPayload, { onConflict: "profile_id" });
     }
 
     // 8. Revalidate all related CRM paths
@@ -203,14 +194,16 @@ export async function deleteCustomerByAdminAction(
     await Promise.allSettled([
       db.from("support_tickets").delete().eq("customer_id", cleanId),
       db.from("customer_addresses").delete().eq("customer_id", cleanId),
-      db.from("customer_notifications").delete().eq("customer_id", cleanId),
+      // FIX ROUND 28 (sweep): no customer_notifications delete — that
+      // table does not exist in this schema.
       db.from("loyalty_accounts").delete().eq("customer_id", cleanId),
-      db.from("crm_customers").delete().eq("profile_id", cleanId),
+      // FIX ROUND 28 (M-2): no crm_customers delete — that table does
+      // not exist in this schema (see the Round-28 DDL proposal).
     ]);
 
     // 3. Delete customer profile
     const { error: profileErr } = await db
-      .from("customer_profiles")
+      .from("profiles")
       .delete()
       .eq("id", cleanId);
 

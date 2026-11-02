@@ -9,51 +9,80 @@ export async function getPickListsAction() {
   await verifyStaff();
   try {
     const db = createAdminDbClient();
+    // FIX ROUND 28 (M-3): pick_lists / pick_list_items real columns are
+    // (pick_list_number, warehouse_id, order_id, assigned_picker_id,
+    // status, …) and (pick_list_id, variant_id, quantity_required,
+    // quantity_picked, status, location). The old select embedded
+    // warehouses(...) and items:pick_list_items(id, quantity, is_picked,
+    // picked_at) — none of those columns/relations resolve, and the row
+    // fields it read (list_number, total_items, picked_items,
+    // assigned_to) do not exist, so the list rendered phantom totals.
+    // Relations are now fetched with batched plain queries and attached.
     const { data: lists, error } = await db
       .from("pick_lists")
-      .select(`
-        *,
-        warehouses(id, name, warehouse_code),
-        items:pick_list_items(id, quantity, is_picked, picked_at)
-      `)
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
       return { success: false, error: error.message };
     }
 
-    // Resolve assigned_to profile names reliably without foreign key schema cache dependency
-    const userIds = [...new Set((lists || []).map((l: any) => l.assigned_to).filter(Boolean))];
-    const profileMap: Record<string, string> = {};
-    if (userIds.length > 0) {
-      const { data: profiles } = await db
-        .from("profiles")
-        .select("id, first_name, last_name, email")
-        .in("id", userIds);
-      if (profiles) {
-        profiles.forEach((p: any) => {
-          profileMap[p.id] = `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.email;
-        });
-      }
-    }
+    const rows: any[] = lists || [];
+    const listIds = rows.map((l: any) => l.id).filter(Boolean);
+    const warehouseIds = [...new Set(rows.map((l: any) => l.warehouse_id).filter(Boolean))];
+    const pickerIds = [...new Set(rows.map((l: any) => l.assigned_picker_id).filter(Boolean))];
 
-    const processed = (lists || []).map((list: any) => {
-      const items = list.items || [];
-      const totalRequired =
-        list.total_items ??
-        items.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
-      const totalPicked =
-        list.picked_items ??
-        items.filter((i: any) => i.is_picked).reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
+    const [{ data: itemRows }, { data: warehouseRows }, { data: profiles }] =
+      await Promise.all([
+        listIds.length
+          ? db.from("pick_list_items").select("*").in("pick_list_id", listIds)
+          : Promise.resolve({ data: [] as any[] }),
+        warehouseIds.length
+          ? db.from("warehouses").select("id, name, code").in("id", warehouseIds)
+          : Promise.resolve({ data: [] as any[] }),
+        pickerIds.length
+          ? db
+              .from("profiles")
+              .select("id, first_name, last_name, email")
+              .in("id", pickerIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+    const itemsByList = new Map<string, any[]>();
+    for (const item of itemRows || []) {
+      if (!itemsByList.has(item.pick_list_id)) itemsByList.set(item.pick_list_id, []);
+      itemsByList.get(item.pick_list_id)!.push(item);
+    }
+    const warehouseById = new Map<string, any>(
+      (warehouseRows || []).map((w: any) => [w.id, w] as [string, any])
+    );
+    const profileMap: Record<string, string> = {};
+    (profiles || []).forEach((p: any) => {
+      profileMap[p.id] = `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.email;
+    });
+
+    const processed = rows.map((list: any) => {
+      const items = itemsByList.get(list.id) || [];
+      const totalRequired = items.reduce(
+        (sum: number, i: any) => sum + (Number(i.quantity_required) || 0),
+        0
+      );
+      const totalPicked = items.reduce(
+        (sum: number, i: any) => sum + (Number(i.quantity_picked) || 0),
+        0
+      );
+      const wh = list.warehouse_id ? warehouseById.get(list.warehouse_id) : null;
 
       return {
         ...list,
-        pick_list_number: list.list_number,
-        itemsTotal: totalRequired || 1,
+        items,
+        warehouses: wh ? { id: wh.id, name: wh.name, code: wh.code || "" } : null,
+        itemsTotal: totalRequired,
         itemsPicked: totalPicked,
-        assignedToName: list.assigned_to && profileMap[list.assigned_to]
-          ? profileMap[list.assigned_to]
-          : "Unassigned",
+        assignedToName:
+          list.assigned_picker_id && profileMap[list.assigned_picker_id]
+            ? profileMap[list.assigned_picker_id]
+            : "Unassigned",
       };
     });
 
@@ -120,73 +149,75 @@ export async function generatePickListFromOrdersAction(warehouseId?: string) {
       return { success: false, error: "No active warehouse found to generate pick list." };
     }
 
-    // 2. Aggregate order items
-    let itemsToInsert: {
-      order_item_id?: string | null;
-      variant_id?: string | null;
-      quantity: number;
-      is_picked: boolean;
-    }[] = [];
+    // 2. Aggregate order items (real pick_list_items columns:
+    // variant_id + quantity_required; pick_list_items has no
+    // order_item_id / quantity / is_picked columns).
+    const itemsToInsert: { variant_id: string; quantity: number }[] = [];
+    const contributingOrderIds = new Set<string>();
 
     if (orders && orders.length > 0) {
       for (const order of orders) {
         if (order.order_items && order.order_items.length > 0) {
           for (const item of order.order_items) {
+            if (!item.variant_id) continue;
             itemsToInsert.push({
-              order_item_id: item.id,
               variant_id: item.variant_id,
               quantity: item.quantity || 1,
-              is_picked: false,
             });
+            contributingOrderIds.add(order.id);
           }
         }
       }
     }
 
-    // Fallback: If no orders or order items exist, pick sample catalog variants
+    // FIX ROUND 28 (M-3): the "sample catalog variants" fallback is
+    // REMOVED. It existed because the generator's reads/writes were
+    // poisoned and it fabricated pick lists of sample products that no
+    // customer ordered — a pick list must only ever contain real order
+    // items. With no eligible order items the honest result is an
+    // error, not a fabricated list.
     if (itemsToInsert.length === 0) {
-      const { data: sampleVariants } = await db.from("variants").select("id").limit(3);
-      if (sampleVariants && sampleVariants.length > 0) {
-        itemsToInsert = sampleVariants.map((v: any) => ({
-          variant_id: v.id,
-          quantity: 2,
-          is_picked: false,
-        }));
-      }
+      return {
+        success: false,
+        error: "No eligible orders with items are available to generate a pick list.",
+      };
     }
 
-    const totalQty = itemsToInsert.reduce((sum, i) => sum + (i.quantity || 1), 0);
     const pickListNumber = `PL-${Date.now().toString().slice(-6)}`;
 
-    // 3. Create pick list record respecting schema constraint (pick_type: 'WAVE'|'BATCH', status: 'PENDING')
+    // 3. Create the pick list with real columns only (pick_list_number,
+    // warehouse_id, order_id, status). The old payload's list_number /
+    // pick_type / total_items / picked_items columns do not exist, so
+    // the builder discarded the insert whole and .single() yielded no
+    // row — production pick_lists stayed at 0 rows.
     const { data: newPickList, error: plErr } = await db
       .from("pick_lists")
       .insert({
-        list_number: pickListNumber,
+        pick_list_number: pickListNumber,
         warehouse_id: targetWarehouseId,
-        pick_type: "WAVE",
+        order_id:
+          contributingOrderIds.size === 1
+            ? [...contributingOrderIds][0]
+            : null,
         status: "PENDING",
-        total_items: totalQty || 1,
-        picked_items: 0,
       })
       .select()
       .single();
 
     if (plErr) throw plErr;
 
-    // 4. Create pick list items matching schema
-    if (itemsToInsert.length > 0) {
-      const formattedItems = itemsToInsert.map((item) => ({
-        pick_list_id: newPickList.id,
-        order_item_id: item.order_item_id || null,
-        variant_id: item.variant_id || null,
-        quantity: item.quantity || 1,
-        is_picked: false,
-      }));
+    // 4. Create pick list items with real columns.
+    const formattedItems = itemsToInsert.map((item) => ({
+      pick_list_id: newPickList.id,
+      variant_id: item.variant_id,
+      quantity_required: item.quantity || 1,
+      quantity_picked: 0,
+      status: "PENDING",
+    }));
 
-      const { error: itemErr } = await db.from("pick_list_items").insert(formattedItems);
-      if (itemErr) {
-      }
+    const { error: itemErr } = await db.from("pick_list_items").insert(formattedItems);
+    if (itemErr) {
+      throw itemErr;
     }
 
     try {
@@ -208,7 +239,9 @@ export async function assignPickerAction(pickListId: string, pickerId: string) {
     const { error } = await db
       .from("pick_lists")
       .update({
-        assigned_to: pickerId || null,
+        // FIX ROUND 28 (M-3): the column is assigned_picker_id —
+        // `assigned_to` does not exist and poisoned the update.
+        assigned_picker_id: pickerId || null,
         status: "IN_PROGRESS",
       })
       .eq("id", pickListId);
@@ -254,10 +287,22 @@ export async function updatePickListStatusAction(
 
     if (dbStatus === "COMPLETED") {
       updates.completed_at = new Date().toISOString();
-      await db
+      // FIX ROUND 28 (M-3): pick_list_items has no is_picked/picked_at
+      // columns — progress lives in quantity_picked (+ status). Mark
+      // every item fully picked with its real columns.
+      const { data: items } = await db
         .from("pick_list_items")
-        .update({ is_picked: true, picked_at: new Date().toISOString() })
+        .select("id, quantity_required")
         .eq("pick_list_id", pickListId);
+      for (const item of items || []) {
+        await db
+          .from("pick_list_items")
+          .update({
+            quantity_picked: item.quantity_required ?? 0,
+            status: "PICKED",
+          })
+          .eq("id", item.id);
+      }
     }
 
     const { error } = await db

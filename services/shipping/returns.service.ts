@@ -694,17 +694,32 @@ export class ReturnsService {
       throw new Error(`Order ${returnRecord.order_id} not found.`);
     }
 
-    // Gateway transaction lookup. (There is no payment_transactions
-    // table in this schema — the read resolves empty; gateway branches
-    // below then fall through to their manual-pending notes, which is
-    // the truthful state without gateway records.)
+    // Gateway transaction lookup.
+    // FIX ROUND 28 (M-2): the real ledger is `payments` (there is no
+    // payment_transactions table — the old read resolved empty, so the
+    // gateway branches below always fell through to manual-pending
+    // notes even when a gateway refund was possible). Rows are mapped
+    // to the legacy shape the branches consume, with `gateway` derived
+    // from the payments method and `gateway_payment_id` from the
+    // session id recorded in gateway_response (bKash paymentID).
     let paymentTransactions: any[] = [];
     try {
       const { data } = await db
-        .from("payment_transactions")
+        .from("payments")
         .select("*")
         .eq("order_id", returnRecord.order_id);
-      paymentTransactions = data || [];
+      const { paymentRowToLegacyTransaction } = await import(
+        "@/lib/payments/order-payment-record"
+      );
+      paymentTransactions = (data || []).map((row: any) => {
+        const mapped = paymentRowToLegacyTransaction(row);
+        const gw = (row.gateway_response || {}) as Record<string, any>;
+        return {
+          ...mapped,
+          gateway: String(row.method || "").toLowerCase(),
+          gateway_payment_id: gw.session_id ?? null,
+        };
+      });
     } catch {
       paymentTransactions = [];
     }

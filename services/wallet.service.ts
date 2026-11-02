@@ -303,7 +303,7 @@ export class WalletService {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.toIdentifier);
 
     // Try customer_profiles first
-    let cpQuery = db.from("customer_profiles").select("id, first_name, last_name, phone, email");
+    let cpQuery = db.from("profiles").select("id, first_name, last_name, phone, email");
     if (isUuid) {
       cpQuery = cpQuery.eq("id", params.toIdentifier);
     } else if (params.toIdentifier.includes("@")) {

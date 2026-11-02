@@ -9,6 +9,7 @@ import { CouponService } from "@/services/coupon.service";
 import { prisma } from "@/lib/prisma";
 import { totalVatAmount } from "@/lib/utils/vat";
 import { FALLBACK_DELIVERY_FEES } from "@/lib/constants/shipping";
+import { applyFreeShippingThreshold } from "@/lib/services/shipping/zone-resolution.service";
 
 export class OrderService {
   /**
@@ -187,25 +188,18 @@ export class OrderService {
     // announcement bar and the cart's progress meter): when the merchandise
     // subtotal reaches the configured threshold, delivery is free. The
     // delivery zone is still resolved and recorded on the order by
-    // placeOrder — only the fee is waived. BUG FIX: this threshold was
-    // previously never consulted here, so qualifying orders were charged
-    // the full zone fee at checkout.
-    let shipping_fee = zone_shipping_fee;
-    if (zone_shipping_fee > 0) {
-      try {
-        // REG-81: the threshold rule is single-sourced in settings.actions
-        // (the cart/PDP surfaces read the same helper).
-        const { getFreeShippingThreshold } = await import(
-          "@/lib/actions/settings.actions"
-        );
-        const threshold = await getFreeShippingThreshold();
-        if (threshold > 0 && subtotal >= threshold) {
-          shipping_fee = 0;
-        }
-      } catch {
-        // Settings unreadable — fall through with the zone fee.
-      }
-    }
+    // placeOrder — only the fee is waived.
+    // FIX ROUND 28 (M-7): the application now goes through the ONE
+    // shared helper (applyFreeShippingThreshold in
+    // lib/services/shipping/zone-resolution.service) that the guest
+    // /api/store/orders path also uses, so all three order-math paths
+    // (cart summary, session placeOrder via this summary, guest) apply
+    // the identical rule. The threshold value itself remains
+    // single-sourced in getFreeShippingThreshold (REG-81).
+    const shipping_fee = await applyFreeShippingThreshold(
+      subtotal,
+      zone_shipping_fee
+    );
 
     // Coupon applied to the checkout session (see resolveSessionCoupon).
     const coupon = await this.resolveSessionCoupon(cartId, userId, subtotal, sessionId);

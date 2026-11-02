@@ -1,8 +1,43 @@
+import { createHmac } from "crypto";
 import { createAdminDbClient } from "@/lib/db/client";
 import { logServerError } from "@/lib/utils/error-handler";
 
+/**
+ * FIX ROUND 28 (M-8): OTP codes are stored ONLY as HMAC-SHA256 hashes
+ * — mirroring the COD OTP pattern (lib/services/fraud/cod-otp.service
+ * .ts) — in BOTH the database (`registration_otps.otp` now holds the
+ * hash, no new column needed) and the in-memory fallback store.
+ * Previously the raw 6-digit code sat in plaintext in both stores.
+ * Verify hashes the candidate and compares hashes.
+ *
+ * The verify-attempt limiter below (REG-78) is in-memory: it does not
+ * survive restarts and is not shared across serverless instances. A
+ * DB-persisted counter needs an `attempts` column on registration_otps
+ * — see the Round-28 DDL proposal; the in-memory limiter stays as
+ * defence-in-depth either way.
+ */
+function getOtpHashSecret(): string {
+  const secret =
+    process.env.EMAIL_OTP_HMAC_SECRET ||
+    process.env.COD_OTP_HMAC_SECRET ||
+    process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      "Email OTP hashing secret is not configured: set EMAIL_OTP_HMAC_SECRET (or COD_OTP_HMAC_SECRET / NEXTAUTH_SECRET)."
+    );
+  }
+  return secret;
+}
+
+function hashOtp(otp: string): string {
+  return createHmac("sha256", getOtpHashSecret())
+    .update(otp.trim())
+    .digest("hex");
+}
+
 interface MemoryOtpRecord {
   email: string;
+  /** HMAC-SHA256 hash of the code — never the raw code (Round 28, M-8). */
   otp: string;
   expires_at: number; // timestamp ms
   created_at: number; // timestamp ms
@@ -129,6 +164,8 @@ export const OtpStore = {
   async saveOtp(email: string, otp: string, expiresAt: Date): Promise<boolean> {
     const db = createAdminDbClient();
     const now = new Date();
+    // Round 28 (M-8): only the hash is ever stored, in either store.
+    const otpHash = hashOtp(otp);
 
     // Reset verify attempts + lockout: a fresh code starts a fresh window.
     verifyAttempts.delete(email);
@@ -137,7 +174,7 @@ export const OtpStore = {
     memoryStore.set(email, [
       {
         email,
-        otp,
+        otp: otpHash,
         expires_at: expiresAt.getTime(),
         created_at: now.getTime(),
       },
@@ -154,7 +191,7 @@ export const OtpStore = {
       const { error } = await db.from("registration_otps").insert([
         {
           email,
-          otp,
+          otp: otpHash,
           expires_at: expiresAt.toISOString(),
           created_at: now.toISOString(),
         },
@@ -189,6 +226,9 @@ export const OtpStore = {
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
     const attemptState = getVerifyAttemptState(email, nowMs);
+    // Round 28 (M-8): stored codes are HMAC hashes — hash the
+    // candidate and compare hash-to-hash everywhere below.
+    const otpHash = hashOtp(otp);
 
     // Locked out from an earlier burst: refuse before looking anything up.
     if (attemptState.locked) {
@@ -208,7 +248,7 @@ export const OtpStore = {
         .from("registration_otps")
         .select("id, email, otp, expires_at")
         .eq("email", email)
-        .eq("otp", otp)
+        .eq("otp", otpHash)
         .gte("expires_at", nowIso)
         .order("created_at", { ascending: false })
         .limit(1);
@@ -232,9 +272,9 @@ export const OtpStore = {
       return { success: true };
     }
 
-    // 2. Check memory store fallback
+    // 2. Check memory store fallback (records hold hashes — Round 28)
     const records = memoryStore.get(email) || [];
-    const matchedIdx = records.findIndex((r) => r.otp === otp);
+    const matchedIdx = records.findIndex((r) => r.otp === otpHash);
 
     if (matchedIdx !== -1) {
       const record = records[matchedIdx];
@@ -262,7 +302,7 @@ export const OtpStore = {
     }
 
     // Check if any expired record existed in memory
-    const expiredRecord = records.find((r) => r.otp === otp && nowMs > r.expires_at);
+    const expiredRecord = records.find((r) => r.otp === otpHash && nowMs > r.expires_at);
     if (expiredRecord) {
       return {
         success: false,

@@ -105,14 +105,19 @@ export async function dispatchOrderAction(
     // Phase 8: a 'created' draft with no consignment (left behind by a
     // failed submission) must not block a retry — only shipments that
     // actually reached a courier count as active.
+    // FIX ROUND 28 (B-1 class): shipments has no consignment_id column
+    // — the courier consignment id is stored as tracking_number. The
+    // old select/filter read a field that never exists, so a booked
+    // 'created' shipment did not count as active and a retry could
+    // double-book the courier.
     const { data: existingShipments } = await adminDb
       .from("shipments")
-      .select("id, status, consignment_id")
+      .select("id, status, tracking_number")
       .eq("order_id", orderId)
       .neq("status", "cancelled");
 
     const activeShipments = (existingShipments || []).filter(
-      (s: any) => s.status !== "created" || s.consignment_id
+      (s: any) => s.status !== "created" || s.tracking_number
     );
 
     if (activeShipments.length > 0) {

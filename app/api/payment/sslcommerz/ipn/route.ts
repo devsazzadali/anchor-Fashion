@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { SSLCommerzService } from "@/lib/services/payment/sslcommerz.service";
+import { recordGatewayTransaction } from "@/lib/payments/order-payment-record";
 import { CartService } from "@/lib/services/cart.service";
 import { CouponService } from "@/services/coupon.service";
 
@@ -206,18 +207,24 @@ export async function POST(req: NextRequest) {
       .eq("code", "sslcommerz")
       .maybeSingle();
 
-    // 5. Update Payment Transactions (Idempotent)
-    await db.from("payment_transactions").insert({
-      order_id: order.id,
-      session_id: paymentSession?.id || null,
-      provider_id: provider?.id || null,
-      user_id: order.customer_id || order.user_id || null,
-      amount: order.total_amount ?? order.grand_total,
+    // 5. Record the transaction on the real payments ledger
+    // (idempotent per gateway transaction id). FIX ROUND 28 (M-2): the
+    // old insert targeted the nonexistent payment_transactions table —
+    // after a fully validated payment the ledger row was silently
+    // dropped. recordGatewayTransaction logs a durable server error if
+    // the write ever fails instead of dropping silently.
+    await recordGatewayTransaction(db, {
+      orderId: order.id,
+      sessionId: paymentSession?.id || null,
+      providerId: provider?.id || null,
+      userId: order.customer_id || order.user_id || null,
+      amount: Number(order.total_amount ?? order.grand_total ?? 0),
+      method: "SSLCOMMERZ",
       currency: expectedCurrency,
-      status: "completed",
-      reference_number: tranId || order.order_number,
-      gateway_transaction_id: confirmedTrxId,
-      gateway_response: valRes,
+      status: "SUCCESS",
+      referenceNumber: tranId || order.order_number,
+      gatewayTransactionId: confirmedTrxId,
+      gatewayResponse: valRes,
     });
 
     if (paymentSession?.id) {
@@ -249,7 +256,7 @@ export async function POST(req: NextRequest) {
         order_id: order.id,
         status: "cancelled",
         notes: `Late IPN captured TrxID ${confirmedTrxId} for cancelled order. Marked for refund.`,
-        created_by: order.customer_id || order.user_id || null,
+        changed_by: order.customer_id || order.user_id || null,
       });
 
       return NextResponse.json({
@@ -284,7 +291,7 @@ export async function POST(req: NextRequest) {
       order_id: order.id,
       status: "confirmed",
       notes: `Paid successfully via SSLCommerz IPN (${valRes.card_type || "Cards/Mobile Banking"}). TrxID: ${confirmedTrxId}, ValID: ${valId}`,
-      created_by: order.customer_id || order.user_id || null,
+      changed_by: order.customer_id || order.user_id || null,
     });
 
     // Authoritative Admin Notification for captured payment via IPN

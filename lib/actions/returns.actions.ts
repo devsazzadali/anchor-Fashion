@@ -53,42 +53,13 @@ async function requireBranchAccess(returnId: string) {
     throw new Error("Unauthorized: Insufficient staff permissions.");
   }
 
-  if (user) {
-    const adminClient = createAdminDbClient();
-    const { data: profile } = await adminClient
-      .from("employee_profiles")
-      .select("branch_id, roles")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const normalizedRole = role.replace(/[\s_-]+/g, "").toUpperCase();
-    const isGlobalAdmin = ["SUPERADMIN", "ADMIN"].includes(normalizedRole);
-    // Only enforce branch filtering if user is not global admin and has a branch assigned
-    if (!isGlobalAdmin && profile?.branch_id) {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(returnId);
-      let query = adminClient.from("returns").select("id, order_id");
-      query = isUuid ? query.eq("id", returnId) : query.eq("return_number", returnId);
-      const { data: returnData } = await query.maybeSingle();
-
-      // REG-83: this used to read the branch from an orders(branch_id)
-      // embed on returns — an unsupported pair the DB builder silently
-      // drops — so orderBranch was ALWAYS undefined and the branch
-      // restriction never fired (fail-open). Resolve the order's branch
-      // with an explicit query instead.
-      let orderBranch: string | null = null;
-      if (returnData?.order_id) {
-        const { data: orderRow } = await adminClient
-          .from("orders")
-          .select("branch_id")
-          .eq("id", returnData.order_id)
-          .maybeSingle();
-        orderBranch = orderRow?.branch_id ?? null;
-      }
-      if (orderBranch && orderBranch !== profile.branch_id) {
-        throw new Error("Unauthorized: You can only access returns for your assigned branch.");
-      }
-    }
-  }
+  // FIX ROUND 28 (sweep): the branch-scoping block that stood here
+  // read branch_id/roles from an `employee_profiles` table that does
+  // not exist (and orders.branch_id, which also does not exist), so
+  // it could never fire. It is removed outright: Anchor is a SINGLE
+  // online store with no branches (owner decision, Phase 10), so
+  // there is no branch scope to enforce — the staff-role check above
+  // is the access gate for returns.
 
   return true;
 }
@@ -399,23 +370,14 @@ export async function fetchReturnsAction(
     const user = await getCurrentUser();
     let branchId: string | undefined;
 
-    if (user) {
-      const adminClient = createAdminDbClient();
-      const { data: profile } = await adminClient
-        .from("employee_profiles")
-        .select("branch_id, roles")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      const role = String(user.user_metadata?.role || user.app_metadata?.role || "").toUpperCase();
-      const isGlobalAdmin =
-        ["SUPERADMIN", "SUPER_ADMIN", "ADMIN"].includes(role) ||
-        profile?.roles?.some((r: string) => ["admin", "superadmin"].includes(String(r).toLowerCase()));
-
-      if (!isGlobalAdmin && profile?.branch_id) {
-        branchId = profile.branch_id;
-      }
-    }
+    // FIX ROUND 28 (sweep): this block read branch_id/roles from the
+    // phantom `employee_profiles` table, so branchId was always
+    // undefined and the admin determination effectively already rested
+    // on the metadata role alone. Anchor is a single online store with
+    // no branches (Phase 10) — branchId stays undefined (unscoped list
+    // for authorized staff, gated by verifyStaff/role checks in the
+    // service path) and the dead read is removed.
+    void branchId;
 
     const filters = { ...parse.data, branchId };
 

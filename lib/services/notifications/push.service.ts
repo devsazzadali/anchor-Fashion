@@ -33,17 +33,19 @@ export class PushService {
       throw new Error("Invalid subscription object");
     }
 
-    const { error } = await db.from("push_subscriptions").upsert(
+    // FIX ROUND 28 (sweep, M-4 class): push_subscriptions stores the
+    // keys in ONE `keys` JSON column — top-level p256dh/auth columns
+    // do not exist, so this upsert saved a keyless row (or nothing).
+    const { data: saved, error } = await db.from("push_subscriptions").upsert(
       {
         user_id: userId,
         endpoint: endpoint,
-        p256dh: keys.p256dh,
-        auth: keys.auth,
+        keys: { p256dh: keys.p256dh, auth: keys.auth },
       },
       { onConflict: "endpoint" }
     );
 
-    if (error) {
+    if (error || !saved || (Array.isArray(saved) && saved.length === 0)) {
       throw new Error("Failed to save push subscription");
     }
   }
@@ -78,8 +80,9 @@ export class PushService {
       const pushSubscription = {
         endpoint: sub.endpoint,
         keys: {
-          p256dh: sub.p256dh,
-          auth: sub.auth,
+          // Round 28: keys live in the `keys` JSON column.
+          p256dh: sub.keys?.p256dh,
+          auth: sub.keys?.auth,
         },
       };
 

@@ -268,19 +268,11 @@ export class AlphaSmsService {
         };
       }
 
-      // Fetch order addresses separately (resilient to missing foreign key relation in schema cache)
-      let addresses: any[] = [];
-      try {
-        const { data: addrList, error: addrErr } = await db
-          .from("order_addresses")
-          .select("*")
-          .eq("order_id", orderId);
-
-        if (!addrErr && addrList && addrList.length > 0) {
-          addresses = addrList;
-        }
-      } catch (addrErr) {
-      }
+      // FIX ROUND 28 (M-2): the order_addresses table does not exist in
+      // this schema — the fetch below always resolved empty. The
+      // address lives in the order's shipping_address JSON (extracted
+      // in step 4); `addresses` stays as an always-empty list so the
+      // downstream find() simply falls through to the JSON.
 
       // 2. Strict Confirmation Guard
       const currentStatus = (order.status || "").toLowerCase();
@@ -328,17 +320,14 @@ export class AlphaSmsService {
         }
       }
 
-      // 4. Extract Customer Name and Phone Number
-      const shippingAddr =
-        addresses.find((a) => (a.address_type || "").toUpperCase() === "SHIPPING") ||
-        addresses[0];
-
-      // Phase 8: storefront orders carry the address (incl. phone) in the
-      // order's shipping_address JSON — there are no order_addresses rows
-      // for them. The extraction previously never looked at the JSON, so
-      // EVERY online order's confirmation SMS aborted with "No phone
-      // number found". Fall back to the JSON address.
+      // 4. Extract Customer Name and Phone Number.
+      // The address lives in the order's shipping_address JSON (there
+      // are no order_addresses rows — see the Round-28 note above);
+      // shippingAddr is that JSON, normalized for the reads below.
       const shippingJson = ((order as any).shipping_address || {}) as any;
+      const shippingAddr = Object.keys(shippingJson).length
+        ? shippingJson
+        : null;
       let phone =
         shippingAddr?.phone ||
         (order as any).phone ||
@@ -667,9 +656,15 @@ export class AlphaSmsService {
   }
 
   /**
-   * Record SMS in database
-   * Dual-strategy: tries `sms_logs` table first; if schema cache reports table missing,
-   * falls back to `communication_logs` table so logs are never lost.
+   * Record SMS in database.
+   * FIX ROUND 28 (M-10): the audit trail lives in `communication_logs`
+   * (real table; the order linkage rides in metadata). The previous
+   * dual-strategy tried `sms_logs` first with columns that do not
+   * exist on it (order_id, phone, type, provider, request_id,
+   * error_message, updated_at — sms_logs has only id, recipient,
+   * message, status, response, created_at), so that insert was
+   * discarded whole on every call and only the fallback ever wrote.
+   * The phantom first leg is removed; this is now the single store.
    */
   static async recordSmsLog(entry: {
     order_id?: string | null;
@@ -683,38 +678,7 @@ export class AlphaSmsService {
     error_message?: string | null;
   }): Promise<{ id: string } | null> {
     const db = await createAdminDbClient();
-    const nowIso = new Date().toISOString();
 
-    // 1. Try public.sms_logs
-    try {
-      const { data, error } = await db
-        .from("sms_logs")
-        .insert({
-          order_id: entry.order_id || null,
-          phone: entry.phone,
-          message: entry.message,
-          type: entry.type,
-          status: entry.status,
-          provider: entry.provider,
-          request_id: entry.request_id || null,
-          response: entry.response || null,
-          error_message: entry.error_message || null,
-          created_at: nowIso,
-          updated_at: nowIso,
-        })
-        .select("id")
-        .maybeSingle();
-
-      if (!error && data) {
-        return data;
-      }
-
-      // If table doesn't exist, proceed to fallback
-    } catch {
-      // Ignored, proceed to fallback
-    }
-
-    // 2. Fallback: Save to existing communication_logs table
     try {
       const { data, error } = await db
         .from("communication_logs")
@@ -740,7 +704,15 @@ export class AlphaSmsService {
       if (!error && data) {
         return data;
       }
+      if (error) {
+        console.error(
+          `[sms-log] FAILED to record SMS log for order ${entry.order_id ?? "n/a"}: ${error.message}`
+        );
+      }
     } catch (commErr) {
+      console.error(
+        `[sms-log] EXCEPTION recording SMS log for order ${entry.order_id ?? "n/a"}: ${(commErr as Error)?.message || String(commErr)}`
+      );
     }
 
     return null;
@@ -773,24 +745,9 @@ export class AlphaSmsService {
   private static async checkPriorSentLog(orderId: string): Promise<any | null> {
     const db = await createAdminDbClient();
 
-    // Check sms_logs
-    try {
-      const { data } = await db
-        .from("sms_logs")
-        .select("*")
-        .eq("order_id", orderId)
-        .eq("type", "ORDER_CONFIRMATION")
-        .eq("status", "SENT")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (data) return data;
-    } catch {
-      // Ignored
-    }
-
-    // Check communication_logs
+    // FIX ROUND 28 (M-10): logs live in communication_logs (see
+    // recordSmsLog) — the old sms_logs leg filtered by phantom
+    // order_id/type columns and could only ever return nothing.
     try {
       const { data } = await db
         .from("communication_logs")
@@ -826,22 +783,9 @@ export class AlphaSmsService {
     const db = await createAdminDbClient();
     const logs: SmsLog[] = [];
 
-    // 1. Fetch from sms_logs
-    try {
-      const { data, error } = await db
-        .from("sms_logs")
-        .select("*")
-        .eq("order_id", orderId)
-        .order("created_at", { ascending: false });
-
-      if (!error && data && data.length > 0) {
-        return data as SmsLog[];
-      }
-    } catch {
-      // Fall through to communication_logs
-    }
-
-    // 2. Fetch from communication_logs fallback
+    // FIX ROUND 28 (M-10): single store — communication_logs (see
+    // recordSmsLog). The old sms_logs leg filtered by the phantom
+    // order_id column and could only ever return empty.
     try {
       const { data, error } = await db
         .from("communication_logs")

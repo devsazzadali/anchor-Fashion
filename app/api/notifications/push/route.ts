@@ -22,19 +22,22 @@ export async function POST(req: Request) {
       );
     }
 
-    const { error } = await db.from("push_subscriptions").upsert(
+    // FIX ROUND 28 (M-4): push_subscriptions real columns are
+    // (id, user_id, endpoint, keys, created_at) — the keys live in ONE
+    // JSON column. The old payload's top-level p256dh / auth /
+    // user_agent / last_used_at columns do not exist, so the builder
+    // discarded the whole upsert while this route still returned
+    // 201 "Subscription saved" (production table: 0 rows).
+    const { data: saved, error } = await db.from("push_subscriptions").upsert(
       {
         user_id: session.user.id,
         endpoint,
-        p256dh: keys.p256dh,
-        auth: keys.auth,
-        user_agent: userAgent || req.headers.get("user-agent"),
-        last_used_at: new Date().toISOString(),
+        keys: { p256dh: keys.p256dh, auth: keys.auth },
       },
       { onConflict: "endpoint" }
     );
 
-    if (error) {
+    if (error || !saved || (Array.isArray(saved) && saved.length === 0)) {
       return NextResponse.json(
         { message: "Internal Server Error" },
         { status: 500 }

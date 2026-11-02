@@ -48,7 +48,7 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   if (order.customer_id) {
     try {
       const { data: cProfile } = await adminDb
-        .from("customer_profiles")
+        .from("profiles")
         .select("first_name, last_name, email, phone")
         .eq("id", order.customer_id)
         .maybeSingle();

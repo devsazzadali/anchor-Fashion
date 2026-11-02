@@ -45,18 +45,23 @@ export async function GET(
     }
     const shipment = { ...shipmentRow, order: orderSummary };
 
-    // 2. Fetch existing tracking events
+    // 2. Fetch existing tracking events.
+    // FIX ROUND 28 (M-11): shipment_tracking_events has no created_at
+    // column — its time column is `timestamp`; ordering by created_at
+    // poisoned the read and events always came back [].
     const { data: events } = await adminDb
       .from("shipment_tracking_events")
       .select("*")
       .eq("shipment_id", shipmentId)
-      .order("created_at", { ascending: true });
+      .order("timestamp", { ascending: true });
 
-    // 3. Optional live sync from provider if consignment_id / tracking_number is present
+    // 3. Optional live sync from provider if a tracking number is present.
+    // (FIX ROUND 28: shipments has no consignment_id column — the
+    // courier's consignment id is stored as tracking_number.)
     const url = new URL(req.url);
     const sync = url.searchParams.get("sync") === "true";
 
-    if (sync && shipment.courier_provider_code && (shipment.consignment_id || shipment.tracking_number)) {
+    if (sync && shipment.courier_provider_code && shipment.tracking_number) {
       try {
         const { provider } = await CourierFactory.getProviderFromDatabase(
           shipment.courier_provider_code
@@ -64,7 +69,7 @@ export async function GET(
 
         if (provider.isConfigured()) {
           const liveTracking = await provider.getTracking(
-            shipment.consignment_id || shipment.tracking_number
+            shipment.tracking_number
           );
 
           if (liveTracking.currentStatusNormalized !== "unknown") {
@@ -89,7 +94,7 @@ export async function GET(
       data: {
         shipment,
         currentStatus: shipment.status,
-        trackingCode: shipment.tracking_number || shipment.consignment_id,
+        trackingCode: shipment.tracking_number,
         events: events || [],
       },
     });

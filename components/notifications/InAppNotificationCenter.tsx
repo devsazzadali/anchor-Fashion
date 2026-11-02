@@ -36,8 +36,15 @@ export function InAppNotificationCenter() {
       .limit(20);
 
     if (data) {
-      setNotifications(data);
-      setUnreadCount(data.filter((n: any) => !n.is_read).length);
+      // FIX ROUND 28 (m-3): notifications has no is_read column — read
+      // state is the `read_at` timestamp (null = unread). Derive the
+      // UI flag from it.
+      const mapped = data.map((n: any) => ({
+        ...n,
+        is_read: n.read_at != null,
+      }));
+      setNotifications(mapped);
+      setUnreadCount(mapped.filter((n: any) => !n.is_read).length);
     }
   };
 
@@ -58,8 +65,13 @@ export function InAppNotificationCenter() {
           filter: `user_id=eq.${session.user.id}`,
         },
         (payload: any) => {
+          // Round 28 (m-3): derive is_read from read_at (see fetch).
+          const incoming = {
+            ...(payload.new as Notification),
+            is_read: (payload.new as any)?.read_at != null,
+          };
           setNotifications((prev) =>
-            [payload.new as Notification, ...prev].slice(0, 20)
+            [incoming, ...prev].slice(0, 20)
           );
           setUnreadCount((prev) => prev + 1);
         }
@@ -68,7 +80,12 @@ export function InAppNotificationCenter() {
   };
 
   const markAsRead = async (id: string) => {
-    await db.from("notifications").update({ is_read: true }).eq("id", id);
+    // Round 28 (m-3): write the real read_at timestamp, not the
+    // phantom is_read column (the old update was silently discarded).
+    await db
+      .from("notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("id", id);
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
@@ -83,9 +100,9 @@ export function InAppNotificationCenter() {
 
     await db
       .from("notifications")
-      .update({ is_read: true })
+      .update({ read_at: new Date().toISOString() })
       .eq("user_id", session.user.id)
-      .eq("is_read", false);
+      .is("read_at", null);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
   };

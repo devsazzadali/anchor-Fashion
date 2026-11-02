@@ -9,7 +9,9 @@ interface Announcement {
   id: string;
   title: string;
   message: string;
-  type: string;
+  type?: string;
+  // FIX ROUND 28 (m-4): the column is `link` (link_url does not exist).
+  link?: string;
   link_url?: string;
 }
 
@@ -28,28 +30,17 @@ export function AnnouncementBar() {
   }, []);
 
   const fetchAnnouncements = async () => {
+    // FIX ROUND 28 (m-4): announcements has NO start_date / end_date
+    // columns (real columns: id, title, message, link, is_active,
+    // created_at) — both date-filtered queries below were poisoned and
+    // returned nothing, so the bar never showed. Active = is_active.
     const { data } = await db
       .from("announcements")
       .select("*")
       .eq("is_active", true)
-      .lte("start_date", new Date().toISOString())
-      .gte("end_date", new Date().toISOString());
+      .order("created_at", { ascending: false });
 
-    // Fallback for null dates (always active)
-    const { data: dataNoDates } = await db
-      .from("announcements")
-      .select("*")
-      .eq("is_active", true)
-      .is("start_date", null)
-      .is("end_date", null);
-
-    const allActive = [...(data || []), ...(dataNoDates || [])];
-    // Remove duplicates if any
-    const unique = Array.from(
-      new Map(allActive.map((item) => [item.id, item])).values()
-    );
-
-    setAnnouncements(unique);
+    setAnnouncements(data || []);
   };
 
   const handleDismiss = (id: string) => {
@@ -76,7 +67,7 @@ export function AnnouncementBar() {
       WARNING: "bg-yellow-500",
       SUCCESS: "bg-green-600",
       PROMOTION: "bg-purple-600",
-    }[announcement.type] || "bg-black";
+    }[announcement.type ?? ""] || "bg-black";
 
   const Content = () => (
     <>
@@ -90,8 +81,8 @@ export function AnnouncementBar() {
       className={`relative px-4 py-2 text-center text-sm text-white ${bgColor}`}
     >
       <div className="flex items-center justify-center">
-        {announcement.link_url ? (
-          <Link href={announcement.link_url} className="hover:underline">
+        {(announcement.link || announcement.link_url) ? (
+          <Link href={(announcement.link || announcement.link_url) as string} className="hover:underline">
             <Content />
           </Link>
         ) : (

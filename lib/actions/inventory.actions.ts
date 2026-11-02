@@ -189,9 +189,12 @@ export async function receivePurchase(
       }
     }
 
-    // Update PO status to DELIVERED
+    // Update PO status to DELIVERED.
+    // FIX ROUND 28 (M-2): the purchase-order table is `purchase_orders`
+    // — `procurement_orders` does not exist, so this status update was
+    // silently discarded and received POs never showed DELIVERED.
     await db
-      .from("procurement_orders")
+      .from("purchase_orders")
       .update({ status: "DELIVERED" })
       .eq("id", poId);
 

@@ -134,7 +134,7 @@ export async function getGroupMembersAction(groupId: string): Promise<{
       const customerIds = directRows.map((r: any) => r.customer_id).filter(Boolean);
       if (customerIds.length > 0) {
         const { data: profiles } = await db
-          .from("customer_profiles")
+          .from("profiles")
           .select("id, first_name, last_name, email, phone, created_at")
           .in("id", customerIds);
         members = profiles || [];
@@ -144,24 +144,18 @@ export async function getGroupMembersAction(groupId: string): Promise<{
     // 2. If it's a dynamic group and has no manually pinned members, dynamically populate matching customers
     if (group.is_dynamic && members.length === 0) {
       const name = (group.name || "").toUpperCase();
+      // FIX ROUND 28 (M-2, PROPOSAL): VIP / RISK segments are defined
+      // over the crm_customers table, which does NOT exist in this
+      // schema (Round-28 DDL proposal). Until it lands those segments
+      // are honestly EMPTY — they must not fall through to the generic
+      // "latest 10 profiles" fallback below, which fabricated members.
+      let crmSegmentUnavailable = false;
 
       if (name.includes("VIP")) {
-        // Query VIPs from crm_customers
-        const { data: crmMatches } = await db
-          .from("crm_customers")
-          .select("profile_id")
-          .or("is_vip.eq.true,health_score.gte.80")
-          .limit(50);
-
-        const profileIds = (crmMatches || []).map((m: any) => m.profile_id).filter(Boolean);
-        if (profileIds.length > 0) {
-          const { data: vipProfiles } = await db
-            .from("customer_profiles")
-            .select("id, first_name, last_name, email, phone, created_at")
-            .in("id", profileIds)
-            .limit(50);
-          members = vipProfiles || [];
-        }
+        crmSegmentUnavailable = true;
+        console.error(
+          "[crm-groups] VIP segment unavailable — crm_customers table missing (Round-28 DDL proposal)."
+        );
       } else if (name.includes("REPEAT") || name.includes("FREQUENT")) {
         // Customers with multiple orders
         const { data: orders } = await db.from("orders").select("customer_id");
@@ -172,7 +166,7 @@ export async function getGroupMembersAction(groupId: string): Promise<{
         const repeatIds = Object.keys(orderCounts).filter((id) => orderCounts[id] >= 2);
         if (repeatIds.length > 0) {
           const { data: repProfiles } = await db
-            .from("customer_profiles")
+            .from("profiles")
             .select("id, first_name, last_name, email, phone, created_at")
             .in("id", repeatIds)
             .limit(50);
@@ -188,7 +182,7 @@ export async function getGroupMembersAction(groupId: string): Promise<{
         const firstIds = Object.keys(orderCounts).filter((id) => orderCounts[id] === 1);
         if (firstIds.length > 0) {
           const { data: firstProfiles } = await db
-            .from("customer_profiles")
+            .from("profiles")
             .select("id, first_name, last_name, email, phone, created_at")
             .in("id", firstIds)
             .limit(50);
@@ -199,31 +193,23 @@ export async function getGroupMembersAction(groupId: string): Promise<{
         const { data: orders } = await db.from("orders").select("customer_id");
         const buyerIds = new Set(orders?.map((o: any) => o.customer_id).filter(Boolean));
         const { data: allProfiles } = await db
-          .from("customer_profiles")
+          .from("profiles")
           .select("id, first_name, last_name, email, phone, created_at")
           .limit(50);
         members = (allProfiles || []).filter((p: any) => !buyerIds.has(p.id));
       } else if (name.includes("RISK") || name.includes("INACTIVE")) {
-        const { data: crmMatches } = await db
-          .from("crm_customers")
-          .select("profile_id")
-          .or("customer_lifecycle_stage.eq.AT_RISK,health_score.lt.50")
-          .limit(50);
-        const profileIds = (crmMatches || []).map((m: any) => m.profile_id).filter(Boolean);
-        if (profileIds.length > 0) {
-          const { data: riskProfiles } = await db
-            .from("customer_profiles")
-            .select("id, first_name, last_name, email, phone, created_at")
-            .in("id", profileIds)
-            .limit(50);
-          members = riskProfiles || [];
-        }
+        crmSegmentUnavailable = true;
+        console.error(
+          "[crm-groups] RISK/INACTIVE segment unavailable — crm_customers table missing (Round-28 DDL proposal)."
+        );
       }
 
-      // If dynamic rules returned empty or no specific keyword, fallback to active customers
-      if (members.length === 0) {
+      // If dynamic rules returned empty or no specific keyword, fallback to active customers.
+      // CRM-backed segments (VIP/RISK) are excluded — empty is the
+      // honest state for them until the crm_customers DDL lands.
+      if (members.length === 0 && !crmSegmentUnavailable) {
         const { data: defaultProfiles } = await db
-          .from("customer_profiles")
+          .from("profiles")
           .select("id, first_name, last_name, email, phone, created_at")
           .order("created_at", { ascending: false })
           .limit(10);
@@ -270,7 +256,8 @@ export async function addMemberToGroupAction(
       .insert({
         segment_id: groupId,
         customer_id: customerId,
-        added_by: "ADMIN",
+        // FIX ROUND 28 (sweep): no added_by column on
+        // customer_segment_members — the key was silently dropped.
       });
 
     if (error) throw error;
@@ -317,7 +304,7 @@ export async function searchAvailableCustomersAction(
     const clean = query.trim().replace(/,/g, "");
 
     let q = db
-      .from("customer_profiles")
+      .from("profiles")
       .select("id, first_name, last_name, email, phone")
       .limit(10);
 

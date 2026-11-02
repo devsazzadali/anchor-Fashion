@@ -15,7 +15,7 @@ export class CRMRepository {
     const db = this.getAdminClient();
     try {
       const { data: customerProfiles } = await db
-        .from("customer_profiles")
+        .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
 
@@ -31,26 +31,23 @@ export class CRMRepository {
       }
     } catch {}
 
-    const { data, error } = await db
-      .from("crm_customers")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) throw new Error(error.message);
-    const withProfiles = await this.attachCustomerProfiles(db, data || []);
-    return withProfiles.map((c: any) => ({
-      ...c,
-      first_name: c.customer_profiles?.first_name || c.first_name,
-      last_name: c.customer_profiles?.last_name || c.last_name,
-      email: c.customer_profiles?.email || c.email,
-      phone: c.customer_profiles?.phone || c.phone,
-    })) as any;
+    // FIX ROUND 28 (M-2, PROPOSAL): the crm_customers fallback that
+    // stood here reads a table that does NOT exist in this schema
+    // (Round-28 DDL proposal) and could only ever resolve empty.
+    // Profiles is the real customer source (above); when it is empty
+    // there are honestly no customers to list.
+    return [];
   }
 
   async getCustomerById(id: string): Promise<CRMCustomer | null> {
     const db = this.getAdminClient();
+    // FIX ROUND 28 (M-2, PROPOSAL): was a crm_customers read (phantom
+    // table — always null, so CRM detail showed "not found" for real
+    // customers). Read the real profiles row and shape it like
+    // getCustomers() does; CRM metadata fields stay absent until the
+    // crm_customers DDL lands.
     const { data, error } = await db
-      .from("crm_customers")
+      .from("profiles")
       .select("*")
       .eq("id", id)
       .single();
@@ -60,7 +57,9 @@ export class CRMRepository {
       throw new Error(error.message);
     }
     if (!data) return null;
-    const [withProfile] = await this.attachCustomerProfiles(db, [data]);
+    const [withProfile] = await this.attachCustomerProfiles(db, [
+      { ...(data as any), profile_id: (data as any).id },
+    ]);
     return withProfile as CRMCustomer;
   }
 
@@ -81,7 +80,7 @@ export class CRMRepository {
     const profileById = new Map<string, any>();
     if (profileIds.length > 0) {
       const { data: profiles } = await db
-        .from("customer_profiles")
+        .from("profiles")
         .select("*")
         .in("id", profileIds);
       for (const p of profiles || []) {

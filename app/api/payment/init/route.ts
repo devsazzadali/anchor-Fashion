@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     const { data: order, error: orderError } = await db
       .from("orders")
       .select(
-        "id, order_number, grand_total, customer_id, payment_method, status"
+        "id, order_number, grand_total, customer_id, payment_method, status, shipping_address"
       )
       .eq("id", orderId)
       .single();
@@ -44,19 +44,22 @@ export async function GET(req: Request) {
       );
     }
 
-    // Fetch address details for accurate customer phone, name, email
-    const { data: shippingAddr } = await db
-      .from("order_addresses")
-      .select("*")
-      .eq("order_id", order.id)
-      .eq("address_type", "SHIPPING")
-      .maybeSingle();
-
-    const customerName = shippingAddr
-      ? `${shippingAddr.first_name || ""} ${shippingAddr.last_name || ""}`.trim()
-      : "Customer";
-    const customerPhone = shippingAddr?.phone || "";
-    const customerEmail = shippingAddr?.email || "";
+    // Customer name/phone/email for the gateway.
+    // FIX ROUND 28 (M-2): the order_addresses table does not exist —
+    // the address lives in the order's shipping_address JSON. The old
+    // read always resolved null, so gateways got "Customer" / "" / "".
+    const shippingAddr = ((order as any).shipping_address || {}) as any;
+    const customerName =
+      (
+        [shippingAddr.first_name, shippingAddr.last_name]
+          .filter(Boolean)
+          .join(" ") ||
+        shippingAddr.recipient_name ||
+        shippingAddr.name ||
+        ""
+      ).trim() || "Customer";
+    const customerPhone = shippingAddr.phone || shippingAddr.phone_number || "";
+    const customerEmail = shippingAddr.email || "";
     const totalAmount = Number(order.grand_total) || 0;
 
     // 2. Only process if the order is in PENDING_PAYMENT state

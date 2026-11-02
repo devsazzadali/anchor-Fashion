@@ -129,9 +129,12 @@ export class OrderService {
       try {
         const db = dbClient || (await import("@/lib/db/client").then(m => m.createDbClient()));
         
-        // 1. Fetch from customer_profiles (contains id, first_name, last_name, email, phone)
+        // 1. Fetch from profiles (FIX ROUND 28, M-2: the
+        // customer_profiles table does not exist — profiles is the
+        // real customer table; the Prisma read below remains the
+        // canonical second source.)
         const { data: cProfile } = await db
-          .from("customer_profiles")
+          .from("profiles")
           .select("id, first_name, last_name, email, phone")
           .eq("id", order.customer_id)
           .maybeSingle();
@@ -166,12 +169,12 @@ export class OrderService {
           profile = null;
         }
 
-        // 3. Fetch tier from crm_customer_profiles
-        const { data: crmProfile } = await db
-          .from("crm_customer_profiles")
-          .select("customer_tier")
-          .eq("profile_id", order.customer_id)
-          .maybeSingle();
+        // 3. Customer tier.
+        // FIX ROUND 28 (sweep): this read a `crm_customer_profiles`
+        // table that does not exist, so the tier was always the
+        // "Standard" fallback at the use site below. Tier data has no
+        // real home until the crm_customers DDL (Round-28 proposal)
+        // lands — the use site now states "Standard" directly.
 
         // 4. If email is still missing, try auth admin client
         let customerEmail = cProfile?.email || null;
@@ -212,50 +215,23 @@ export class OrderService {
             full_name: fullName,
             phone: phone,
             email: customerEmail,
-            tier: crmProfile?.customer_tier || "Standard",
+            // Tier: "Standard" until the crm_customers DDL lands
+            // (see the Round-28 note in step 3 above).
+            tier: "Standard",
           };
         }
       } catch (err) {
       }
     }
 
-    // Fetch shipping & billing addresses
+    // Fetch shipping & billing addresses.
+    // FIX ROUND 28 (M-2): the order_addresses and addresses tables do
+    // not exist in this schema (and orders has no shipping_address_id /
+    // billing_address_id columns) — those two reads always resolved
+    // empty and are removed. The address JSON persisted on the order
+    // row (step 3 below) is the real source.
     let shippingAddress = null;
     let billingAddress = null;
-    try {
-      const db = dbClient || (await import("@/lib/db/client").then(m => m.createDbClient()));
-      
-      // 1. Try order_addresses
-      const { data: orderAddrs } = await db
-        .from("order_addresses")
-        .select("*")
-        .eq("order_id", id);
-
-      if (orderAddrs && orderAddrs.length > 0) {
-        shippingAddress = orderAddrs.find((a: any) => a.address_type === "SHIPPING") || orderAddrs[0];
-        billingAddress = orderAddrs.find((a: any) => a.address_type === "BILLING") || shippingAddress;
-      }
-
-      // 2. Fallback to addresses table
-      if (!shippingAddress && order.shipping_address_id) {
-        const { data: addr } = await db
-          .from("addresses")
-          .select("*")
-          .eq("id", order.shipping_address_id)
-          .maybeSingle();
-        if (addr) shippingAddress = addr;
-      }
-
-      if (!billingAddress && order.billing_address_id) {
-        const { data: addr } = await db
-          .from("addresses")
-          .select("*")
-          .eq("id", order.billing_address_id)
-          .maybeSingle();
-        if (addr) billingAddress = addr;
-      }
-    } catch (err) {
-    }
 
     // 3. Fallback to the address JSON persisted on the order itself.
     // Prisma checkout orders store the shipping/billing address as JSON on
@@ -287,18 +263,26 @@ export class OrderService {
         shippingAddress;
     }
 
-    // Fetch manual payment transaction if available
+    // Fetch manual payment transaction if available.
+    // FIX ROUND 28 (M-2): reads the real `payments` ledger (the phantom
+    // payment_transactions table meant this was always null) and maps
+    // the row to the legacy transaction shape the admin detail renders.
     let manualPayment = null;
     try {
       const db = dbClient || (await import("@/lib/db/client").then(m => m.createDbClient()));
       const { data: tx } = await db
-        .from("payment_transactions")
+        .from("payments")
         .select("*")
         .eq("order_id", id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      manualPayment = tx;
+      if (tx) {
+        const { paymentRowToLegacyTransaction } = await import(
+          "@/lib/payments/order-payment-record"
+        );
+        manualPayment = paymentRowToLegacyTransaction(tx);
+      }
     } catch (err) {
     }
 

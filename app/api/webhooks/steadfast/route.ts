@@ -77,61 +77,79 @@ export async function POST(req: Request) {
       );
     }
 
-    const eventId = `steadfast_${targetCode}_${parsed.status}_${Date.now()}`;
-
-    // 3. Log webhook event idempotently
+    // 3. Log webhook event. FIX ROUND 28 (B-1): courier_webhook_events
+    // has ONLY (id, courier, event_type, payload, created_at) — the old
+    // insert carried courier_code/event_id/processed/processed_at, none
+    // of which exist, so the builder discarded the whole row. (True
+    // idempotency needs an event_id column — see the Round-28 DDL
+    // proposal; until then events are logged, not deduplicated.)
     try {
       await adminDb.from("courier_webhook_events").insert({
-        courier_code: "steadfast",
+        courier: "steadfast",
         event_type: String(parsed.status || "STATUS_UPDATE"),
-        event_id: eventId,
         payload: rawPayload as any,
-        processed: true,
-        processed_at: new Date().toISOString(),
       });
     } catch (e) {
     }
 
     // 4. Find matching shipment — bound equality lookups, no filter-string
-    // interpolation (try the consignment id, then the tracking number).
+    // interpolation (try the tracking number, then the shipment number).
+    // FIX ROUND 28 (B-1): shipments has NO consignment_id column — the
+    // old `.eq("consignment_id", …)` poisoned the query (unknown column
+    // → empty success), so the shipment was never found and the handler
+    // returned 200 having updated nothing. The courier's consignment id
+    // is what booking stores as the shipment's tracking_number; the
+    // consignment_id storage column is an owner schema decision
+    // (Round-28 DDL proposal).
     let shipment = null;
     {
-      const byConsignment = await adminDb
+      const byTracking = await adminDb
         .from("shipments")
         .select("id, status, order_id")
-        .eq("consignment_id", targetCode)
+        .eq("tracking_number", targetCode)
         .maybeSingle();
-      shipment = byConsignment.data;
+      shipment = byTracking.data;
       if (!shipment) {
-        const byTracking = await adminDb
+        const byNumber = await adminDb
           .from("shipments")
           .select("id, status, order_id")
-          .eq("tracking_number", targetCode)
+          .eq("shipment_number", targetCode)
           .maybeSingle();
-        shipment = byTracking.data;
+        shipment = byNumber.data;
       }
     }
 
     if (shipment) {
-      // 5. Update shipment status if provided
+      // 5. Update shipment status if provided.
+      // FIX ROUND 28 (B-1): provider_status is not a shipments column —
+      // its presence made the builder drop the ENTIRE update (including
+      // status). Only real columns are written now.
       if (parsed.status && parsed.status !== "unknown") {
+        const shipmentUpdate: Record<string, any> = {
+          status: parsed.status,
+          updated_at: new Date().toISOString(),
+        };
+        if (parsed.status === "delivered") {
+          shipmentUpdate.delivered_at = new Date().toISOString();
+        }
         await adminDb
           .from("shipments")
-          .update({
-            status: parsed.status,
-            provider_status: parsed.status,
-            updated_at: new Date().toISOString(),
-          })
+          .update(shipmentUpdate)
           .eq("id", shipment.id);
 
-        // 6. Record tracking event
+        // 6. Record tracking event — real shipment_tracking_events
+        // columns are (id, shipment_id, status, timestamp, location,
+        // notes); the old insert's tracking_number / status_description
+        // / provider_raw / created_at columns do not exist and the row
+        // was discarded whole.
         await adminDb.from("shipment_tracking_events").insert({
           shipment_id: shipment.id,
-          tracking_number: targetCode,
           status: parsed.status,
-          status_description: parsed.message || `Status updated via Steadfast webhook: ${parsed.status}`,
-          provider_raw: rawPayload as any,
-          created_at: parsed.eventTime || new Date().toISOString(),
+          timestamp: parsed.eventTime || new Date().toISOString(),
+          location: null,
+          notes:
+            parsed.message ||
+            `Status updated via Steadfast webhook: ${parsed.status}`,
         });
 
         // 7. Update order fulfillment status if delivered

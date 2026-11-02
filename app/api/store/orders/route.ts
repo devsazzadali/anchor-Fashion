@@ -6,7 +6,7 @@ import { InventoryService } from '@/services/inventory.service';
 import { OrderRepository } from '@/lib/repositories/order.repository';
 import { prisma } from '@/lib/prisma';
 import { lineVatAmount, roundMoney } from '@/lib/utils/vat';
-import { resolveShippingCharge } from '@/lib/services/shipping/zone-resolution.service';
+import { resolveShippingCharge, applyFreeShippingThreshold } from '@/lib/services/shipping/zone-resolution.service';
 import { CodRiskService } from '@/lib/services/fraud/cod-risk.service';
 import { CodOtpService } from '@/lib/services/fraud/cod-otp.service';
 
@@ -240,8 +240,14 @@ export async function POST(request: Request) {
     // covers the customer's city/district sets the charge; every other
     // address falls to the default zone. (This replaces the hardcoded
     // Dhaka ৳100 / elsewhere ৳150 ternary.)
-    const { zone: deliveryZone, charge: shippingFee } =
+    // FIX ROUND 28 (M-7): the free-shipping threshold now applies here
+    // too, through the same shared helper the cart/session paths use —
+    // a ≥৳999 (configured threshold) guest order ships free, as
+    // promised. shippingFee feeds totalAmount AND the persisted
+    // shipping_fee below, so both stay consistent.
+    const { zone: deliveryZone, charge: zoneCharge } =
       await resolveShippingCharge({ district: city, city });
+    const shippingFee = await applyFreeShippingThreshold(subtotal, zoneCharge);
     const totalAmount = roundMoney(subtotal + vatAmount + shippingFee);
 
     const nameParts = (customer_name || '').trim().split(' ');

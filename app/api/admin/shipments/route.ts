@@ -139,13 +139,17 @@ export async function POST(req: Request) {
       throw new Error(`Failed to persist shipment in database: ${insertError.message}`);
     }
 
-    // 8. Create initial tracking event
+    // 8. Create initial tracking event.
+    // FIX ROUND 28 (sweep, B-1 class): shipment_tracking_events real
+    // columns are (shipment_id, status, timestamp, location, notes) —
+    // tracking_number / status_description / provider_raw do not
+    // exist and were silently dropped, leaving a bare status row.
     await adminDb.from("shipment_tracking_events").insert({
       shipment_id: newShipment.id,
-      tracking_number: shipmentResult.trackingCode,
       status: "created",
-      status_description: "Consignment created with courier partner",
-      provider_raw: (shipmentResult.rawResponse as any) || {},
+      timestamp: new Date().toISOString(),
+      location: null,
+      notes: "Consignment created with courier partner",
     });
 
     // 9. Update order status if OMS requires it

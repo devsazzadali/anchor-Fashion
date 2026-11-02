@@ -325,7 +325,7 @@ export default function ShipmentDetailPage({
                 size="sm"
                 variant="outline"
                 onClick={handleGenerateLabel}
-                disabled={!shipment.consignment_id || generateLabel.isPending}
+                disabled={!shipment.tracking_number || generateLabel.isPending}
                 className="flex items-center gap-1"
               >
                 <Printer className="h-4 w-4" /> Print Label

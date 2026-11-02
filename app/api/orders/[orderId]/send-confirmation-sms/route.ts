@@ -56,16 +56,24 @@ export async function POST(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const role = (user.app_metadata?.role || user.user_metadata?.role || "").toLowerCase();
+    // FIX ROUND 28 (m-8): staff status comes from the canonical
+    // profiles-table resolver (lib/auth/server::resolveUserRole), NOT
+    // from auth metadata — user_metadata can be user-editable, which
+    // made this gate escalate-able, and the old role names
+    // ("ops_manager", "warehouse_staff") are not roles-table names.
+    const { resolveUserRole } = await import("@/lib/auth/server");
+    const role = (await resolveUserRole(user as any)).toUpperCase();
     const isStaffOrAdmin = [
-      "admin",
-      "superadmin",
-      "super_admin",
-      "manager",
-      "ops_manager",
-      "inventory_manager",
-      "staff",
-      "warehouse_staff",
+      "SUPERADMIN",
+      "SUPER_ADMIN",
+      "ADMIN",
+      "MANAGER",
+      "WAREHOUSE_MANAGER",
+      "MARKETING_MANAGER",
+      "FINANCE_MANAGER",
+      "STAFF",
+      "SUPPORT",
+      "OPERATIONS",
     ].includes(role);
     const isOwner = order.customer_id === user.id || order.created_by === user.id;
 

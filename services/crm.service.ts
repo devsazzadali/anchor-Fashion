@@ -174,7 +174,7 @@ export class CRMService {
 
       // Check if customer profile already exists
       const { data: existingProfile } = await db
-        .from("customer_profiles")
+        .from("profiles")
         .select("id")
         .ilike("email", cleanEmail)
         .maybeSingle();
@@ -216,7 +216,7 @@ export class CRMService {
         }
 
         // 2. Upsert customer_profiles
-        await db.from("customer_profiles").upsert(
+        await db.from("profiles").upsert(
           {
             id: authUserId,
             first_name: firstName,
@@ -228,7 +228,8 @@ export class CRMService {
           { onConflict: "id" }
         );
 
-        // 3. Upsert profiles
+        // 3. Upsert profiles (FIX ROUND 28: profiles has no `role`
+        // column — role lives in role_id; the phantom key is dropped.)
         try {
           await db.from("profiles").upsert(
             {
@@ -237,24 +238,21 @@ export class CRMService {
               last_name: lastName,
               email: cleanEmail,
               phone: phone,
-              role: "customer",
               is_active: true,
             },
             { onConflict: "id" }
           );
         } catch {}
 
-        // 4. Upsert crm_customers
-        await db.from("crm_customers").upsert(
-          {
-            profile_id: authUserId,
-            customer_lifecycle_stage: "FIRST_TIME_BUYER",
-            is_vip: false,
-            health_score: 80,
-            total_support_tickets: 0,
-            last_interaction_at: new Date().toISOString(),
-          },
-          { onConflict: "profile_id" }
+        // 4. CRM customer metadata.
+        // FIX ROUND 28 (M-2, PROPOSAL): the crm_customers table does
+        // NOT exist in this schema — the upsert that stood here was
+        // silently discarded by the row builder on every call. The
+        // table is specified in the Round-28 DDL proposal; until that
+        // DDL lands, CRM metadata for this customer is NOT persisted
+        // and this is logged loudly instead of faked.
+        console.error(
+          `[crm] crm_customers table missing — CRM metadata NOT persisted for profile ${authUserId} (lifecycle FIRST_TIME_BUYER). See Round-28 DDL proposal.`
         );
 
         targetProfileId = authUserId;

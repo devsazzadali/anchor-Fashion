@@ -281,7 +281,7 @@ export class MarketingService {
     try {
       // 1. Fetch from customer_profiles
       const { data: customers } = await db
-        .from("customer_profiles")
+        .from("profiles")
         .select("id, email, first_name, last_name")
         .not("email", "is", null)
         .limit(200);

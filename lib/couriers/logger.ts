@@ -46,17 +46,27 @@ export async function logCourierApiCall(entry: CourierApiLogEntry): Promise<void
     const sanitizedPayload = sanitizeLogData(entry.payload);
     const sanitizedResponse = sanitizeLogData(entry.responseData);
 
+    // FIX ROUND 28 (sweep): courier_api_logs real columns are
+    // (courier, endpoint, request, response, status_code) — the old
+    // payload's courier_code / method / success / response_time_ms /
+    // request_id / error_message / payload / response_data keys do
+    // not exist, so every log row landed nearly empty. The detail now
+    // rides inside the request/response JSON columns.
     const { error } = await db.from("courier_api_logs").insert({
-      courier_code: entry.courierCode,
-      method: entry.method,
+      courier: entry.courierCode,
       endpoint: entry.endpoint,
       status_code: entry.statusCode,
-      success: entry.success,
-      response_time_ms: entry.responseTimeMs,
-      request_id: entry.requestId || null,
-      error_message: entry.errorMessage || null,
-      payload: sanitizedPayload as any,
-      response_data: sanitizedResponse as any,
+      request: {
+        method: entry.method,
+        request_id: entry.requestId || null,
+        response_time_ms: entry.responseTimeMs,
+        success: entry.success,
+        payload: sanitizedPayload as any,
+      },
+      response: {
+        data: sanitizedResponse as any,
+        error_message: entry.errorMessage || null,
+      },
     });
 
     if (error) {

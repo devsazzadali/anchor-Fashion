@@ -60,8 +60,14 @@ const EMBEDDED_SELECT_SUPPORT: Record<string, ReadonlySet<string>> = {
   customer_profiles: new Set(["roles"]),
   orders: new Set(["order_items", "order_status_history"]),
   customer_orders: new Set(["order_items", "order_status_history"]),
-  products: new Set(["variants", "product_media"]),
-  store_products: new Set(["variants", "product_media"]),
+  products: new Set(["variants", "product_media", "categories"]),
+  store_products: new Set(["variants", "product_media", "categories"]),
+  // FIX ROUND 28 (M-1): payment_sessions → orders. The bKash/SSLCommerz
+  // callbacks' primary lookup `payment_sessions.select("*, orders(*)")`
+  // silently received rows WITHOUT the order because this pair was
+  // unsupported, so only fallback keys could ever find the order. The
+  // attach branch below resolves the order explicitly via order_id.
+  payment_sessions: new Set(["orders"]),
 };
 
 /** Splits a select list on top-level commas (paren-depth aware). */
@@ -900,6 +906,38 @@ export class DbQueryBuilder implements PromiseLike<any> {
         }
       }
 
+      // FIX ROUND 28 (M-1): payment_sessions → orders embed. PostgREST
+      // returns a single object for a many-to-one embed, so row.orders
+      // is the order row (or null), resolved via the session's order_id.
+      if (
+        this.tableName === "payment_sessions" &&
+        this.selectCols.includes("orders")
+      ) {
+        const orderIds = [
+          ...new Set(rows.map((r) => r.order_id).filter(Boolean)),
+        ];
+        if (orderIds.length > 0) {
+          const orders = await prisma.order.findMany({
+            where: { id: { in: orderIds } },
+          });
+          const orderMeta = DB_TABLES["orders"];
+          const orderMap = new Map<string, any>();
+          for (const o of orders as any[]) {
+            const snake: Record<string, any> = {};
+            for (const col of Object.keys(orderMeta.fields)) {
+              const f = orderMeta.fields[col].field;
+              if (f in o) snake[col] = serializePlain(o[f]);
+            }
+            orderMap.set(snake.id, snake);
+          }
+          for (const row of rows) {
+            row.orders = row.order_id
+              ? orderMap.get(row.order_id) || null
+              : null;
+          }
+        }
+      }
+
       if (
         (this.tableName === "products" || this.tableName === "store_products") &&
         (this.selectCols.includes("variants") ||
@@ -942,6 +980,37 @@ export class DbQueryBuilder implements PromiseLike<any> {
               }
               for (const row of rows) {
                 row.product_media = mediaMap.get(row.id) || [];
+              }
+            } catch {}
+          }
+          // FIX ROUND 28 (m-12): categories embed — the gate previously
+          // let `categories(...)` selects through with NO attach branch,
+          // so consumers (e.g. analytics) received products with no
+          // category at all. Many-to-one via category_id → single object.
+          if (this.selectCols.includes("categories")) {
+            try {
+              const categoryIds = [
+                ...new Set(rows.map((r) => r.category_id).filter(Boolean)),
+              ];
+              if (categoryIds.length > 0) {
+                const cats = (await (prisma as any).category.findMany({
+                  where: { id: { in: categoryIds } },
+                })) as any[];
+                const catMeta = DB_TABLES["categories"];
+                const catMap = new Map<string, any>();
+                for (const c of cats) {
+                  const snake: Record<string, any> = {};
+                  for (const col of Object.keys(catMeta.fields)) {
+                    const f = catMeta.fields[col].field;
+                    if (f in c) snake[col] = serializePlain(c[f]);
+                  }
+                  catMap.set(snake.id, snake);
+                }
+                for (const row of rows) {
+                  row.categories = row.category_id
+                    ? catMap.get(row.category_id) || null
+                    : null;
+                }
               }
             } catch {}
           }

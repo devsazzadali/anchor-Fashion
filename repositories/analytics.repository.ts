@@ -311,7 +311,7 @@ export class AnalyticsRepository {
     // builder — the builder silently drops the embedded `categories(name)`
     // select, so every product arrived without its category and the
     // breakdown below bucketed ALL sales under a literal fallback name.
-    const [itemsRes, products, addressesRes] = await Promise.all([
+    const [itemsRes, products, orderRowsRes] = await Promise.all([
       db
         .from("order_items")
         .select("id, order_id, product_id, product_name, quantity, line_total"),
@@ -323,10 +323,24 @@ export class AnalyticsRepository {
           category: { select: { name: true } },
         },
       }),
-      db
-        .from("order_addresses")
-        .select("order_id, first_name, last_name, city, address_type"),
+      // FIX ROUND 28 (M-2): order_addresses does not exist — customer
+      // names/cities for this report come from the shipping_address
+      // JSON persisted on each order, synthesized into the address-row
+      // shape the aggregation below consumes.
+      db.from("orders").select("id, shipping_address"),
     ]);
+    const addressesRes = {
+      data: (orderRowsRes.data || []).map((o: any) => {
+        const sa = (o.shipping_address || {}) as any;
+        return {
+          order_id: o.id,
+          first_name: sa.first_name || null,
+          last_name: sa.last_name || null,
+          city: sa.city || null,
+          address_type: "SHIPPING",
+        };
+      }),
+    };
 
     // Same row shape the aggregation below already consumes.
     const productRows = products.map((p) => ({
@@ -521,7 +535,7 @@ export class AnalyticsRepository {
     const db = await createAdminDbClient();
 
     let customersQuery = db
-      .from("customer_profiles")
+      .from("profiles")
       .select("id, created_at");
     if (dateRange) {
       customersQuery = customersQuery
@@ -717,15 +731,19 @@ export class AnalyticsRepository {
     }
     const { data: coupons } = await couponsQuery;
 
-    const { data: customers } = await db
-      .from("customer_profiles")
-      .select("accepts_marketing");
+    // FIX ROUND 28 (M-2/m-12): profiles has no accepts_marketing
+    // column (and customer_profiles does not exist) — the newsletter
+    // subscriber count comes from the real newsletter_subscribers
+    // table (active subscriptions).
+    const { data: subscribers } = await db
+      .from("newsletter_subscribers")
+      .select("id")
+      .eq("is_active", true);
 
     const totalDiscountGiven =
       coupons?.reduce((acc: number, c: any) => acc + (c.discount_applied || 0), 0) || 0;
 
-    const newsletterSubscribers =
-      customers?.filter((c: any) => c.accepts_marketing).length || 0;
+    const newsletterSubscribers = subscribers?.length || 0;
 
     const couponUsageStats: Record<string, number> = {};
     coupons?.forEach((c: any) => {

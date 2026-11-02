@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { BKashService } from "@/lib/services/payment/bkash.service";
+import { recordGatewayTransaction } from "@/lib/payments/order-payment-record";
 import { CartService } from "@/lib/services/cart.service";
 import { CouponService } from "@/services/coupon.service";
 import { InventoryService } from "@/services/inventory.service";
@@ -136,16 +137,20 @@ async function handleCallback(req: NextRequest) {
         .eq("id", paymentSession.id);
     }
 
-    // Record failed transaction log
-    await db.from("payment_transactions").insert({
-      order_id: order.id,
-      session_id: paymentSession?.id || null,
-      provider_id: paymentSession?.provider_id || null,
-      amount: order.total_amount ?? order.grand_total,
+    // Record failed transaction log. FIX ROUND 28 (M-2): the
+    // payment_transactions table does not exist — this insert was
+    // silently discarded. The record now lands on the real `payments`
+    // ledger via the shared helper.
+    await recordGatewayTransaction(db, {
+      orderId: order.id,
+      sessionId: paymentSession?.id || null,
+      providerId: paymentSession?.provider_id || null,
+      amount: Number(order.total_amount ?? order.grand_total ?? 0),
+      method: "BKASH",
       currency: "BDT",
-      status: "failed",
-      error_code: `BKASH_${status.toUpperCase()}`,
-      error_message: `Customer ${status}ed payment at gateway`,
+      status: "FAILED",
+      errorCode: `BKASH_${status.toUpperCase()}`,
+      errorMessage: `Customer ${status}ed payment at gateway`,
     });
 
     return NextResponse.redirect(
@@ -217,18 +222,22 @@ async function handleCallback(req: NextRequest) {
         .eq("code", "bkash")
         .maybeSingle();
 
-      // 5. Update Payment Transactions (Idempotent insert/upsert)
-      await db.from("payment_transactions").insert({
-        order_id: order.id,
-        session_id: paymentSession?.id || null,
-        provider_id: provider?.id || null,
-        user_id: order.customer_id || order.user_id || null,
-        amount: order.total_amount,
+      // 5. Record the transaction on the real payments ledger
+      // (idempotent per gateway transaction id). FIX ROUND 28 (M-2):
+      // the old insert targeted the nonexistent payment_transactions
+      // table and was silently discarded.
+      await recordGatewayTransaction(db, {
+        orderId: order.id,
+        sessionId: paymentSession?.id || null,
+        providerId: provider?.id || null,
+        userId: order.customer_id || order.user_id || null,
+        amount: Number(order.total_amount ?? 0),
+        method: "BKASH",
         currency: "BDT",
-        status: "completed",
-        reference_number: order.order_number,
-        gateway_transaction_id: trxID,
-        gateway_response: executeRes,
+        status: "SUCCESS",
+        referenceNumber: order.order_number,
+        gatewayTransactionId: trxID,
+        gatewayResponse: executeRes,
       });
 
       // Update payment session to completed
@@ -253,7 +262,7 @@ async function handleCallback(req: NextRequest) {
           order_id: order.id,
           status: "cancelled",
           notes: `Late payment callback captured TrxID ${trxID} for cancelled order. Marked for refund.`,
-          created_by: order.customer_id || order.user_id || null,
+          changed_by: order.customer_id || order.user_id || null,
         });
 
         return NextResponse.redirect(
@@ -285,7 +294,7 @@ async function handleCallback(req: NextRequest) {
         order_id: order.id,
         status: "confirmed",
         notes: `Paid successfully via bKash. TrxID: ${trxID}`,
-        created_by: order.customer_id || order.user_id || null,
+        changed_by: order.customer_id || order.user_id || null,
       });
 
       // Authoritative Admin Notification for captured bKash payment
