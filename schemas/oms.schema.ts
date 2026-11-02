@@ -30,6 +30,10 @@ export const updateOrderStatusSchema = z.object({
   order_id: z.string().uuid(),
   new_status: orderStatusSchema,
   reason: z.string().optional(),
+  // FIX ROUND 29 (D8): free-text note accompanying a cancellation
+  // reason (required by the UI when the reason is "Other"), stored
+  // with the reason in the order's status history.
+  note: z.string().max(500).optional(),
 });
 
 export const addOrderNoteSchema = z.object({

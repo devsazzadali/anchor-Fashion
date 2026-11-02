@@ -67,7 +67,10 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
       validatedData.order_id,
       validatedData.new_status,
       userId,
-      role
+      role,
+      // FIX ROUND 29 (D8): thread the cancellation reason/note through
+      // so an admin cancel records it exactly like a customer cancel.
+      { reason: validatedData.reason, note: validatedData.note }
     );
 
     // REG-27: audit the status change (actor = the acting user).

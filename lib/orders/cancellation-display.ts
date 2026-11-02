@@ -30,6 +30,22 @@ export interface CancellationDisplay {
   cancelledAt: string | null;
 }
 
+/**
+ * The cancellation reason list, shared by the customer cancel dialog
+ * and the admin cancel dialog (FIX ROUND 29, D8) so both sides offer —
+ * and store — exactly the same reasons.
+ */
+export const CANCELLATION_REASONS = [
+  "Changed my mind",
+  "Ordered by mistake",
+  "Found a better price",
+  "Wrong size/item selected",
+  "Delivery taking too long",
+  "Payment issue",
+  "Duplicate order",
+  "Other",
+] as const;
+
 interface CancellationHistoryRow {
   status?: string | null;
   new_status?: string | null;

@@ -24,22 +24,12 @@ import {
 import { XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cancelCustomerOrderAction } from "@/app/actions/oms/order.actions";
+import { CANCELLATION_REASONS } from "@/lib/orders/cancellation-display";
 
 interface CancelOrderDialogProps {
   orderId: string;
   orderNumber: string;
 }
-
-const CANCELLATION_REASONS = [
-  "Changed my mind",
-  "Ordered by mistake",
-  "Found a better price",
-  "Wrong size/item selected",
-  "Delivery taking too long",
-  "Payment issue",
-  "Duplicate order",
-  "Other",
-];
 
 export function CancelOrderDialog({ orderId, orderNumber }: CancelOrderDialogProps) {
   const [open, setOpen] = useState(false);

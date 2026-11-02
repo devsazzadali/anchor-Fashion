@@ -307,7 +307,9 @@ export class OrderRepository {
     id: string,
     status: OrderStatus,
     updatedBy?: string,
-    _?: any
+    // FIX ROUND 29 (D8): cancellation reason/note from the admin
+    // dialog. Previously this 4th parameter existed but was ignored.
+    opts?: { reason?: string; note?: string }
   ): Promise<Order> {
     const isUserUuid =
       updatedBy &&
@@ -364,6 +366,25 @@ export class OrderRepository {
       }
     }
 
+    // FIX ROUND 29 (D8): when staff cancel WITH a reason, record it in
+    // the history row in the exact format the customer cancel action
+    // uses ("Reason" or "Reason: note") so deriveCancellationDisplay
+    // surfaces it identically on the customer page, the admin detail
+    // and the timeline. Without a reason, keep the staff boilerplate
+    // (which the display derivation deliberately never presents as a
+    // customer reason). The acting staff member stays recorded in
+    // changedBy either way.
+    const cancelReason = opts?.reason?.trim();
+    const cancelNote = opts?.note?.trim();
+    const historyNotes =
+      target === "CANCELLED" && cancelReason
+        ? cancelNote
+          ? `${cancelReason}: ${cancelNote}`
+          : cancelReason
+        : updatedBy
+          ? `Order status updated to ${status} (by ${updatedBy})`
+          : `Order status updated to ${status}`;
+
     const updated = await prisma.order.update({
       where: { id },
       data: {
@@ -372,9 +393,7 @@ export class OrderRepository {
         statusHistory: {
           create: {
             status: target,
-            notes: updatedBy
-              ? `Order status updated to ${status} (by ${updatedBy})`
-              : `Order status updated to ${status}`,
+            notes: historyNotes,
             changedBy: isUserUuid ? updatedBy : null,
           }
         }
@@ -596,5 +615,16 @@ function mapPrismaOrderToOms(record: any): Order {
     }),
     shipping_address: shippingAddr ? (shippingAddr as any) : undefined,
     billing_address: billingAddr ? (billingAddr as any) : undefined,
+    // FIX ROUND 29 (D8): the queries include statusHistory but the
+    // mapper dropped it, so the admin detail could never show a
+    // cancellation reason or a status timeline. Snake-case shape,
+    // matching what deriveCancellationDisplay consumes on the
+    // customer side.
+    order_status_history: (record.statusHistory || []).map((h: any) => ({
+      status: h.status,
+      notes: h.notes ?? null,
+      changed_by: h.changedBy ?? null,
+      created_at: h.createdAt?.toISOString?.() ?? null,
+    })),
   } as Order;
 }

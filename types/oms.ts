@@ -68,6 +68,15 @@ export interface Order {
   items_count?: number;
   items_preview?: string;
   shipping_address?: any | null;
+  /** FIX ROUND 29 (D8): status history rows (snake_case), populated by
+   *  mapPrismaOrderToOms for the detail view's timeline + cancellation
+   *  panel. */
+  order_status_history?: {
+    status: string;
+    notes: string | null;
+    changed_by: string | null;
+    created_at: string | null;
+  }[];
 }
 
 export interface OrderItem {

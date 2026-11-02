@@ -115,8 +115,16 @@ export class DashboardRepository {
       0
     );
     const totalOrdersCount = allOrders.length;
+    // FIX ROUND 29 (D3): AOV definition — displayed Total Revenue ÷
+    // displayed Total Orders. Revenue excludes cancelled / failed /
+    // refunded / returned orders (money never collected), while the
+    // Orders card counts every order placed. AOV previously divided
+    // revenue by the valid-orders count only (99,251.75 ÷ 27 ≈ ৳3,676),
+    // which contradicted the two cards beside it (99,251.75 ÷ 39 ≈
+    // ৳2,545). Numerator and divisor now match the displayed cards
+    // exactly, the same definition getDailyRevenue already used.
     const avgOrderVal =
-      validOrders.length > 0 ? Math.round(totalRev / validOrders.length) : 0;
+      totalOrdersCount > 0 ? Math.round(totalRev / totalOrdersCount) : 0;
 
     // Real period-over-period trends (last 30 days vs the 30 before).
     // These were previously hardcoded (+12.5%, +8.2%, ...) and
@@ -139,10 +147,11 @@ export class DashboardRepository {
     const revPrev = validOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom)).reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
     const ordCur = allOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1)).length;
     const ordPrev = allOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom)).length;
-    const validCur = validOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1));
-    const aovCur = validCur.length > 0 ? revCur / validCur.length : 0;
-    const validPrev = validOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom));
-    const aovPrev = validPrev.length > 0 ? revPrev / validPrev.length : 0;
+    // FIX ROUND 29 (D3): trend AOV uses the same definition as the
+    // headline figure — window revenue (valid orders) ÷ ALL orders in
+    // the window — so the trend compares like with like.
+    const aovCur = ordCur > 0 ? revCur / ordCur : 0;
+    const aovPrev = ordPrev > 0 ? revPrev / ordPrev : 0;
     const custCur = profiles.filter((p) => inWindow(p.createdAt, curFrom, now + 1)).length;
     const custPrev = profiles.filter((p) => inWindow(p.createdAt, prevFrom, curFrom)).length;
 
@@ -154,6 +163,7 @@ export class DashboardRepository {
     const returningCount = [...ordersPerBuyer.values()].filter((n) => n >= 2).length;
     const buyersCur = new Set(validOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1)).map((o) => o.profileId).filter(Boolean));
     const repeatBuyersCur = [...buyersCur].filter((id) => (ordersPerBuyer.get(id as string) || 0) >= 2).length;
+    const validPrev = validOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom));
     const buyersPrev = new Set(validPrev.map((o) => o.profileId).filter(Boolean));
     const repeatBuyersPrev = [...buyersPrev].filter((id) => (ordersPerBuyer.get(id as string) || 0) >= 2).length;
 
@@ -289,7 +299,7 @@ export class DashboardRepository {
     // including a product whose items carry divergent name/price
     // snapshots) plus synthetic quantity-0 / divergent-snapshot
     // fixtures — Round-20 equivalence + repo-execution harnesses.
-    const [soldGroups, zeroQtyGroups, earningGroups, firstSeenItems] =
+    const [soldGroups, zeroQtyGroups, earningGroups, firstSeenItems, pricedItems] =
       await Promise.all([
         prisma.orderItem.groupBy({
           by: ["productId"],
@@ -311,6 +321,17 @@ export class DashboardRepository {
           distinct: ["productId"],
           select: { productId: true, productName: true, unitPrice: true },
         }),
+        // FIX ROUND 29 (D4): a product's first-seen snapshot can be a
+        // corrupt row — production carries a POS test item whose
+        // product_name is literally "Unknown Product" with unit_price 0
+        // (order AF-POS-20261029-2793, itself a ৳0 order). A priced
+        // snapshot is the representative price source before falling
+        // back to the product's current base price.
+        prisma.orderItem.findMany({
+          where: { productId: { not: null }, unitPrice: { gt: 0 } },
+          distinct: ["productId"],
+          select: { productId: true, unitPrice: true },
+        }),
       ]);
 
     const soldByProduct = new Map<string, number>();
@@ -325,6 +346,10 @@ export class DashboardRepository {
     const earningsByProduct = new Map<string, number>();
     for (const g of earningGroups) {
       if (g.productId) earningsByProduct.set(g.productId, Number(g._sum.totalPrice) || 0);
+    }
+    const pricedByProduct = new Map<string, number>();
+    for (const it of pricedItems) {
+      if (it.productId) pricedByProduct.set(it.productId, Number(it.unitPrice) || 0);
     }
 
     const statsByProduct: Record<
@@ -378,9 +403,18 @@ export class DashboardRepository {
       const prod = pMap.get(sale.product_id);
       return {
         product_id: sale.product_id,
-        product_name: sale.product_name,
+        // FIX ROUND 29 (D4): the product row's own name is authoritative.
+        // The first-seen item snapshot can be a corrupt literal
+        // ("Unknown Product" on a ৳0 POS test item) even though the
+        // product exists — the snapshot is only the fallback for
+        // products that no longer exist.
+        product_name: prod?.name || sale.product_name,
         category_name: prod?.category?.name || "Apparel",
-        price: sale.price || Number(prod?.basePrice) || 0,
+        price:
+          pricedByProduct.get(sale.product_id) ||
+          sale.price ||
+          Number(prod?.basePrice) ||
+          0,
         sold: sale.sold,
         earnings: sale.earnings,
         image_url: prod?.imageUrl || null,
@@ -431,27 +465,55 @@ export class DashboardRepository {
   }
 
   async getRecentCustomers() {
+    // FIX ROUND 29 (D5): the widget is "Recent Customers" — show each
+    // customer once (their latest order), and resolve the display name
+    // from every source that can carry it: profile name → shipping
+    // address name (guest/auto-created profiles) → email prefix →
+    // "Guest customer". Previously the rows were the latest ORDERS (one
+    // customer could fill the whole list) and any row whose profile
+    // name was missing rendered as a bare truncated UUID in the UI.
     const latestOrders = await prisma.order.findMany({
-      take: 5,
+      take: 25,
       orderBy: { createdAt: "desc" },
-      select: { id: true, profileId: true, status: true, createdAt: true, profile: { select: { firstName: true, lastName: true, email: true, avatarUrl: true } } }
+      select: {
+        id: true,
+        profileId: true,
+        status: true,
+        createdAt: true,
+        shippingAddress: true,
+        profile: { select: { firstName: true, lastName: true, email: true, avatarUrl: true } },
+      },
     });
 
-    return latestOrders.map((ord) => {
-      const prof = ord.profile;
-      const fullName = prof?.firstName || prof?.lastName
-        ? `${prof.firstName || ""} ${prof.lastName || ""}`.trim()
-        : prof?.email?.split("@")[0] || "Customer";
+    const seen = new Set<string>();
+    const rows: any[] = [];
+    for (const ord of latestOrders) {
+      const key = ord.profileId || ord.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
 
-      return {
-        user_id: ord.profileId || ord.id,
+      const prof = ord.profile;
+      const addr = (ord.shippingAddress || {}) as Record<string, any>;
+      const profileName = [prof?.firstName, prof?.lastName].filter(Boolean).join(" ").trim();
+      const addressName = [addr.first_name || addr.firstName, addr.last_name || addr.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      const fullName =
+        profileName || addressName || prof?.email?.split("@")[0] || "Guest customer";
+
+      rows.push({
+        user_id: key,
         full_name: fullName,
+        email: prof?.email || null,
         avatar_url: prof?.avatarUrl || null,
         latest_order_id: ord.id,
         latest_order_status: ord.status,
         last_order_date: ord.createdAt.toISOString(),
-      };
-    });
+      });
+      if (rows.length >= 5) break;
+    }
+    return rows;
   }
 
   async getUserLocations() {

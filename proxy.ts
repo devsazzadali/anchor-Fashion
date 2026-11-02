@@ -69,7 +69,7 @@ const STATIC_TOP_LEVEL = new Set([
   "flash-deals", "inventory", "invoice", "loyalty", "maintenance",
   "manager", "monitoring", "not-found", "operations", "privacy",
   "product", "products", "revenue", "sales", "search", "settings",
-  "support", "terms", "track-order", "~offline",
+  "support", "terms", "track-order", "wishlist", "store", "~offline",
 ]);
 
 function applySecurityHeaders(response: NextResponse): NextResponse {

@@ -18,7 +18,10 @@ export class OrderService {
     id: string,
     newStatus: OrderStatus,
     updatedBy?: string,
-    role?: string
+    role?: string,
+    // FIX ROUND 29 (D8): optional cancellation reason/note from the
+    // admin dialog, forwarded to the repository's history write.
+    opts?: { reason?: string; note?: string }
   ): Promise<Order> {
     const order = await this.orderRepo.getOrderById(id);
     if (!order) {
@@ -31,7 +34,7 @@ export class OrderService {
       );
     }
 
-    const updated = await this.orderRepo.updateOrderStatus(id, newStatus, updatedBy);
+    const updated = await this.orderRepo.updateOrderStatus(id, newStatus, updatedBy, opts);
 
     // Check for referral qualification and loyalty points
     const lowerStatus = newStatus.toLowerCase();

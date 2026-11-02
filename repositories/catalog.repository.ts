@@ -391,6 +391,15 @@ export const CatalogRepository = {
             { barcode: { contains: term, mode: "insensitive" } },
             { variants: { some: { sku: { contains: term, mode: "insensitive" } } } },
             { variants: { some: { barcode: { contains: term, mode: "insensitive" } } } },
+            // FIX ROUND 29 (D2): category names are searchable too — a
+            // shopper typing "panjabi" expects the Panjabi category's
+            // products even when a name/description lacks the word.
+            { category: { name: { contains: term, mode: "insensitive" } } },
+            {
+              productCategories: {
+                some: { category: { name: { contains: term, mode: "insensitive" } } },
+              },
+            },
           ],
         });
       }
@@ -416,6 +425,13 @@ export const CatalogRepository = {
       // matching set, sort by the displayed price in memory, then page.
       const isPriceSort =
         params.sortBy === "price_asc" || params.sortBy === "price_desc";
+      // FIX ROUND 29 (D2): a search with no explicit sort is ranked by
+      // relevance (below), not by createdAt — "panjabi" previously
+      // returned the newest knitwear first because every description
+      // mentioning the word ranked equally. Like the price sorts, the
+      // full matching set is fetched and paged in memory; the reported
+      // count stays the database total of ALL matches (unchanged).
+      const isRelevanceSort = Boolean(params.search?.trim()) && !params.sortBy;
 
       const [products, total, bestPromo] = await Promise.all([
         prisma.product.findMany({
@@ -432,7 +448,7 @@ export const CatalogRepository = {
             variants: { include: { inventoryLevels: true } },
           },
           orderBy,
-          ...(isPriceSort ? {} : { take: limit, skip: offset }),
+          ...(isPriceSort || isRelevanceSort ? {} : { take: limit, skip: offset }),
         }),
         prisma.product.count({ where }),
         PromotionRepository.getBestActivePromotion().catch(() => null),
@@ -450,6 +466,41 @@ export const CatalogRepository = {
             const diff = displayedUnitPrice(a) - displayedUnitPrice(b);
             if (diff !== 0) return diff * dir;
             // Deterministic tie-break: newest first, then id.
+            const ca = String(a?.created_at || "");
+            const cb = String(b?.created_at || "");
+            if (ca !== cb) return cb.localeCompare(ca);
+            return String(a?.id || "").localeCompare(String(b?.id || ""));
+          })
+          .slice(offset, offset + limit);
+      }
+
+      if (isRelevanceSort) {
+        // Tier ladder: exact name > name prefix > name contains > all
+        // query words in the name > category-name match > any other
+        // field (description / SKU / barcode). Newest first inside a
+        // tier, id as the final deterministic tie-break.
+        const term = params.search!.trim().toLowerCase();
+        const words = term.split(/\s+/).filter(Boolean);
+        const tierOf = (p: any): number => {
+          const name = String(p?.name || "").toLowerCase();
+          if (name === term) return 0;
+          if (name.startsWith(term)) return 1;
+          if (name.includes(term)) return 2;
+          if (words.length > 1 && words.every((w) => name.includes(w))) return 3;
+          const catNames = [
+            p?.category?.name,
+            ...((p?.additional_categories || []) as any[]).map((c) => c?.name),
+          ]
+            .filter(Boolean)
+            .map((n: string) => n.toLowerCase());
+          if (catNames.some((n) => n.includes(term) || words.some((w) => n.includes(w)))) return 4;
+          return 5;
+        };
+        mapped = mapped
+          .slice()
+          .sort((a: any, b: any) => {
+            const dt = tierOf(a) - tierOf(b);
+            if (dt !== 0) return dt;
             const ca = String(a?.created_at || "");
             const cb = String(b?.created_at || "");
             if (ca !== cb) return cb.localeCompare(ca);

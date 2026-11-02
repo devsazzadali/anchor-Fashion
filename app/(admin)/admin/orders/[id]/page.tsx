@@ -24,7 +24,18 @@ import {
   rejectManualPaymentAction,
 } from "@/lib/actions/payment.actions";
 import { OrderSmsCard } from "@/components/admin/orders/order-sms-card";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  CANCELLATION_REASONS,
+  deriveCancellationDisplay,
+} from "@/lib/orders/cancellation-display";
 import {
   Printer,
   FileText,
@@ -57,6 +68,10 @@ export default function AdminOrderDetailsPage() {
     useOrderDetails(orderId);
 
   const [cancelGateOpen, setCancelGateOpen] = useState(false);
+  // FIX ROUND 29 (D8): admin cancels now capture a reason (+ optional
+  // note), mirroring the customer cancel dialog.
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelNote, setCancelNote] = useState("");
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -80,9 +95,12 @@ export default function AdminOrderDetailsPage() {
       </div>
     );
 
-  const handleStatusUpdate = async (newStatus: OrderStatus) => {
+  const handleStatusUpdate = async (
+    newStatus: OrderStatus,
+    extra?: { reason?: string; note?: string }
+  ) => {
     try {
-      const updated: any = await updateStatus({ order_id: order.id, new_status: newStatus });
+      const updated: any = await updateStatus({ order_id: order.id, new_status: newStatus, ...extra });
       toast.success(`Order status updated to ${newStatus}`);
       // S5-4: several transitions previously left the page showing the
       // old state until a manual reload (the invalidation refetch raced
@@ -108,6 +126,27 @@ export default function AdminOrderDetailsPage() {
     } catch (e) {
       toast.error(`Failed to update status: ${(e as Error).message}`);
     }
+  };
+
+  // FIX ROUND 29 (D8): the cancel confirm requires a reason (and a
+  // note when the reason is "Other"), exactly like the customer-side
+  // dialog; the pair is stored in the order's status history.
+  const handleConfirmCancel = () => {
+    if (!cancelReason) {
+      toast.error("Please select a cancellation reason");
+      return;
+    }
+    if (cancelReason === "Other" && !cancelNote.trim()) {
+      toast.error("Please provide a note for 'Other' reason");
+      return;
+    }
+    setCancelGateOpen(false);
+    handleStatusUpdate("cancelled", {
+      reason: cancelReason,
+      note: cancelNote.trim() || undefined,
+    });
+    setCancelReason("");
+    setCancelNote("");
   };
 
   const handleCopyTrx = (text: string) => {
@@ -165,6 +204,13 @@ export default function AdminOrderDetailsPage() {
 
   const typedOrder = order as unknown as OrderWithDetails;
   const customer = typedOrder.customer;
+  // FIX ROUND 29 (D8): cancellation facts + timeline, derived from the
+  // same history rows the customer page reads.
+  const cancellation = deriveCancellationDisplay(order as any);
+  const statusHistory = [...((order as any).order_status_history || [])].sort(
+    (a: any, b: any) =>
+      new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+  );
   const shipping = typedOrder.shippingAddress;
   const billing = typedOrder.billingAddress;
   const manualPayment = typedOrder.manualPayment;
@@ -367,6 +413,74 @@ export default function AdminOrderDetailsPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* FIX ROUND 29 (D8): Cancellation Details — the reason the
+              customer picked (or staff recorded) used to be invisible
+              on the admin side. Derived from the status history, the
+              same source as the customer's Cancellation Details panel. */}
+          {order.status === "cancelled" && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                  <XCircle className="h-4 w-4 text-destructive" />
+                  Cancellation Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs text-muted-foreground space-y-1">
+                <p>
+                  <span className="font-medium text-foreground">Reason:</span>{" "}
+                  {cancellation.reason || "Not specified"}
+                </p>
+                {cancellation.note && (
+                  <p>
+                    <span className="font-medium text-foreground">Note:</span>{" "}
+                    {cancellation.note}
+                  </p>
+                )}
+                <p>
+                  <span className="font-medium text-foreground">Cancelled At:</span>{" "}
+                  {cancellation.cancelledAt
+                    ? new Date(cancellation.cancelledAt).toLocaleString()
+                    : "Unknown"}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* FIX ROUND 29 (D8): Status Timeline — the order's status
+              history was fetched but never rendered on this page. */}
+          {statusHistory.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  Status Timeline
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ol className="space-y-3">
+                  {statusHistory.map((h: any, i: number) => (
+                    <li key={i} className="flex gap-3 text-xs">
+                      <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-primary/60" />
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {orderStatusLabel(String(h.status || "").toLowerCase())}
+                          <span className="ml-2 font-normal text-muted-foreground">
+                            {h.created_at
+                              ? new Date(h.created_at).toLocaleString()
+                              : ""}
+                          </span>
+                        </p>
+                        {h.notes && (
+                          <p className="text-muted-foreground">{h.notes}</p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right Column: Status & Customer Details */}
@@ -949,21 +1063,67 @@ export default function AdminOrderDetailsPage() {
       {/* S5-12: cancelling an order is irreversible and releases its
           reserved stock — it previously fired on a single click with no
           confirmation (the one destructive action round 3 missed).
-          Route it through the shared ConfirmDialog. */}
-      <ConfirmDialog
-        open={cancelGateOpen}
-        title="Cancel this order?"
-        description={`Order #${order.order_number} will be cancelled and its reserved stock released back to available inventory. This cannot be undone.`}
-        confirmLabel="Cancel Order"
-        cancelLabel="Keep Order"
-        variant="destructive"
-        isLoading={isUpdatingStatus}
-        onConfirm={() => {
-          setCancelGateOpen(false);
-          handleStatusUpdate("cancelled");
-        }}
-        onCancel={() => setCancelGateOpen(false)}
-      />
+          FIX ROUND 29 (D8): the gate now also captures WHY — a reason
+          select + optional note mirroring the customer cancel dialog,
+          stored in the order's status history the same way. */}
+      <Dialog open={cancelGateOpen} onOpenChange={setCancelGateOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cancel this order?</DialogTitle>
+            <DialogDescription>
+              Order #{order.order_number} will be cancelled and its reserved stock released back to available inventory. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <label htmlFor="admin-cancel-reason" className="text-xs font-semibold text-foreground">
+                Reason for cancellation <span className="text-destructive">*</span>
+              </label>
+              <Select value={cancelReason} onValueChange={(val) => setCancelReason(val || "")}>
+                <SelectTrigger id="admin-cancel-reason">
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CANCELLATION_REASONS.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(cancelReason === "Other" || cancelReason) && (
+              <div className="grid gap-2">
+                <label htmlFor="admin-cancel-note" className="text-xs font-semibold text-foreground">
+                  Additional Note {cancelReason === "Other" && <span className="text-destructive">*</span>}
+                </label>
+                <Textarea
+                  id="admin-cancel-note"
+                  value={cancelNote}
+                  onChange={(e) => setCancelNote(e.target.value)}
+                  placeholder="Add any details about this cancellation"
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelGateOpen(false)}>
+              Keep Order
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmCancel}
+              disabled={isUpdatingStatus}
+            >
+              {isUpdatingStatus ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Cancel Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reject Payment Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>

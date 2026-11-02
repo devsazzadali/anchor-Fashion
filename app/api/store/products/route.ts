@@ -14,6 +14,19 @@ export async function GET(request: Request) {
   const category = searchParams.get('category');
   const search = searchParams.get('search');
   const featured = searchParams.get('featured');
+  // FIX ROUND 29 (D1): explicit id list (comma-separated UUIDs) — the
+  // guest wishlist page resolves its locally saved product ids through
+  // this feed. Non-UUID segments are ignored.
+  const idsParam = searchParams.get('ids');
+  const ids = idsParam
+    ? idsParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) =>
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+        )
+        .slice(0, 100)
+    : [];
 
   // REG-84: bound the feed. Defaults (limit 500) sit far above the
   // current catalog size, so today's response is byte-identical; the
@@ -37,6 +50,7 @@ export async function GET(request: Request) {
       where: {
         status: 'ACTIVE',
         deletedAt: null,
+        ...(ids.length > 0 ? { id: { in: ids } } : {}),
         ...(featured === 'true' ? { isFeatured: true } : {}),
         ...(search
           ? { name: { contains: search, mode: 'insensitive' as const } }
