@@ -5,6 +5,10 @@ import { FlashSaleService } from "@/lib/services/marketing/flash-sale.service";
 import { ProductDetailView } from "@/components/product/product-detail-view";
 import { getFreeShippingThreshold } from "@/lib/actions/settings.actions";
 import { notFound } from "next/navigation";
+import { getSiteUrl } from "@/lib/site-url";
+
+// FIX2 (OBS-6): canonical base via lib/site-url (was hardcoded .com).
+const siteUrl = getSiteUrl();
 
 export const revalidate = 60;
 
@@ -33,12 +37,12 @@ export async function generateMetadata({
     title,
     description,
     alternates: {
-      canonical: `https://anchorfashion.com/products/${product.slug}`,
+      canonical: `${siteUrl}/products/${product.slug}`,
     },
     openGraph: {
       title,
       description,
-      url: `https://anchorfashion.com/products/${product.slug}`,
+      url: `${siteUrl}/products/${product.slug}`,
       siteName: "Anchor Fashion",
       images: [
         {
@@ -113,7 +117,7 @@ export default async function ProductDetailPage({
     },
     offers: {
       "@type": "Offer",
-      url: `https://anchorfashion.com/products/${product.slug}`,
+      url: `${siteUrl}/products/${product.slug}`,
       priceCurrency: "BDT",
       price: effectivePrice,
       itemCondition: "https://schema.org/NewCondition",
@@ -131,13 +135,13 @@ export default async function ProductDetailPage({
         "@type": "ListItem",
         position: 1,
         name: "Home",
-        item: "https://anchorfashion.com",
+        item: siteUrl,
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "Products",
-        item: "https://anchorfashion.com/products",
+        item: `${siteUrl}/products`,
       },
       ...(product.categories?.name
         ? [
@@ -145,7 +149,7 @@ export default async function ProductDetailPage({
               "@type": "ListItem",
               position: 3,
               name: product.categories.name,
-              item: `https://anchorfashion.com/categories/${product.categories.slug}`,
+              item: `${siteUrl}/categories/${product.categories.slug}`,
             },
           ]
         : []),
@@ -153,7 +157,7 @@ export default async function ProductDetailPage({
         "@type": "ListItem",
         position: product.categories?.name ? 4 : 3,
         name: product.name,
-        item: `https://anchorfashion.com/products/${product.slug}`,
+        item: `${siteUrl}/products/${product.slug}`,
       },
     ],
   };

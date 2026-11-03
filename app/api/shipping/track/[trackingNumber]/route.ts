@@ -46,6 +46,10 @@ export async function GET(
     }
 
     // Not a courier tracking number — try an order number.
+    // FIX2 (R30 OBS-3): totalAmount deliberately NOT selected — this is
+    // an unauthenticated endpoint keyed only by the (guessable) order
+    // number, so it returns the minimum the tracking UI needs: status
+    // and timeline facts, never money amounts.
     const order = await prisma.order.findFirst({
       where: {
         orderNumber: { equals: trackingNumber.trim(), mode: "insensitive" },
@@ -55,7 +59,6 @@ export async function GET(
         orderNumber: true,
         status: true,
         createdAt: true,
-        totalAmount: true,
       },
     });
 
@@ -100,7 +103,6 @@ export async function GET(
             orderNumber: order.orderNumber,
             status: order.status,
             placedAt: order.createdAt.toISOString(),
-            totalAmount: order.totalAmount ? Number(order.totalAmount) : null,
             shipped:
               Boolean(shipment?.trackingNumber) ||
               SHIPPED_STATUSES.includes(order.status),

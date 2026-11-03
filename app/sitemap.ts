@@ -1,14 +1,14 @@
 import { MetadataRoute } from "next";
 import { CatalogRepository } from "@/repositories/catalog.repository";
 import { getPosts } from "@/lib/actions/blog.actions";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL && !process.env.NEXT_PUBLIC_SITE_URL.includes("localhost")
-      ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")
-      : "https://www.anchorfashion.com.bd";
+  // FIX2 (OBS-6): canonical base via the shared helper (same value this
+  // file previously computed inline — see lib/site-url.ts).
+  const baseUrl = getSiteUrl();
 
   let products: any[] = [];
   let categories: any[] = [];

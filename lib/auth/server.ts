@@ -131,6 +131,37 @@ export const getServerSession = cache(
 
       if (user) {
         const resolvedRole = await resolveUserRole(user);
+
+        // R30 FIX2 (item 7 follow-up): enforce admin deactivation. The users
+        // UI's "Deactivate User" only flipped profiles.is_active — nothing
+        // consulted it, so a deactivated staff account could still sign in
+        // and use the /manager console. Treat a deactivated, identity-bound
+        // profile as signed out everywhere getServerSession is the gate
+        // (admin/manager/customer layouts + role guards + server actions).
+        // The identity-binding mirrors resolveUserRole's guard so an
+        // unverified look-alike registration cannot be used to lock out —
+        // or be locked by — someone else's profile row.
+        try {
+          const email = user.email
+            ? user.email.toLowerCase().trim()
+            : undefined;
+          const profile = email
+            ? await prisma.profile.findUnique({
+                where: { email },
+                select: { id: true, isActive: true },
+              })
+            : null;
+          const identityBound =
+            !!profile &&
+            ((!!user.id && profile.id === user.id) ||
+              (user as any).emailVerified === true);
+          if (profile && identityBound && profile.isActive === false) {
+            return { user: null, session: null };
+          }
+        } catch {
+          // Fail open on lookup errors, mirroring resolveUserRole.
+        }
+
         return {
           user: {
             ...user,

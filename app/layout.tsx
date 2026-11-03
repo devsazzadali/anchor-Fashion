@@ -17,9 +17,14 @@ import {
   getStoreInfo,
   getSocialLinks,
 } from "@/lib/actions/settings.actions";
+import { getSiteUrl } from "@/lib/site-url";
 
 export async function generateMetadata(): Promise<Metadata> {
   const seo = await getSeoSettings();
+  // FIX2 (OBS-6): canonical base via the shared helper — this layout
+  // previously hardcoded https://anchorfashion.com (a parked domain)
+  // while sitemap/robots used anchorfashion.com.bd. See lib/site-url.ts.
+  const siteUrl = getSiteUrl();
 
   const titleDefault = seo.meta_title || "Anchor Fashion | Premium E-Commerce";
   const desc = seo.meta_description || "Enterprise e-commerce platform for Anchor Fashion.";
@@ -45,7 +50,7 @@ export async function generateMetadata(): Promise<Metadata> {
     // default unchanged.
     title: titleDefault,
     description: desc,
-    metadataBase: new URL("https://anchorfashion.com"),
+    metadataBase: new URL(siteUrl),
     icons: {
       icon: [
         { url: "/favicon.ico", sizes: "any" },
@@ -64,7 +69,7 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       type: "website",
       locale: "en_US",
-      url: "https://anchorfashion.com",
+      url: siteUrl,
       title: titleDefault,
       description: desc,
       siteName: "Anchor Fashion",
@@ -96,7 +101,7 @@ export async function generateMetadata(): Promise<Metadata> {
       },
     },
     alternates: {
-      canonical: "https://anchorfashion.com",
+      canonical: siteUrl,
     },
   };
 }
@@ -115,6 +120,7 @@ export default async function RootLayout({
     getStoreInfo().catch(() => null),
     getSocialLinks().catch(() => null),
   ]);
+  const siteUrl = getSiteUrl();
   const jsonLdPhone = storeInfo?.phone || "+880 1711-223344";
   const jsonLdSocials = [
     socialLinks?.facebook,
@@ -151,12 +157,12 @@ export default async function RootLayout({
               "@graph": [
                 {
                   "@type": "Organization",
-                  "@id": "https://anchorfashion.com/#organization",
+                  "@id": `${siteUrl}/#organization`,
                   name: "Anchor Fashion",
-                  url: "https://anchorfashion.com",
+                  url: siteUrl,
                   logo: {
                     "@type": "ImageObject",
-                    url: "https://anchorfashion.com/icon.png",
+                    url: `${siteUrl}/icon.png`,
                     width: 512,
                     height: 512,
                   },
@@ -171,18 +177,17 @@ export default async function RootLayout({
                 },
                 {
                   "@type": "WebSite",
-                  "@id": "https://anchorfashion.com/#website",
-                  url: "https://anchorfashion.com",
+                  "@id": `${siteUrl}/#website`,
+                  url: siteUrl,
                   name: "Anchor Fashion",
                   description:
                     "Premium luxury fashion and modern apparel in Bangladesh.",
                   publisher: {
-                    "@id": "https://anchorfashion.com/#organization",
+                    "@id": `${siteUrl}/#organization`,
                   },
                   potentialAction: {
                     "@type": "SearchAction",
-                    target:
-                      "https://anchorfashion.com/products?search={search_term_string}",
+                    target: `${siteUrl}/products?search={search_term_string}`,
                     "query-input": "required name=search_term_string",
                   },
                 },

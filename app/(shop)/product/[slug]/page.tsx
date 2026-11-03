@@ -5,6 +5,10 @@ import { FlashSaleService } from "@/lib/services/marketing/flash-sale.service";
 import { ProductDetailView } from "@/components/product/product-detail-view";
 import { getFreeShippingThreshold } from "@/lib/actions/settings.actions";
 import { notFound } from "next/navigation";
+import { getSiteUrl } from "@/lib/site-url";
+
+// FIX2 (OBS-6): canonical base via lib/site-url (was hardcoded .com).
+const siteUrl = getSiteUrl();
 
 export const revalidate = 60;
 
@@ -113,7 +117,7 @@ export default async function ProductDetailPage({
     },
     offers: {
       "@type": "Offer",
-      url: `https://anchorfashion.com/product/${product.slug}`,
+      url: `${siteUrl}/product/${product.slug}`,
       priceCurrency: "BDT",
       price: effectivePrice,
       itemCondition: "https://schema.org/NewCondition",

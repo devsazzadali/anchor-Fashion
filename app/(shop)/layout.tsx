@@ -11,6 +11,7 @@ import { CartDrawer } from "@/components/cart/cart-drawer";
 import { PromotionRepository } from "@/lib/repositories/marketing/promotion.repository";
 
 import { getCachedCategories } from "@/lib/cache/catalog-cache";
+import { getSiteUrl } from "@/lib/site-url";
 
 export default async function ShopLayout({
   children,
@@ -49,8 +50,9 @@ export default async function ShopLayout({
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": safeStoreInfo.store_name || "Anchor Fashion",
-    "url": "https://anchorfashion.com",
-    "logo": "https://anchorfashion.com/icon.svg",
+    // FIX2 (OBS-6): canonical base via lib/site-url (was hardcoded .com).
+    "url": getSiteUrl(),
+    "logo": `${getSiteUrl()}/icon.svg`,
     "contactPoint": {
       "@type": "ContactPoint",
       "telephone": safeStoreInfo.phone || "+880 1711-223344",

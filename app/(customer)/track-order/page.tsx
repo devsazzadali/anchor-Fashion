@@ -44,7 +44,6 @@ export default function TrackOrderPage() {
     orderNumber: string;
     status: string;
     placedAt: string;
-    totalAmount: number | null;
     shipped: boolean;
     trackingNumber: string | null;
   } | null = (rawData as any)?.orderInfo ?? null;
@@ -137,11 +136,6 @@ export default function TrackOrderPage() {
                     })}
                   </strong>
                 </p>
-                {orderInfo.totalAmount !== null && (
-                  <p>
-                    Order total: <strong>৳{orderInfo.totalAmount}</strong>
-                  </p>
-                )}
               </div>
               {!orderInfo.shipped && (
                 <div className="mt-4 flex items-start gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">

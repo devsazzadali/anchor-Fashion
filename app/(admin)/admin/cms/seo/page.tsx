@@ -23,11 +23,11 @@ export default function SeoManager() {
     metaTitle: "Anchor Fashion | Premium Clothing",
     metaDescription:
       "Discover the latest trends in premium fashion at Anchor Fashion.",
-    ogImage: "https://anchorfashion.com/og-image.jpg",
+    ogImage: "https://www.anchorfashion.com.bd/og-image.jpg",
     twitterHandle: "@anchorfashion",
     enableIndex: true,
     jsonLd:
-      '{\n  "@context": "https://schema.org",\n  "@type": "Organization",\n  "name": "Anchor Fashion",\n  "url": "https://anchorfashion.com"\n}',
+      '{\n  "@context": "https://schema.org",\n  "@type": "Organization",\n  "name": "Anchor Fashion",\n  "url": "https://www.anchorfashion.com.bd"\n}',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {

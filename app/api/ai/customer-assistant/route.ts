@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
 import { generateContent } from "@/lib/ai/gemini";
+import { rateLimit } from "@/lib/security/rate-limit";
+
+// FIX2 (R30 OBS-4): this public route calls the paid Gemini API with no
+// abuse control. Reuse the codebase's shared in-memory limiter
+// (lib/security/rate-limit) with the same client-IP derivation the OTP
+// route uses (first x-forwarded-for entry). 20 requests/minute/IP is
+// far above any human chat pace and blocks scripted cost abuse.
+const AI_CHAT_RATE_LIMIT = { limit: 20, windowMs: 60_000 };
 
 const SYSTEM_PROMPT = `
 You are an expert AI Customer Assistant for Anchor Fashion, a premium fashion brand.
@@ -11,6 +19,16 @@ Format your output using markdown where appropriate to highlight products or key
 
 export async function POST(req: Request) {
   try {
+    const forwardedFor = req.headers.get("x-forwarded-for");
+    const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "unknown-ip";
+    const { success } = rateLimit(`ai-customer-assistant:${ip}`, AI_CHAT_RATE_LIMIT);
+    if (!success) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a moment and try again." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const { messages } = body;
 

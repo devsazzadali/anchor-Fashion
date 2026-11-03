@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { CourierGatewayService } from "@/services/courier/courier-gateway.service";
 import { ShippingService } from "@/services/shipping/shipping.service";
 import { CourierProviderCode } from "@/types/shipping.types";
+import {
+  getPresentedWebhookSecret,
+  sharedSecretMatches,
+} from "@/lib/webhooks/shared-secret";
 
 /**
  * POST /api/webhooks/courier
@@ -22,6 +26,29 @@ export async function POST(req: Request) {
             "Provider not specified. Use ?provider=steadfast or /api/webhooks/courier/[provider]",
         },
         { status: 400 }
+      );
+    }
+
+    // ── Webhook authenticity (REG-76: fail CLOSED) ───────────────────
+    // Same gate as /api/webhooks/courier/[provider]: without it this
+    // backwards-compat route forwarded unauthenticated POSTs into
+    // shipment/order status mutation. The caller must present the
+    // configured <PROVIDER>_WEBHOOK_SECRET (header `x-webhook-secret`
+    // or `?token=`); unset or wrong secret → 401 before any mutation.
+    const webhookSecret =
+      process.env[`${provider.toUpperCase()}_WEBHOOK_SECRET`];
+    if (!webhookSecret) {
+      return NextResponse.json(
+        { success: false, message: "Webhook not configured" },
+        { status: 401 }
+      );
+    }
+    if (
+      !sharedSecretMatches(getPresentedWebhookSecret(req), webhookSecret)
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Invalid webhook secret" },
+        { status: 401 }
       );
     }
 

@@ -305,7 +305,15 @@ export class CodOtpService {
     // Compute submitted hash
     const submittedHash = this.hashOtp(enteredOtp);
 
-    if (submittedHash !== session.otpHash) {
+    // Timing-safe hash comparison (both values are HMAC-SHA256 hex;
+    // a plain !== leaks prefix-match timing against the stored hash).
+    const submittedBuf = Buffer.from(submittedHash);
+    const storedBuf = Buffer.from(session.otpHash ?? "");
+    const hashMatches =
+      submittedBuf.length === storedBuf.length &&
+      crypto.timingSafeEqual(submittedBuf, storedBuf);
+
+    if (!hashMatches) {
       // Increment attempt count
       session.attempts += 1;
       await this.saveSession(session);

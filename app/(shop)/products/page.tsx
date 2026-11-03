@@ -27,19 +27,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
+import { getSiteUrl } from "@/lib/site-url";
+
+// FIX2 (OBS-6): canonical base via lib/site-url (was hardcoded .com).
+const siteUrl = getSiteUrl();
 
 export const metadata = {
   title: "All Products | Anchor Fashion",
   description:
     "Explore our full collection of premium apparel, formal wear, casual luxury, and accessories at Anchor Fashion.",
   alternates: {
-    canonical: "https://anchorfashion.com/products",
+    canonical: `${siteUrl}/products`,
   },
   openGraph: {
     title: "All Products | Anchor Fashion",
     description:
       "Explore our full collection of premium apparel, formal wear, casual luxury, and accessories at Anchor Fashion.",
-    url: "https://anchorfashion.com/products",
+    url: `${siteUrl}/products`,
     siteName: "Anchor Fashion",
     images: [{ url: "/og-image.jpg", width: 1200, height: 630 }],
     type: "website",
@@ -176,13 +180,13 @@ export default async function ProductsPage({
         "@type": "ListItem",
         position: 1,
         name: "Home",
-        item: "https://anchorfashion.com",
+        item: siteUrl,
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "Products",
-        item: "https://anchorfashion.com/products",
+        item: `${siteUrl}/products`,
       },
       ...(category
         ? [
@@ -190,7 +194,7 @@ export default async function ProductsPage({
               "@type": "ListItem",
               position: 3,
               name: currentCategoryObj?.name || category,
-              item: `https://anchorfashion.com/products?category=${category}`,
+              item: `${siteUrl}/products?category=${category}`,
             },
           ]
         : []),

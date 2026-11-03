@@ -88,7 +88,11 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
     salePrice: salePriceNum,
     vat_percent: Number(p.vatPercent || 0),
     vatPercent: Number(p.vatPercent || 0),
-    cost_price: p.costPrice ? Number(p.costPrice) : null,
+    // FIX2 (R30 OBS-5 class): cost_price deliberately NOT mapped. This
+    // DTO is serialized into every public storefront payload (home,
+    // listing, PDP, search), so the wholesale cost was readable by any
+    // visitor in the page source. Admin cost views use their own
+    // procurement/inventory queries, never this mapper.
     sku: p.sku,
     barcode: p.barcode,
     status: p.status,
@@ -530,6 +534,11 @@ export const CatalogRepository = {
               { slug },
               { sku: { equals: slug, mode: "insensitive" } },
             ],
+            // Storefront PDPs must only serve sellable products: without the
+            // status filter, ARCHIVED/DRAFT products stayed publicly
+            // reachable (and buyable-looking) by direct URL after being
+            // deactivated (R30 FIX2, item 8a follow-up).
+            status: "ACTIVE",
             deletedAt: null,
           },
           include: {
