@@ -5,10 +5,12 @@ import crypto from "crypto";
  *
  * Both providers' dashboards can be configured with a webhook URL that
  * either carries a `?token=<secret>` query parameter or sends an
- * `x-webhook-secret` header. The configured secret lives in an env var
- * (STEADFAST_WEBHOOK_SECRET / PATHAO_WEBHOOK_SECRET). Verification is
- * fail-closed: routes reject the call when the env secret is unset, so
- * an unconfigured deployment never processes unauthenticated status
+ * `x-webhook-secret` header. The configured secret comes from the
+ * `<PROVIDER>_WEBHOOK_SECRET` env var when set, otherwise from the
+ * provider's encrypted DB credentials (admin-dashboard settable — see
+ * lib/webhooks/configured-secret.ts). Verification is fail-closed:
+ * routes reject the call when no secret is configured, so an
+ * unconfigured deployment never processes unauthenticated status
  * updates. See REG-70 / REG-76.
  */
 

@@ -390,6 +390,26 @@ export function CourierConfigModal({ courier, onClose, onSaved }: Props) {
           </div>
 
           {renderFields()}
+
+          {(courier.code === "steadfast" || courier.code === "pathao") && (
+            <div className="grid gap-2">
+              <Label htmlFor="webhookSecret">Webhook Secret</Label>
+              <Input
+                id="webhookSecret"
+                type="password"
+                value={credentials.webhookSecret || ""}
+                onChange={(e) => handleChange("webhookSecret", e.target.value)}
+                placeholder="Secret for verifying courier status callbacks"
+              />
+              <p className="text-xs text-muted-foreground">
+                In the courier&apos;s merchant panel, set the webhook URL to
+                this site&apos;s /api/webhooks/courier/{courier.code} address
+                and append ?token= followed by this same secret — delivery
+                status updates are only accepted when it matches. Stored
+                encrypted with the other credentials.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t pt-4">

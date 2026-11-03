@@ -6,6 +6,7 @@ import {
   getPresentedWebhookSecret,
   sharedSecretMatches,
 } from "@/lib/webhooks/shared-secret";
+import { resolveCourierWebhookSecret } from "@/lib/webhooks/configured-secret";
 
 /**
  * POST /api/webhooks/courier/[provider]
@@ -28,8 +29,7 @@ export async function POST(
   // configured <PROVIDER>_WEBHOOK_SECRET (header `x-webhook-secret` or
   // `?token=`), and the call is rejected before any parsing or mutation
   // when the secret is unset or wrong.
-  const webhookSecret =
-    process.env[`${provider.toUpperCase()}_WEBHOOK_SECRET`];
+  const webhookSecret = await resolveCourierWebhookSecret(provider);
   if (!webhookSecret) {
     return NextResponse.json(
       { success: false, message: "Webhook not configured" },
