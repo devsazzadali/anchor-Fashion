@@ -356,9 +356,9 @@ export function ProductCard({ product, className }: ProductCardProps) {
                   {formatCurrency(displayComparePrice)}
                 </span>
               )}
-              {vatPercent > 0 && (
-                <span className="text-[10px] text-zinc-400">incl. VAT</span>
-              )}
+              {/* The displayed price is always the final VAT-inclusive
+                  price (VAT is 0% on some products) — label it uniformly. */}
+              <span className="text-[10px] text-zinc-400">incl. VAT</span>
             </div>
 
             {/* Mobile Instant Add Button */}

@@ -30,9 +30,9 @@ export function CartItem({ item, isReadOnly = false }: CartItemProps) {
     0;
   // REG-50: one VAT rule everywhere a price is shown — the figure next
   // to a product is the VAT-INCLUSIVE price (the PDP/card wording),
-  // labelled "incl. VAT" when the product carries VAT. The cart totals
-  // blocks break the VAT portion out separately; the amount payable
-  // does not change.
+  // always labelled "incl. VAT" (the figure is the final price; VAT is
+  // 0% on some products). The cart totals blocks break the VAT portion
+  // out separately; the amount payable does not change.
   const vatPercent = Number(product?.vat_percent ?? product?.vatPercent ?? 0);
   const displayLineTotal = priceWithVat(price, vatPercent) * item.quantity;
   const image =
@@ -83,11 +83,9 @@ export function CartItem({ item, isReadOnly = false }: CartItemProps) {
             </h3>
             <p className="ml-4 text-right">
               {formatCurrency(displayLineTotal)}
-              {vatPercent > 0 && (
-                <span className="block text-[10px] font-normal text-slate-400">
-                  incl. VAT
-                </span>
-              )}
+              <span className="block text-[10px] font-normal text-slate-400">
+                incl. VAT
+              </span>
             </p>
           </div>
           {item.variant && (

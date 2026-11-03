@@ -17,6 +17,7 @@ import Image from "next/image";
 
 import { usePersonalizationStore } from "@/stores/use-personalization-store";
 import { totalVatAmount, priceWithVat } from "@/lib/utils/vat";
+import { formatCurrency } from "@/lib/utils";
 
 export function CartDrawer({
   freeShippingThreshold = 0,
@@ -136,8 +137,8 @@ export function CartDrawer({
               <div className="mb-4 bg-gray-50 p-4 rounded-lg">
                 <div className="mb-2 flex items-center justify-between text-xs font-medium text-[#1A1A1A]">
                   <span>
-                    {amountNeeded > 0 
-                      ? `You're only ৳${amountNeeded.toLocaleString()} away from Free Shipping` 
+                    {amountNeeded > 0
+                      ? `You're only ${formatCurrency(amountNeeded)} away from Free Shipping`
                       : "🎉 You've unlocked Free Shipping!"}
                   </span>
                 </div>
@@ -170,7 +171,7 @@ export function CartDrawer({
                              <Image src={upsell.product_media?.[0]?.url || "/images/placeholder.webp"} alt={upsell.name} fill sizes="(max-width: 768px) 50vw, 200px" className="object-cover" />
                            </div>
                            <p className="truncate text-xs font-medium">{upsell.name}</p>
-                           <p className="text-[10px] text-gray-500">৳{priceWithVat(Number(upsell.base_price) || 0, (upsell as any).vat_percent ?? 0).toLocaleString()}{Number((upsell as any).vat_percent ?? 0) > 0 ? " incl. VAT" : ""}</p>
+                           <p className="text-[10px] text-gray-500">{formatCurrency(priceWithVat(Number(upsell.base_price) || 0, (upsell as any).vat_percent ?? 0))} incl. VAT</p>
                         </div>
                       ))}
                     </div>
@@ -189,15 +190,15 @@ export function CartDrawer({
                 (informational, never added twice). */}
             <div className="flex items-center justify-between font-medium text-foreground">
               <span>Subtotal (incl. VAT)</span>
-              <span>৳{(subtotal + vatAmount).toLocaleString()}</span>
+              <span>{formatCurrency(subtotal + vatAmount)}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-foreground">
               <span>VAT included</span>
-              <span>৳{vatAmount.toLocaleString()}</span>
+              <span>{formatCurrency(vatAmount)}</span>
             </div>
             <div className="flex items-center justify-between font-semibold text-foreground">
               <span>Total incl. VAT</span>
-              <span>৳{(subtotal + vatAmount).toLocaleString()}</span>
+              <span>{formatCurrency(subtotal + vatAmount)}</span>
             </div>
             <p className="text-xs text-gray-500">
               Shipping calculated at checkout.

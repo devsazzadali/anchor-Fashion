@@ -138,11 +138,9 @@ export function GuestWishlist() {
               </Link>
               <p className="mt-1 text-sm font-semibold text-slate-900">
                 {formatCurrency(displayPrice)}
-                {Number(product.vat_percent || 0) > 0 && (
-                  <span className="ml-1 text-[11px] font-normal text-slate-400">
-                    incl. VAT
-                  </span>
-                )}
+                <span className="ml-1 text-[11px] font-normal text-slate-400">
+                  incl. VAT
+                </span>
               </p>
             </div>
           </div>

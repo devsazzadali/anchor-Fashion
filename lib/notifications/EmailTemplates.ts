@@ -31,7 +31,7 @@ export const EmailTemplates = {
 
   orderConfirmed: (order: any, storeUrl: string) => {
     const formatPrice = (amount: number) => 
-      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT' }).format(amount).replace('BDT', '৳');
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount).replace('BDT', '৳');
 
     const itemsHtml = (order.order_items || []).map((item: any) => `
       <tr>
@@ -132,7 +132,7 @@ export const EmailTemplates = {
     customer_care?: string;
   }) => {
     const formatPrice = (amount: number) =>
-      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT' }).format(amount || 0).replace('BDT', '৳');
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount || 0).replace('BDT', '৳');
 
     const itemsHtml = (order.order_items || []).map((item: any) => `
       <tr>
@@ -238,7 +238,7 @@ export const EmailTemplates = {
     adminUrl: string;
   }) => {
     const formatPrice = (amount: number) =>
-      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT' }).format(amount || 0).replace('BDT', '৳');
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount || 0).replace('BDT', '৳');
     const isNew = event.kind === "new_order";
     const heading = isNew ? "New order received" : "Order status changed";
     const detail = isNew

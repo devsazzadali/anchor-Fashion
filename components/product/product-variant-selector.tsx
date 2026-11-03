@@ -585,9 +585,9 @@ export function ProductVariantSelector({
           <span className="text-3xl font-semibold tracking-tight text-gray-950 font-sans">
             {formatCurrency(displayEffectivePrice)}
           </span>
-          {productVatPercent > 0 && (
-            <span className="text-xs text-gray-400">incl. VAT</span>
-          )}
+          {/* Always the final VAT-inclusive price — label uniformly
+              (some products carry 0% VAT). */}
+          <span className="text-xs text-gray-400">incl. VAT</span>
           {displayCompareAtPrice && displayCompareAtPrice > displayEffectivePrice && (
             <>
               <span className="text-lg text-gray-400 line-through">

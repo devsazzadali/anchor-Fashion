@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
+import { priceWithVat } from "@/lib/utils/vat";
 import { useCartStore } from "@/stores/use-cart-store";
 import { useWishlistStore } from "@/stores/use-wishlist-store";
 import { useSession } from "@/hooks/use-session";
@@ -91,6 +92,15 @@ export function ProductQuickView({
   const discountPercent =
     product.discount ??
     (hasDiscount ? Math.round(((comparePrice - price) / comparePrice) * 100) : null);
+
+  // Display prices follow the card/PDP rule (REG-50): VAT-inclusive and
+  // labelled "incl. VAT". `price`/`comparePrice` above stay pre-VAT —
+  // they only feed the discount-ratio math; the cart recomputes totals
+  // from product data, never from these display figures.
+  const vatPercent = Number(product.vat_percent ?? product.vatPercent ?? 0);
+  const displayPrice = priceWithVat(price, vatPercent);
+  const displayComparePrice =
+    comparePrice > 0 ? priceWithVat(comparePrice, vatPercent) : comparePrice;
 
   // Variants extraction
   const variants = product.variants || [];
@@ -318,11 +328,12 @@ export function ProductQuickView({
               {/* Price & Savings */}
               <div className="flex items-baseline gap-3 border-b border-zinc-100 pb-4">
                 <span className="text-2xl font-semibold text-zinc-900">
-                  {formatCurrency(price)}
+                  {formatCurrency(displayPrice)}
                 </span>
+                <span className="text-xs text-zinc-400">incl. VAT</span>
                 {hasDiscount && (
                   <span className="text-base text-zinc-400 line-through">
-                    {formatCurrency(comparePrice)}
+                    {formatCurrency(displayComparePrice)}
                   </span>
                 )}
                 {hasDiscount && discountPercent && (
@@ -423,7 +434,7 @@ export function ProductQuickView({
                 ) : (
                   <>
                     <ShoppingBag className="h-4 w-4 transition-transform group-hover:scale-110" />
-                    Add To Cart • {formatCurrency(price * quantity)}
+                    Add To Cart • {formatCurrency(displayPrice * quantity)}
                   </>
                 )}
               </Button>

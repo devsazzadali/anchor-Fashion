@@ -83,7 +83,7 @@ export function WishlistGrid() {
         const price = product?.base_price || product?.price || 0;
         // REG-50: one VAT rule everywhere a price is shown — the figure
         // next to a product is the VAT-INCLUSIVE price (the PDP/card
-        // wording), labelled "incl. VAT" when the product carries VAT.
+        // wording), always labelled "incl. VAT" (VAT is 0% on some).
         const vatPercent = Number(product?.vat_percent ?? product?.vatPercent ?? 0);
         const displayPrice = priceWithVat(price, vatPercent);
         const image =
@@ -137,11 +137,9 @@ export function WishlistGrid() {
               </Link>
               <p className="text-sm font-semibold">
                 {formatCurrency(displayPrice)}
-                {vatPercent > 0 && (
-                  <span className="block text-[10px] font-normal text-slate-400">
-                    incl. VAT
-                  </span>
-                )}
+                <span className="block text-[10px] font-normal text-slate-400">
+                  incl. VAT
+                </span>
               </p>
             </div>
 

@@ -222,17 +222,15 @@ export function OrderSummary({
               </div>
               <div className="flex items-center text-sm font-medium">
                 {/* REG-50: line prices follow the PDP rule — VAT-inclusive,
-                    labelled when the product carries VAT. */}
+                    always labelled (VAT is 0% on some products). */}
                 <span className="text-right">
                   {formatCurrency(
                     priceWithVat(price, (item.product as any)?.vat_percent ?? 0) *
                       item.quantity
                   )}
-                  {Number((item.product as any)?.vat_percent ?? 0) > 0 && (
-                    <span className="block text-[10px] font-normal text-slate-400">
-                      incl. VAT
-                    </span>
-                  )}
+                  <span className="block text-[10px] font-normal text-slate-400">
+                    incl. VAT
+                  </span>
                 </span>
               </div>
             </div>
