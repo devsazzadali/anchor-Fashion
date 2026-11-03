@@ -130,28 +130,9 @@ export function ProductCard({ product, className }: ProductCardProps) {
       return;
     }
 
-    let currentUser = user;
-    if (!currentUser) {
-      const res = await authClient.getSession();
-      currentUser = res?.data?.user ?? null;
-    }
-
-    if (!currentUser) {
-      toast.info("Please log in to add items to your cart.", {
-        action: {
-          label: "Login",
-          onClick: () =>
-            router.push(
-              `/auth/login?next=${encodeURIComponent(`/product/${product.slug}`)}`
-            ),
-        },
-      });
-      router.push(
-        `/auth/login?next=${encodeURIComponent(`/product/${product.slug}`)}`
-      );
-      return;
-    }
-
+    // No login gate here: guests add to a cookie-based guest cart,
+    // exactly like the PDP add-to-bag — addToCartAction creates the
+    // af_guest_session cart server-side and merges it at sign-in.
     let targetVariantId = variantId;
     if (!targetVariantId && variants.length > 0) {
       targetVariantId = variants[0]?.id || null;

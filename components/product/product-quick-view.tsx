@@ -175,27 +175,8 @@ export function ProductQuickView({
       return;
     }
 
-    let currentUser = user;
-    if (!currentUser) {
-      const res = await authClient.getSession();
-      currentUser = res?.data?.user ?? null;
-    }
-
-    if (!currentUser) {
-      toast.info("Please log in to add items to your cart.", {
-        action: {
-          label: "Login",
-          onClick: () => {
-            onClose();
-            router.push(`/auth/login?next=${encodeURIComponent(`/product/${product.slug}`)}`);
-          },
-        },
-      });
-      onClose();
-      router.push(`/auth/login?next=${encodeURIComponent(`/product/${product.slug}`)}`);
-      return;
-    }
-
+    // No login gate here either: guests add to the same cookie-based
+    // guest cart as the PDP and product cards (see product-card.tsx).
     // If sizes exist and none selected, remind user
     if (sizes.length > 0 && !selectedSize) {
       toast.error("Please select a size first");
