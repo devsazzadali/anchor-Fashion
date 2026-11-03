@@ -137,11 +137,8 @@ export function ProductActions({
       currentUser = res?.data?.user ?? null;
     }
 
-    if (!currentUser) {
-      toast.info("Please log in to add items to your wishlist.");
-      router.push(`/auth/login?next=${encodeURIComponent(pathname)}`);
-      return;
-    }
+    // A3-C5: guests save to the device (local) wishlist — see
+    // product-card.tsx. No login redirect.
 
     const role = currentUser?.user_metadata?.role || currentUser?.app_metadata?.role || "CUSTOMER";
     if (ADMIN_ROLES.includes(role)) {

@@ -117,14 +117,14 @@ async function runFallback(fnName: string, args: any): Promise<any> {
     }
 
     if (couponId) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE coupons
-         SET used_count = COALESCE(used_count, 0) + 1,
-             updated_at = NOW()
-         WHERE id = $1::uuid`,
-        couponId
-      );
-
+      // A3-B3: the usage row and the used_count increment are ONE
+      // redemption record — both must land or neither does. Previously
+      // the increment ran first and the usage insert was wrapped in a
+      // swallow-everything try/catch, so any insert failure left
+      // used_count bumped with no coupon_usages row (and other flows
+      // skipped recording entirely), under-recording real redemptions.
+      // Now the insert is mandatory: on failure the caller gets an
+      // error and order placement rolls back.
       try {
         await prisma.$executeRawUnsafe(
           `INSERT INTO coupon_usages (id, coupon_id, order_id, customer_id, discount_amount, created_at)
@@ -134,12 +134,32 @@ async function runFallback(fnName: string, args: any): Promise<any> {
           customerId || null,
           discountApplied
         );
-      } catch (usageErr) {
+      } catch (usageErr: any) {
+        return {
+          data: null,
+          error: {
+            message: `Failed to record coupon usage: ${usageErr?.message || usageErr}`,
+          },
+        };
       }
+
+      await prisma.$executeRawUnsafe(
+        `UPDATE coupons
+         SET used_count = COALESCE(used_count, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1::uuid`,
+        couponId
+      );
 
       return { data: true, error: null };
     }
-    return { data: true, error: null };
+    // Coupon not found: that is a failed redemption, not a silent
+    // success — surface it so the order can roll back instead of
+    // granting a discount the ledger never recorded.
+    return {
+      data: null,
+      error: { message: `Coupon not found for code: ${couponCode || "(none)"}` },
+    };
   } else if (fnName === "release_coupon_atomic") {
     const orderId = args.p_order_id || args.order_id;
     if (orderId) {

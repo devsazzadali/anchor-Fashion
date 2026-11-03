@@ -87,11 +87,39 @@ export class OrderService {
    * order was charged in full. Soft variant returns null on any problem
    * (used for display summaries); placeOrder re-validates strictly.
    */
+  /**
+   * A3-A8: the coupon identity for a checkout. Signed-in customers use
+   * their user id; GUESTS are bound by their verified checkout phone —
+   * the same identity key the auto-profile system uses (normalized
+   * phone → profile). Without this, guests had no id at all, the
+   * per-user limit check was skipped, and "1 per customer" coupons
+   * were reusable without limit through guest checkout.
+   */
+  private static async resolveCouponCustomerId(
+    userId: string | null | undefined,
+    phone?: string | null
+  ): Promise<string | undefined> {
+    if (userId) return userId;
+    if (!phone) return undefined;
+    try {
+      const { normalizePhone, findProfileByNormalizedPhone } = await import(
+        "@/lib/services/customer/guest-profile.service"
+      );
+      const normalized = normalizePhone(phone);
+      if (!normalized) return undefined;
+      const profile = await findProfileByNormalizedPhone(normalized);
+      return profile?.id || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private static async resolveSessionCoupon(
     cartId: string,
     userId: string | null | undefined,
     subtotal: number,
-    sessionId?: string | null
+    sessionId?: string | null,
+    guestPhone?: string | null
   ): Promise<{ code: string; discount: number } | null> {
     try {
       const session = sessionId
@@ -110,7 +138,7 @@ export class OrderService {
       const validation = await CouponService.validateAndCalculateDiscount(
         code,
         subtotal,
-        userId || undefined
+        await this.resolveCouponCustomerId(userId, guestPhone)
       );
       if (!validation.isValid) return null;
       return { code: validation.coupon?.code || code, discount: validation.discount };
@@ -202,7 +230,13 @@ export class OrderService {
     );
 
     // Coupon applied to the checkout session (see resolveSessionCoupon).
-    const coupon = await this.resolveSessionCoupon(cartId, userId, subtotal, sessionId);
+    const coupon = await this.resolveSessionCoupon(
+      cartId,
+      userId,
+      subtotal,
+      sessionId,
+      (shippingAddress as any)?.phone || null
+    );
     const discount_amount = coupon?.discount ?? 0;
 
     const total_amount = Math.max(
@@ -246,34 +280,42 @@ export class OrderService {
     // Strict coupon validation before anything is persisted: a coupon the
     // customer applied that has since expired / hit its limit must fail the
     // order with the coupon error, not silently change the charged total.
+    // A3-A8: the previous catch re-threw only errors whose message matched
+    // a regex — every other validation failure (e.g. "not active yet") was
+    // swallowed into appliedCoupon = null while summary.discount_amount
+    // (which HAD resolved the coupon) was still charged: discount granted,
+    // consumeCoupon never called, used_count never incremented. Now ANY
+    // invalid session coupon fails the order; only a session-lookup
+    // problem (no code readable) leaves the order coupon-free.
+    // A3-A8: guests validate against their phone-bound auto-profile id.
+    const couponCustomerId = await this.resolveCouponCustomerId(
+      userId,
+      checkoutData.information.shipping_address.phone
+    );
     let appliedCoupon: { code: string; discount: number } | null = null;
+    let sessionCouponCode: string | null = null;
     try {
       const sessionRow = await prisma.checkoutSession.findUnique({
         where: { id: sessionId },
         select: { couponCode: true },
       });
-      const code = sessionRow?.couponCode?.trim();
-      if (code) {
-        const validation = await CouponService.validateAndCalculateDiscount(
-          code,
-          summary.subtotal,
-          userId || undefined
-        );
-        if (!validation.isValid) {
-          throw new Error(validation.error || "Invalid coupon");
-        }
-        appliedCoupon = {
-          code: validation.coupon?.code || code,
-          discount: validation.discount,
-        };
+      sessionCouponCode = sessionRow?.couponCode?.trim() || null;
+    } catch {
+      sessionCouponCode = null;
+    }
+    if (sessionCouponCode) {
+      const validation = await CouponService.validateAndCalculateDiscount(
+        sessionCouponCode,
+        summary.subtotal,
+        couponCustomerId
+      );
+      if (!validation.isValid) {
+        throw new Error(validation.error || "Invalid coupon");
       }
-    } catch (err) {
-      if (err instanceof Error && /coupon|Minimum order|expired|usage limit|already used/i.test(err.message)) {
-        throw err;
-      }
-      // Session lookup problems must not block a coupon-free checkout; the
-      // soft summary above already resolved any discount consistently.
-      appliedCoupon = null;
+      appliedCoupon = {
+        code: validation.coupon?.code || sessionCouponCode,
+        discount: validation.discount,
+      };
     }
 
     // Generate Order Number
@@ -432,9 +474,16 @@ export class OrderService {
     // (idempotent) and cancel, mirroring the reservation-failure path.
     if (appliedCoupon) {
       try {
+        // A3-A8/B3: record the redemption against the SAME identity the
+        // per-user limit was validated with — for guests that is the
+        // phone-bound auto-profile (createOrder has just linked the
+        // order to it, so order.user_id carries it), never null. The
+        // consume writes the coupon_usages row + used_count increment
+        // as one operation; a recording failure cancels the order
+        // (below), so a granted discount can no longer go unrecorded.
         await CouponService.consumeCoupon(
           appliedCoupon.code,
-          userId || undefined,
+          userId || (order as any).user_id || couponCustomerId,
           order.id,
           appliedCoupon.discount
         );

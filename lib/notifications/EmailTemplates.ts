@@ -30,14 +30,24 @@ export const EmailTemplates = {
   `,
 
   orderConfirmed: (order: any, storeUrl: string) => {
-    const formatPrice = (amount: number) => 
+    const formatPrice = (amount: number) =>
       new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount).replace('BDT', '৳');
 
-    const itemsHtml = (order.order_items || []).map((item: any) => `
+    // A3-A5: the OMS caller hands over the repository-mapped order shape
+    // — items under `items`, shipping under `shipping_fee`, VAT under
+    // `vat_amount`. This template used to read `order_items` /
+    // `shipping_cost` (the delivered-invoice shape), so the item table
+    // rendered EMPTY, shipping always showed ৳0, and with no VAT row the
+    // visible numbers never summed to the total. Accept both shapes.
+    const items = order.items || order.order_items || [];
+    const shippingFee = Number(order.shipping_fee ?? order.shipping_cost ?? 0);
+    const vatAmount = Number(order.vat_amount ?? order.tax_total ?? 0);
+
+    const itemsHtml = items.map((item: any) => `
       <tr>
         <td style="padding: 15px 0; border-bottom: 1px solid #eaeaea;">
           <p style="margin: 0; font-weight: bold; color: #1a1a1a;">${item.product_name}</p>
-          ${item.variant_sku ? `<p style="margin: 4px 0 0; font-size: 12px; color: #888;">SKU: ${item.variant_sku}</p>` : ""}
+          ${(item.variant_sku || item.sku) ? `<p style="margin: 4px 0 0; font-size: 12px; color: #888;">SKU: ${item.variant_sku || item.sku}</p>` : ""}
         </td>
         <td style="padding: 15px 0; border-bottom: 1px solid #eaeaea; text-align: center; color: #555;">${item.quantity}</td>
         <td style="padding: 15px 0; border-bottom: 1px solid #eaeaea; text-align: right; color: #1a1a1a; font-weight: bold;">${formatPrice(item.unit_price * item.quantity)}</td>
@@ -82,11 +92,15 @@ export const EmailTemplates = {
             </tr>
             <tr>
               <td colspan="2" style="padding: 5px 0; text-align: right; color: #555;">Shipping:</td>
-              <td style="padding: 5px 0; text-align: right; color: #1a1a1a;">${formatPrice(order.shipping_cost || 0)}</td>
+              <td style="padding: 5px 0; text-align: right; color: #1a1a1a;">${formatPrice(shippingFee)}</td>
             </tr>
             ${order.discount_amount ? `<tr>
               <td colspan="2" style="padding: 5px 0; text-align: right; color: #e50000;">Discount:</td>
               <td style="padding: 5px 0; text-align: right; color: #e50000;">-${formatPrice(order.discount_amount)}</td>
+            </tr>` : ''}
+            ${vatAmount ? `<tr>
+              <td colspan="2" style="padding: 5px 0; text-align: right; color: #555;">VAT:</td>
+              <td style="padding: 5px 0; text-align: right; color: #1a1a1a;">${formatPrice(vatAmount)}</td>
             </tr>` : ''}
             <tr>
               <td colspan="2" style="padding: 15px 0 0; text-align: right; font-weight: bold; color: #1a1a1a; border-top: 2px solid #eaeaea;">Total:</td>
@@ -97,7 +111,7 @@ export const EmailTemplates = {
       </div>
 
       <div style="text-align: center; margin: 40px 0;">
-        <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View / Download Invoice PDF</a>
+        <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View Invoice</a>
       </div>
 
       <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eaeaea;">
@@ -206,7 +220,7 @@ export const EmailTemplates = {
       </div>
 
       <div style="text-align: center; margin: 40px 0;">
-        <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View / Download Full Invoice</a>
+        <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View Invoice</a>
       </div>
 
       ${company ? `<div style="text-align: center; margin-top: 10px; padding: 14px; background-color: #f9f9f9; border-radius: 8px;">

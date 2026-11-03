@@ -363,6 +363,11 @@ export function ProductDetailView({
                 productMedia={product.product_media || []}
                 flashSale={flashSale}
                 sizeCharts={product.size_charts || []}
+                productCategory={
+                  product.categories
+                    ? `${product.categories.slug || ""} ${product.categories.name || ""}`.trim()
+                    : undefined
+                }
                 freeShippingThreshold={freeShippingThreshold}
                 onVariantChange={handleVariantChange}
               />

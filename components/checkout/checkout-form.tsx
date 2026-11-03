@@ -95,6 +95,11 @@ export function CheckoutForm({
 
   const form = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutFormSchema),
+    // A3-C4: validate on blur (the auth forms' inline standard) — with
+    // the default onSubmit mode a shopper could type garbage into the
+    // email/phone fields, blur, and see no error anywhere. Client-side
+    // only: submit handling and the order logic are unchanged.
+    mode: "onBlur",
     defaultValues: {
       information: {
         email: formData.information?.email || "",
@@ -398,7 +403,14 @@ export function CheckoutForm({
                 <FormItem>
                   <FormLabel>Email Address</FormLabel>
                   <FormControl>
-                    <Input placeholder="you@example.com" {...field} />
+                    <Input
+                      placeholder="you@example.com"
+                      {...field}
+                      type="email"
+                      required
+                      autoComplete="email"
+                      inputMode="email"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -446,7 +458,16 @@ export function CheckoutForm({
                 <FormItem className="mt-4">
                   <FormLabel>Phone Number</FormLabel>
                   <FormControl>
-                    <Input placeholder="01XXXXXXXXX" {...field} />
+                    <Input
+                      placeholder="01XXXXXXXXX"
+                      {...field}
+                      type="tel"
+                      required
+                      autoComplete="tel"
+                      inputMode="tel"
+                      pattern="(\+?880|0)1[3-9][0-9]{8}"
+                      title="Enter a valid mobile number (11 digits starting with 01)"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

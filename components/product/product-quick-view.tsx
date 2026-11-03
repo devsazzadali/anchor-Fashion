@@ -16,7 +16,7 @@ import { useCartStore } from "@/stores/use-cart-store";
 import { useWishlistStore } from "@/stores/use-wishlist-store";
 import { useSession } from "@/hooks/use-session";
 import { authClient } from "@/lib/auth/client";
-import { useRouter } from "next/navigation";
+
 import { toast } from "sonner";
 import { ADMIN_ROLES } from "@/lib/constants/auth";
 import {
@@ -44,7 +44,6 @@ export function ProductQuickView({
   isOpen,
   onClose,
 }: ProductQuickViewProps) {
-  const router = useRouter();
   const { user } = useSession();
   const { addItem: addCartItem } = useCartStore();
   const { wishlist, addItem: addWishlistItem, removeItemByProductId } = useWishlistStore();
@@ -142,12 +141,8 @@ export function ProductQuickView({
       currentUser = res?.data?.user ?? null;
     }
 
-    if (!currentUser) {
-      toast.info("Please log in to add items to your wishlist.");
-      onClose();
-      router.push(`/auth/login?next=${encodeURIComponent(`/product/${product.slug}`)}`);
-      return;
-    }
+    // A3-C5: guests save to the device (local) wishlist — see
+    // product-card.tsx. No login redirect.
 
     const role = currentUser?.user_metadata?.role || currentUser?.app_metadata?.role || "CUSTOMER";
     if (ADMIN_ROLES.includes(role)) {

@@ -305,7 +305,37 @@ export async function POST(request: Request) {
               { status: 403 }
             );
           }
-        } else if (!(await CodOtpService.isSessionVerified(otpSessionId))) {
+          // A3-A3: a just-verified code still has to belong to THIS
+          // order's identity — the session's dispatch target (and the
+          // phone recorded at dispatch) must match the order's
+          // phone/email, otherwise the verification was earned on a
+          // different identity and validates nothing here.
+          const bound = await CodOtpService.isSessionBoundToOrder(
+            otpSessionId,
+            { phone: customer_phone, email: customer_email || null }
+          );
+          if (!bound) {
+            return NextResponse.json(
+              {
+                error:
+                  'Verification does not match this order\'s phone/email. Please request a new code for this order.',
+                verificationRequired: true,
+                sessionId: otpSessionId,
+                riskLevel: riskEvaluation.riskLevel,
+                maskedTarget: CodOtpService.maskTarget(
+                  customer_email || customer_phone,
+                  customer_email ? 'email' : 'phone'
+                ),
+              },
+              { status: 403 }
+            );
+          }
+        } else if (
+          !(await CodOtpService.isSessionBoundToOrder(otpSessionId, {
+            phone: customer_phone,
+            email: customer_email || null,
+          }))
+        ) {
           const otpInit = await CodOtpService.initiateVerification({
             sessionId: otpSessionId,
             email: customer_email || '',

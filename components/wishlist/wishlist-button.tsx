@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useSession } from "@/hooks/use-session";
-import { useRouter, usePathname } from "next/navigation";
 
 interface WishlistButtonProps {
   productId: string;
@@ -22,9 +20,6 @@ export function WishlistButton({
   size = "icon",
 }: WishlistButtonProps) {
   const { wishlist, addItem, removeItem, isLoading } = useWishlistStore();
-  const { user } = useSession();
-  const router = useRouter();
-  const pathname = usePathname();
 
   // Check if item is in wishlist
   const wishlistItem = wishlist?.items?.find(
@@ -36,12 +31,8 @@ export function WishlistButton({
     e.preventDefault();
     e.stopPropagation();
 
-    // Auth gate: redirect to login if not authenticated
-    if (!user) {
-      toast.info("Please log in to add items to your wishlist.");
-      router.push(`/auth/login?next=${encodeURIComponent(pathname)}`);
-      return;
-    }
+    // A3-C5: no auth gate — guests save to the device (local) wishlist,
+    // signed-in users sync to their account (the store handles both).
 
     if (isWishlisted && wishlistItem) {
       await removeItem(wishlistItem.id);

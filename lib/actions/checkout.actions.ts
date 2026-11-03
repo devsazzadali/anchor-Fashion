@@ -274,7 +274,18 @@ export async function processCheckoutAction(
 
       // Check if verification is required by risk policy
       if (riskEvaluation.requiresVerification) {
-        const isVerified = await CodOtpService.isSessionVerified(checkoutSessionId);
+        // A3-A3: "verified" is not enough — the verified session must be
+        // bound to THIS order's phone AND email. A code verified against
+        // the customer's own email must not validate an order submitted
+        // under a different phone/email; when the binding fails we fall
+        // through to re-dispatch against the order's own identity below.
+        const isVerified = await CodOtpService.isSessionBoundToOrder(
+          checkoutSessionId,
+          {
+            phone: parsedData.information.shipping_address.phone,
+            email: parsedData.information.email,
+          }
+        );
 
         if (!isVerified) {
           // Trigger OTP dispatch if not already active

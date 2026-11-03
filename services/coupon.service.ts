@@ -91,6 +91,10 @@ export class CouponService {
       }
 
       // 5. Validate Per-User Limit
+      // A3-A8: callers pass the phone-bound auto-profile id for guests
+      // (OrderService.resolveCouponCustomerId), so this check now binds
+      // guests by their verified checkout phone — previously guests
+      // arrived with no id and the check was skipped entirely.
       const perUserLimit = couponData.per_user_limit || 1;
       if (customerId && perUserLimit) {
         const { count, error: usageError } = await db

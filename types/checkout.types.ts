@@ -131,6 +131,8 @@ export interface Order {
   coupon_id?: string | null;
   /** Coupon code applied to this order (orders.coupon_code column). */
   coupon_code?: string | null;
+  /** Public view-only invoice token (orders.invoice_token column). */
+  invoice_token?: string | null;
   payment_method: string;
   payment_status?: string | null;
   payment_intent_id?: string | null;

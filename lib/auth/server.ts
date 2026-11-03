@@ -49,7 +49,6 @@ export interface NeonAuthSessionUser {
 
 /**
  * Deduplicated and indexed role resolution.
- * If user.role is already an elevated role, skips DB query completely.
  * Uses point-lookup by unique email / id.
  *
  * SECURITY: the profile is looked up by email, and sign-up is open. An elevated
@@ -57,6 +56,13 @@ export interface NeonAuthSessionUser {
  * this auth user's id (ids cannot be chosen at sign-up) OR the auth email has been
  * verified. Otherwise anyone could register a staff member's email address and
  * inherit that profile's role.
+ *
+ * A3-A4: the role on the raw Neon Auth user object is NEVER trusted — an
+ * earlier fast path returned any elevated `user.role` immediately, before
+ * the identity-binding guard below, so a self-registered user who managed
+ * to get an elevated role onto their hosted auth record would have skipped
+ * the guard entirely. The role now comes ONLY from the identity-bound
+ * profiles record; the raw auth role is not consulted at all.
  */
 export const resolveUserRole = cache(
   async (user: {
@@ -66,12 +72,7 @@ export const resolveUserRole = cache(
     emailVerified?: boolean | null;
   }): Promise<string> => {
     if (!user) return "CUSTOMER";
-    let role = String(user.role || "").toUpperCase().trim();
-
-    // If role is already known and elevated, return immediately
-    if (role && role !== "USER" && role !== "CUSTOMER") {
-      return role;
-    }
+    let role = "CUSTOMER";
 
     try {
       const email = user.email ? user.email.toLowerCase().trim() : undefined;

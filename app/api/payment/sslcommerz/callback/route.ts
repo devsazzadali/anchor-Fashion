@@ -154,6 +154,38 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
   // 3. Handle Cancellation or Failure from Gateway
   if (action === "cancel" || status === "CANCELLED" || action === "fail" || status === "FAILED") {
+    // A3-A1: this branch is destructive (cancels the order, releases
+    // inventory + coupon), so the notification must be authenticated
+    // BEFORE any state change: (1) tran_id must be bound to a real
+    // payment_session belonging to THIS order, and (2) the payload's
+    // verify_sign must validate against the store password. A genuine
+    // gateway fail/cancel redirect always carries both; an
+    // unauthenticated hit (e.g. ?action=cancel&tran_id=<order number>)
+    // is ignored with NO state change — the customer still lands on the
+    // failure page, but the order stays pending_payment.
+    const sessionBound =
+      !!paymentSession &&
+      paymentSession.order_id === order.id &&
+      (paymentSession.metadata as any)?.tran_id === tranId;
+    let signatureValid = false;
+    try {
+      if (payload.verify_sign && payload.verify_key) {
+        const config = await SSLCommerzService.getConfig();
+        signatureValid = SSLCommerzService.verifySignature(
+          payload,
+          config.store_passwd
+        );
+      }
+    } catch {
+      signatureValid = false;
+    }
+    if (!sessionBound || !signatureValid) {
+      return NextResponse.redirect(
+        new URL(`/checkout/failed?order_id=${order.id}&reason=unvalidated_callback`, appUrl),
+        303
+      );
+    }
+
     const isCancel = action === "cancel" || status === "CANCELLED";
 
     try {
@@ -225,16 +257,12 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
       // Verify Provider Status
       if (valRes.status !== "VALID" && valRes.status !== "VALIDATED") {
-
-        await inventoryService.releaseOrderInventory(order.id);
-        await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
-        await CouponService.releaseCoupon(order.id);
-
-        await db
-          .from("orders")
-          .update({ status: "cancelled", payment_status: "FAILED" })
-          .eq("id", order.id);
-
+        // A3-A1: a rejected validation proves nothing about the order —
+        // a forged val_id lands here too. Do NOT cancel the order or
+        // release inventory/coupon on an unvalidated notification; the
+        // order stays pending_payment and expires by its reservation
+        // window. (The amount/currency checks below run only on a
+        // VALIDATED gateway response and keep their handling.)
         return NextResponse.redirect(
           new URL(`/checkout/failed?order_id=${order.id}&reason=validation_failed`, appUrl),
           303

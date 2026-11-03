@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { PromotionRepository } from "@/lib/repositories/marketing/promotion.repository";
 import { priceWithVat } from "@/lib/utils/vat";
 import { escapeLikeWildcards } from "@/lib/utils/like-escape";
+import { expandSearchTerms } from "@/lib/utils/bengali-search";
 
 /**
  * The unit price a product card actually displays: the effective selling
@@ -385,9 +386,14 @@ export const CatalogRepository = {
         // `contains` becomes a Postgres LIKE pattern and an unescaped
         // "%" or "_" in the term acted as a wildcard (searching "%"
         // returned the whole catalog).
-        const term = escapeLikeWildcards(params.search.trim());
+        // A3-C8: expandSearchTerms adds the Latin transliteration for
+        // Bengali-script queries ("পাঞ্জাবি" → also "panjabi"), which
+        // previously returned 0 products against the Latin catalog.
+        const terms = expandSearchTerms(params.search).map((t) =>
+          escapeLikeWildcards(t)
+        );
         andClauses.push({
-          OR: [
+          OR: terms.flatMap((term) => [
             { name: { contains: term, mode: "insensitive" } },
             { description: { contains: term, mode: "insensitive" } },
             { shortDescription: { contains: term, mode: "insensitive" } },
@@ -404,7 +410,7 @@ export const CatalogRepository = {
                 some: { category: { name: { contains: term, mode: "insensitive" } } },
               },
             },
-          ],
+          ]),
         });
       }
 

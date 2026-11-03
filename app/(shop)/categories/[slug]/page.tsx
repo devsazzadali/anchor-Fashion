@@ -7,7 +7,7 @@ import {
   getBrands,
   getProducts,
 } from "@/features/commerce/actions/categories";
-import { ProductCard } from "@/components/product/product-card";
+import { InfiniteScrollGrid } from "@/components/product/infinite-scroll-grid";
 import { ProductFilters } from "@/components/product/product-filters";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,13 @@ export default async function CategoryPage({
   if (!category) notFound();
   const displayName = category?.name || slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
-  // Fetch data in parallel with comprehensive filter parameters
+  // Fetch data in parallel with comprehensive filter parameters.
+  // A3-C1: the old limit of 24 silently truncated the category — e.g.
+  // /categories/panjabi showed 24 of 38 products with no pagination,
+  // no load-more, and ?page=2 ignored. Fetch the category's full set
+  // (the catalog is 188 products; 200 covers any single category) and
+  // render it through the same InfiniteScrollGrid the /products page
+  // uses, so every product is reachable from its category page.
   const [products, categories, brands] = await Promise.all([
     getProducts({
       categoryId: category?.id,
@@ -67,7 +73,7 @@ export default async function CategoryPage({
       maxPrice,
       search,
       sortBy: sortBy,
-      limit: 24,
+      limit: 200,
     }),
     getCategories(),
     getBrands(),
@@ -267,14 +273,12 @@ export default async function CategoryPage({
             </Suspense>
           </aside>
 
-          {/* Product Cards Grid */}
+          {/* Product Cards Grid — A3-C1: progressive reveal of the FULL
+              category set via the shared InfiniteScrollGrid (initial
+              24, +8 per scroll step), replacing the hard 24-card cap. */}
           <div className="md:col-span-3 lg:col-span-4">
             {products.length > 0 ? (
-              <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+              <InfiniteScrollGrid products={products} initialCount={24} />
             ) : (
               <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white py-20 px-4 text-center">
                 <h3 className="mb-2 text-xl font-medium text-gray-900">No products found</h3>

@@ -81,6 +81,9 @@ export interface ProductVariantSelectorProps {
   productMedia?: ProductMediaItem[];
   flashSale?: FlashSaleInfo | null;
   sizeCharts?: SizeChart[];
+  /** A3-C3: the product's category (slug/name) so the Size Guide opens
+   * the chart for the product's own category. */
+  productCategory?: string;
   onVariantChange?: (info: VariantChangeInfo) => void;
 }
 
@@ -281,6 +284,7 @@ export function ProductVariantSelector({
   productMedia = [],
   flashSale = null,
   sizeCharts = [],
+  productCategory,
   freeShippingThreshold = 0,
   onVariantChange,
 }: ProductVariantSelectorProps) {
@@ -684,6 +688,7 @@ export function ProductVariantSelector({
               {dimension.name.toLowerCase() === "size" && (
                 <SizeGuideModal
                   sizeCharts={sizeCharts}
+                  categoryHint={productCategory || productName}
                   availableSizes={dimension.values}
                   selectedSize={selectedValue}
                   onSelectSize={(sizeVal) => {

@@ -97,6 +97,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
+    // A3-A1: if the order was located via value_a / intent fallback, the
+    // payment session for this tran_id may not have been resolved yet —
+    // resolve it now; the failure-branch gate below binds against it.
+    if (!paymentSession && tranId) {
+      const { data: sessionData } = await db
+        .from("payment_sessions")
+        .select("*")
+        .filter("metadata->>tran_id", "eq", tranId)
+        .maybeSingle();
+      if (sessionData) paymentSession = sessionData;
+    }
+
     // 2. Idempotency Guard: If order is already paid/confirmed, acknowledge immediately
     const isAlreadyPaid =
       order.status === "CONFIRMED" ||
@@ -123,8 +135,41 @@ export async function POST(req: NextRequest) {
       } catch (_) {}
     };
 
+    // A3-A1: a FAILED/CANCELLED notification is destructive (cancels the
+    // order, releases inventory + coupon), so it must be authenticated
+    // BEFORE any state change: (1) tran_id must be bound to a real
+    // payment_session belonging to THIS order, and (2) the payload's
+    // verify_sign must validate against the store password. An
+    // unauthenticated failure post is rejected with NO state change —
+    // previously this branch ran before any gateway validation, so
+    // anyone who could guess an order number could mass-cancel the
+    // day's pending orders.
+    const isValidatedFailureNotification = async (): Promise<boolean> => {
+      try {
+        if (!paymentSession || paymentSession.order_id !== order.id) {
+          return false;
+        }
+        const sessionTranId = (paymentSession.metadata as any)?.tran_id;
+        if (!sessionTranId || sessionTranId !== tranId) return false;
+        if (!payload.verify_sign || !payload.verify_key) return false;
+        const config = await SSLCommerzService.getConfig();
+        return SSLCommerzService.verifySignature(payload, config.store_passwd);
+      } catch {
+        return false;
+      }
+    };
+
     // 3. Handle Failure or Cancellation notifications from IPN
     if (status === "FAILED" || status === "CANCELLED") {
+      if (!(await isValidatedFailureNotification())) {
+        return NextResponse.json(
+          {
+            status: "IGNORED",
+            error: "Failure notification could not be validated; no state changed",
+          },
+          { status: 401 }
+        );
+      }
 
       await safeRollback();
 
@@ -150,14 +195,10 @@ export async function POST(req: NextRequest) {
     const valRes = await SSLCommerzService.validateTransaction(valId, tranId);
 
     if (valRes.status !== "VALID" && valRes.status !== "VALIDATED") {
-
-      await safeRollback();
-
-      await db
-        .from("orders")
-        .update({ status: "cancelled", payment_status: "FAILED" })
-        .eq("id", order.id);
-
+      // A3-A1: a rejected validation proves nothing about the order — a
+      // forged val_id lands here too. Do NOT cancel the order or release
+      // inventory/coupon on an unvalidated notification; the order stays
+      // pending_payment and expires by its reservation window.
       return NextResponse.json(
         { error: "Validation server rejected transaction" },
         { status: 400 }

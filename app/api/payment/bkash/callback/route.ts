@@ -208,8 +208,31 @@ async function handleCallback(req: NextRequest) {
         );
       }
 
-      // Authoritative Invoice Verification
+      // Authoritative Invoice Verification (A3-A9: this block was an
+      // empty no-op — the mismatch was detected and execution continued,
+      // so a payment executed against one order's invoice could confirm
+      // another order with an equal total). The merchant invoice number
+      // is set to the order number at payment creation; a mismatch means
+      // this executed payment does NOT belong to this order, so it must
+      // not confirm it — handle exactly like the amount mismatch above.
       if (executeRes.merchantInvoiceNumber && executeRes.merchantInvoiceNumber !== order.order_number) {
+
+        await inventoryService.releaseOrderInventory(order.id);
+        await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
+        await CouponService.releaseCoupon(order.id);
+
+        const invoiceMismatchPayload: Record<string, any> = { status: "cancelled" };
+        const { error: invoiceMismatchErr } = await db
+          .from("orders")
+          .update({ ...invoiceMismatchPayload, payment_status: "FAILED" })
+          .eq("id", order.id);
+        if (invoiceMismatchErr) {
+          await db.from("orders").update(invoiceMismatchPayload).eq("id", order.id);
+        }
+
+        return NextResponse.redirect(
+          new URL(`/checkout/failed?order_id=${order.id}&reason=invoice_mismatch`, appUrl)
+        );
       }
 
       const trxID = executeRes.trxID || paymentID;

@@ -10,6 +10,11 @@ function mapPrismaOrderToCheckoutOrder(record: any): Order {
     id: record.id,
     user_id: record.profileId || record.customerId,
     order_number: record.orderNumber,
+    // A3-A5: the public view-only invoice token must travel with the
+    // mapped order — the OMS confirmation email links to /invoice/<token>
+    // and previously never received it, so it fell back to a login-gated
+    // account page.
+    invoice_token: record.invoiceToken || null,
     status: (record.status || "confirmed") as OrderStatus,
     subtotal: Number(record.subtotal || 0),
     shipping_fee: Number(record.shippingFee || 0),

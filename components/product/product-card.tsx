@@ -9,7 +9,6 @@ import { useWishlistStore } from "@/stores/use-wishlist-store";
 import { useCartStore } from "@/stores/use-cart-store";
 import { useSession } from "@/hooks/use-session";
 import { authClient } from "@/lib/auth/client";
-import { useRouter, usePathname } from "next/navigation";
 import { cn, formatCurrency } from "@/lib/utils";
 import { priceWithVat } from "@/lib/utils/vat";
 import { toast } from "sonner";
@@ -22,8 +21,6 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, className }: ProductCardProps) {
-  const router = useRouter();
-  const pathname = usePathname();
   const { user } = useSession();
   const { wishlist, addItem: addWishlistItem, removeItemByProductId } = useWishlistStore();
   const { addItem: addCartItem } = useCartStore();
@@ -92,14 +89,12 @@ export function ProductCard({ product, className }: ProductCardProps) {
       currentUser = res?.data?.user ?? null;
     }
 
-    if (!currentUser) {
-      toast.info("Please log in to add items to your wishlist.");
-      const redirectUrl = product.slug
-        ? `/product/${product.slug}`
-        : pathname || "/";
-      router.push(`/auth/login?next=${encodeURIComponent(redirectUrl)}`);
-      return;
-    }
+    // A3-C5: no login gate for guests — the wishlist page promises
+    // guests device-local saving ("Items you save as a guest stay on
+    // this device"), and the wishlist store is localStorage-persisted
+    // with an optimistic local add that survives the (failing) guest
+    // server call. Guests save to the device wishlist; signed-in users
+    // sync to their account exactly as before.
 
     const role = currentUser?.user_metadata?.role || currentUser?.app_metadata?.role || "CUSTOMER";
     if (ADMIN_ROLES.includes(role)) {
