@@ -6,6 +6,15 @@ import {
   CommunicationLog,
 } from "@/types/crm.types";
 
+// Row shape this file actually reads from the profiles builder select.
+interface ProfileDbRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  phone: string | null;
+}
+
 export class CRMRepository {
   private getAdminClient() {
     return createAdminDbClient();
@@ -20,14 +29,14 @@ export class CRMRepository {
         .order("created_at", { ascending: false });
 
       if (customerProfiles && customerProfiles.length > 0) {
-        return customerProfiles.map((cp: any) => ({
+        return customerProfiles.map((cp: ProfileDbRow) => ({
           ...cp,
           profile_id: cp.id,
           first_name: cp.first_name,
           last_name: cp.last_name,
           email: cp.email,
           phone: cp.phone,
-        })) as any;
+        })) as CRMCustomer[];
       }
     } catch {}
 
@@ -58,7 +67,7 @@ export class CRMRepository {
     }
     if (!data) return null;
     const [withProfile] = await this.attachCustomerProfiles(db, [
-      { ...(data as any), profile_id: (data as any).id },
+      { ...data, profile_id: data.id },
     ]);
     return withProfile as CRMCustomer;
   }

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { createAdminDbClient } from "@/lib/db/client";
 
 /**
  * S6-7: the Finance → Transactions page was permanently empty because
@@ -78,8 +79,43 @@ export function legacyStatusToPaymentStatus(status: string | null | undefined): 
   return "PENDING";
 }
 
+/** Real `payments` row shape, as this mapper reads it. Every field is
+ * optional because one caller (the returns service) maps partial rows
+ * that carry only `method` / `gateway_response`. */
+export interface PaymentDbRow {
+  id?: string;
+  order_id?: string;
+  method?: string | null;
+  status?: string | null;
+  transaction_id?: string | null;
+  gateway_response?: Record<string, unknown> | null;
+  amount?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** Legacy payment_transactions shape this mapper produces. */
+export interface LegacyTransaction {
+  id?: string;
+  order_id?: string;
+  method?: string | null;
+  session_id?: string | null;
+  provider_id?: string | null;
+  user_id?: string | null;
+  amount?: number;
+  currency?: string;
+  status: string;
+  reference_number?: string | null;
+  gateway_transaction_id?: string | null;
+  gateway_response?: Record<string, unknown>;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 /** Map a real `payments` row back to the legacy payment_transactions shape. */
-export function paymentRowToLegacyTransaction(row: any): any {
+export function paymentRowToLegacyTransaction(row: PaymentDbRow | null): LegacyTransaction | null {
   if (!row) return row;
   const gw = (row.gateway_response || {}) as Record<string, any>;
   return {
@@ -113,7 +149,7 @@ export interface GatewayTransactionArgs {
   currency?: string;
   referenceNumber?: string | null;
   gatewayTransactionId?: string | null;
-  gatewayResponse?: any;
+  gatewayResponse?: unknown;
   errorCode?: string | null;
   errorMessage?: string | null;
   extraMeta?: Record<string, any>;
@@ -127,7 +163,7 @@ export interface GatewayTransactionArgs {
  * logs a durable server error (never drops silently) and returns false.
  */
 export async function recordGatewayTransaction(
-  db: any,
+  db: ReturnType<typeof createAdminDbClient>,
   args: GatewayTransactionArgs
 ): Promise<boolean> {
   try {

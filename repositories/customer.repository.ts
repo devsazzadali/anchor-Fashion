@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import {
   CustomerProfile,
   CustomerAddress,
@@ -35,7 +36,12 @@ export class CustomerRepository {
     updates: Partial<CustomerProfile>
   ): Promise<CustomerProfile | null> {
     try {
-      const updateData: any = {};
+      const updateData: {
+        firstName?: string | null;
+        lastName?: string | null;
+        phone?: string | null;
+        avatarUrl?: string | null;
+      } = {};
       if (updates.first_name !== undefined) updateData.firstName = updates.first_name;
       if (updates.last_name !== undefined) updateData.lastName = updates.last_name;
       if (updates.phone !== undefined) updateData.phone = updates.phone;
@@ -176,7 +182,7 @@ export class CustomerRepository {
         orderBy: { createdAt: "desc" },
       });
 
-      return reviews.map((r: any) => ({
+      return reviews.map((r) => ({
         id: r.id,
         customer_id: r.userId || "",
         product_id: r.productId || "",
@@ -193,7 +199,7 @@ export class CustomerRepository {
           name: r.product?.name || "",
           product_media: [],
         },
-      })) as any[];
+      })) as CustomerReview[];
     } catch (error) {
       return [];
     }
@@ -229,7 +235,7 @@ export class CustomerRepository {
 
   // --- CRM Additions ---
 
-  static async logActivity(userId: string, activityType: string, metadata: any = {}) {
+  static async logActivity(userId: string, activityType: string, metadata: Prisma.InputJsonValue = {}) {
     try {
       const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
       await prisma.auditLog.create({

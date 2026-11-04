@@ -9,6 +9,7 @@ import { lineVatAmount, roundMoney } from '@/lib/utils/vat';
 import { resolveShippingCharge, applyFreeShippingThreshold } from '@/lib/services/shipping/zone-resolution.service';
 import { CodRiskService } from '@/lib/services/fraud/cod-risk.service';
 import { CodOtpService } from '@/lib/services/fraud/cod-otp.service';
+import type { OrderStatus } from '@/types/checkout.types';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -372,7 +373,7 @@ export async function POST(request: Request) {
       {
         user_id: effectiveCustomerId,
         guest_email: customer_email || null,
-        status: 'confirmed',
+        status: 'confirmed' as OrderStatus,
         payment_status: 'UNPAID',
         payment_method,
         subtotal,
@@ -381,7 +382,7 @@ export async function POST(request: Request) {
         vat_amount: vatAmount,
         tax_total: vatAmount,
         total_amount: totalAmount,
-      } as any,
+      },
       resolvedItems.map((it) => ({
         product_id: it.product_id,
         variant_id: it.variant_id,
@@ -391,9 +392,9 @@ export async function POST(request: Request) {
         quantity: it.quantity,
         unit_price: it.unit_price,
         line_total: it.line_total,
-      })) as any,
-      shippingAddress as any,
-      shippingAddress as any
+      })),
+      shippingAddress,
+      shippingAddress
     );
 
     // ── Deduct stock for the persisted order ─────────────────────────────

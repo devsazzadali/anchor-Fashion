@@ -38,8 +38,8 @@ async function verifyStaffSession(): Promise<{ authorized: boolean; error?: stri
       await resolveUserRole({
         id: user.id,
         email: user.email,
-        role: (user as any).role,
-        emailVerified: (user as any).emailVerified,
+        role: user.role,
+        emailVerified: user.emailVerified,
       })
     )
       .trim()
@@ -218,13 +218,13 @@ export async function updateCuratedCategoriesSettings(
     await prisma.setting.upsert({
       where: { key: SETTINGS_KEY },
       update: {
-        value: cleanSettings as any,
+        value: cleanSettings,
         category: "cms",
         description: "Homepage Curated Categories (The Style Edit) section configuration",
       },
       create: {
         key: SETTINGS_KEY,
-        value: cleanSettings as any,
+        value: cleanSettings,
         category: "cms",
         description: "Homepage Curated Categories (The Style Edit) section configuration",
       },

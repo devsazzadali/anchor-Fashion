@@ -44,7 +44,19 @@ export interface NeonAuthSessionUser {
   name?: string | null;
   image?: string | null;
   role?: string | null;
-  [key: string]: any;
+  // Carried by the hosted auth record and read by the guarded role
+  // resolver (resolveUserRole) and the deactivation check below.
+  emailVerified?: boolean | null;
+  // Auth metadata bag; checkout reads its role fallback from here.
+  user_metadata?: { role?: string | null; [key: string]: unknown } | null;
+  [key: string]: unknown;
+}
+
+// Shape of the hosted session payload getServerSession unwraps: either
+// the wrapped `data` object or, defensively, the result itself.
+interface NeonAuthSessionPayload {
+  user?: NeonAuthSessionUser | null;
+  session?: Record<string, unknown> | null;
 }
 
 /**
@@ -118,6 +130,12 @@ export const resolveUserRole = cache(
 /**
  * Deduplicated session fetch within a single request.
  * Wrapped in React.cache to avoid repeating HTTP calls and DB lookups across layout and page.
+ *
+ * REG-65 holdout: the session value flows through lib/db/auth.ts into
+ * consumers that read session.user, while the client branch of that
+ * helper yields a session record with no user field — typing this
+ * return member errors in three consumer files outside this batch's
+ * scope. Reconciling the two session shapes is a functional fix.
  */
 export const getServerSession = cache(
   async (): Promise<{
@@ -126,9 +144,9 @@ export const getServerSession = cache(
   }> => {
     try {
       const res = await auth.getSession();
-      const data = (res as any)?.data ?? res;
-      const user = data?.user ?? null;
-      const session = data?.session ?? null;
+      const data = (res as { data?: NeonAuthSessionPayload | null })?.data ?? res;
+      const user = (data as NeonAuthSessionPayload)?.user ?? null;
+      const session = (data as NeonAuthSessionPayload)?.session ?? null;
 
       if (user) {
         const resolvedRole = await resolveUserRole(user);
@@ -155,7 +173,7 @@ export const getServerSession = cache(
           const identityBound =
             !!profile &&
             ((!!user.id && profile.id === user.id) ||
-              (user as any).emailVerified === true);
+              user.emailVerified === true);
           if (profile && identityBound && profile.isActive === false) {
             return { user: null, session: null };
           }

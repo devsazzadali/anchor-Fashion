@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import {
   Collection,
   CreateCollectionInput,
@@ -27,12 +28,12 @@ export class CollectionRepository {
     await prisma.setting.upsert({
       where: { key: SETTINGS_KEY },
       update: {
-        value: collections as any,
+        value: collections,
         updatedAt: new Date(),
       },
       create: {
         key: SETTINGS_KEY,
-        value: collections as any,
+        value: collections,
         category: "catalog",
         description: "Curated product collections",
       },
@@ -52,7 +53,12 @@ export class CollectionRepository {
   static async getCollectionBySlug(
     slug: string,
     activeOnly: boolean = true
-  ): Promise<{ collection: Collection | null; products: any[] }> {
+  ): Promise<{
+    collection: Collection | null;
+    products: Prisma.ProductGetPayload<{
+      include: { variants: true; media: true; category: true };
+    }>[];
+  }> {
     const collections = await this.getRawCollections();
     const collection =
       collections.find(
@@ -63,7 +69,9 @@ export class CollectionRepository {
       return { collection: null, products: [] };
     }
 
-    let products: any[] = [];
+    let products: Prisma.ProductGetPayload<{
+      include: { variants: true; media: true; category: true };
+    }>[] = [];
     if (collection.product_ids && collection.product_ids.length > 0) {
       products = await prisma.product.findMany({
         where: {
