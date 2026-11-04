@@ -13,6 +13,17 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
+// REG-65: boundary contract for a Steadfast activity log off the untyped
+// API payload. Fields read without a fallback are asserted as strings; the
+// `type` alias (not an interface) keeps `raw: log` assignable to
+// `Record<string, any>` on TrackingUpdate.
+type SteadfastActivityLog = {
+  status: string;
+  status_message?: string;
+  location?: string;
+  created_at?: string;
+};
+
 export class SteadfastProvider implements ICourierProvider {
   readonly id = "steadfast" as const;
   readonly name = "Steadfast Courier";
@@ -139,7 +150,7 @@ export class SteadfastProvider implements ICourierProvider {
 
       if (data.status === 200) {
         const updates: TrackingUpdate[] = (data.activity_log || []).map(
-          (log: any) => ({
+          (log: SteadfastActivityLog) => ({
             status: log.status,
             statusDescription: log.status_message || log.status,
             location: log.location || "",
@@ -228,7 +239,7 @@ export class SteadfastProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

@@ -19,6 +19,10 @@ export class BlogService {
 
   async createPost(data: unknown): Promise<BlogPost> {
     const validData = blogPostSchema.parse(data);
+    // REG-65 holdout: postData stays loosely typed below. The zod schema
+    // allows a null author_id, while BlogPost declares author_id a plain
+    // string, so narrowing here forces a repository/schema change that is
+    // outside this type-only batch.
     const postData: any = { ...validData };
 
     if (!postData.featured_image && postData.cover_image) {
@@ -36,6 +40,9 @@ export class BlogService {
 
   async updatePost(id: string, data: unknown): Promise<BlogPost> {
     const validData = blogPostSchema.partial().parse(data);
+    // REG-65 holdout: same schema/type disagreement as createPost above —
+    // the zod output allows a null author_id that BlogPost does not, so
+    // narrowing here is a repository/schema decision, not a type-only edit.
     const postData: any = { ...validData };
 
     if (postData.cover_image !== undefined) {

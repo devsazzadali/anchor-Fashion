@@ -14,6 +14,17 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
+// REG-65: boundary contract for a DHL tracking event off the untyped API
+// payload. Fields read without a fallback are asserted as strings; the
+// `type` alias (not an interface) keeps `raw: e` assignable to
+// `Record<string, any>` on TrackingUpdate.
+type DhlTrackingEvent = {
+  typeCode: string;
+  description: string;
+  serviceArea?: { description?: string }[];
+  timestamp: string;
+};
+
 export class DHLProvider implements ICourierProvider {
   readonly id = "dhl" as const;
   readonly name = "DHL Express";
@@ -173,7 +184,7 @@ export class DHLProvider implements ICourierProvider {
 
       if (shipment) {
         const updates: TrackingUpdate[] = (shipment.events || []).map(
-          (e: any) => ({
+          (e: DhlTrackingEvent) => ({
             status: e.typeCode,
             statusDescription: e.description,
             location: e.serviceArea?.[0]?.description || "",
@@ -254,7 +265,7 @@ export class DHLProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

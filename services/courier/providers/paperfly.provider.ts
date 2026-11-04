@@ -14,6 +14,17 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
+// REG-65: boundary contract for a Paperfly tracking log off the untyped
+// API payload. Fields read without a fallback are asserted as strings; the
+// `type` alias (not an interface) keeps `raw: log` assignable to
+// `Record<string, any>` on TrackingUpdate.
+type PaperflyTrackingLog = {
+  status: string;
+  comment?: string;
+  location?: string;
+  time: string;
+};
+
 export class PaperflyProvider implements ICourierProvider {
   readonly id = "paperfly" as const;
   readonly name = "Paperfly Courier";
@@ -125,7 +136,7 @@ export class PaperflyProvider implements ICourierProvider {
 
       if (data.success && data.tracking_info) {
         const updates: TrackingUpdate[] = (data.tracking_info.logs || []).map(
-          (log: any) => ({
+          (log: PaperflyTrackingLog) => ({
             status: log.status,
             statusDescription: log.comment || log.status,
             location: log.location || "",
@@ -208,7 +219,7 @@ export class PaperflyProvider implements ICourierProvider {
     return map[raw.toLowerCase()] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

@@ -20,6 +20,16 @@ interface PathaoTokenCache {
   expiresAt: number;
 }
 
+// REG-65: boundary contract for a Pathao order log off the untyped API
+// payload. Fields read without a fallback are asserted as strings; the
+// `type` alias (not an interface) keeps `raw: log` assignable to
+// `Record<string, any>` on TrackingUpdate.
+type PathaoOrderLog = {
+  status: string;
+  comment?: string;
+  created_at: string;
+};
+
 export class PathaoProvider implements ICourierProvider {
   readonly id = "pathao" as const;
   readonly name = "Pathao Courier";
@@ -215,7 +225,7 @@ export class PathaoProvider implements ICourierProvider {
 
       if (data.type === "success" && data.data) {
         const order = data.data;
-        const updates: TrackingUpdate[] = (order.log || []).map((log: any) => ({
+        const updates: TrackingUpdate[] = (order.log || []).map((log: PathaoOrderLog) => ({
           status: log.status,
           statusDescription: log.comment || log.status,
           location: "",
@@ -314,7 +324,7 @@ export class PathaoProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

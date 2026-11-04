@@ -19,6 +19,17 @@ interface FedExToken {
   expiresAt: number;
 }
 
+// REG-65: boundary contract for a FedEx scan event off the untyped API
+// payload. Fields read without a fallback are asserted as strings; the
+// `type` alias (not an interface) keeps `raw: e` assignable to
+// `Record<string, any>` on TrackingUpdate.
+type FedexScanEvent = {
+  eventType: string;
+  eventDescription: string;
+  scanLocation?: { city?: string };
+  date: string;
+};
+
 export class FedExProvider implements ICourierProvider {
   readonly id = "fedex" as const;
   readonly name = "FedEx";
@@ -218,7 +229,7 @@ export class FedExProvider implements ICourierProvider {
 
       if (track) {
         const updates: TrackingUpdate[] = (track.scanEvents || []).map(
-          (e: any) => ({
+          (e: FedexScanEvent) => ({
             status: e.eventType,
             statusDescription: e.eventDescription,
             location: e.scanLocation?.city || "",
@@ -301,7 +312,7 @@ export class FedExProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

@@ -14,6 +14,17 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
+// REG-65: boundary contract for an ECourier track-history entry off the
+// untyped API payload. Fields read without a fallback are asserted as
+// strings; the `type` alias (not an interface) keeps `raw: h` assignable to
+// `Record<string, any>` on TrackingUpdate.
+type EcourierTrackingEvent = {
+  status: string;
+  details?: string;
+  location?: string;
+  date: string;
+};
+
 export class ECourierProvider implements ICourierProvider {
   readonly id = "ecourier" as const;
   readonly name = "eCourier";
@@ -130,7 +141,7 @@ export class ECourierProvider implements ICourierProvider {
 
       if (data.success && data.data) {
         const updates: TrackingUpdate[] = (data.data.trackHistory || []).map(
-          (h: any) => ({
+          (h: EcourierTrackingEvent) => ({
             status: h.status,
             statusDescription: h.details || h.status,
             location: h.location || "",
@@ -210,7 +221,7 @@ export class ECourierProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

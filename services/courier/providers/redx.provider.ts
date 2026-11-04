@@ -14,6 +14,17 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
+// REG-65: boundary contract for a RedX tracking event off the untyped API
+// payload. Fields read without a fallback are asserted as strings; the
+// `type` alias (not an interface) keeps `raw: event` assignable to
+// `Record<string, any>` on TrackingUpdate.
+type RedxTrackingEvent = {
+  type: string;
+  message: string;
+  hub?: string;
+  created_at: string;
+};
+
 export class RedXProvider implements ICourierProvider {
   readonly id = "redx" as const;
   readonly name = "RedX Courier";
@@ -130,7 +141,7 @@ export class RedXProvider implements ICourierProvider {
 
       if (data.tracking_events) {
         const updates: TrackingUpdate[] = data.tracking_events.map(
-          (event: any) => ({
+          (event: RedxTrackingEvent) => ({
             status: event.type,
             statusDescription: event.message,
             location: event.hub || "",
@@ -211,7 +222,7 @@ export class RedXProvider implements ICourierProvider {
     return map[raw.toUpperCase()] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

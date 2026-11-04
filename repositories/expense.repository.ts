@@ -2,6 +2,30 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { Expense, ExpenseFilters, ExpenseSummary } from "@/types/finance.types";
 import { ExpenseFormValues } from "@/schemas/finance.schema";
 
+// REG-65: boundary contract for the untyped builder rows mapped to Expense.
+// Fields passed straight through are asserted at their target types; fields
+// read behind `||` fallbacks are asserted at the fallback's type. The mapper
+// body itself is byte-identical.
+type ExpenseRow = {
+  id: string;
+  date: string;
+  category: string;
+  description: string;
+  amount: unknown;
+  status: unknown;
+  vendor: string;
+  branch_id: string | null;
+  branch?: { name?: string | null } | null;
+  warehouse_id: string | null;
+  warehouse?: { name?: string | null } | null;
+  payment_method: string;
+  notes: string | null;
+  receipt_url: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export class ExpenseRepository {
   private getAdminClient() {
     return createAdminDbClient();
@@ -78,7 +102,7 @@ export class ExpenseRepository {
 
       if (!data) return [];
 
-      let list = (data as any[]).map(this.mapRowToExpense);
+      let list = (data as ExpenseRow[]).map(this.mapRowToExpense);
 
       if (filters?.search && filters.search.trim() !== "") {
         const term = filters.search.toLowerCase().trim();
@@ -265,7 +289,7 @@ export class ExpenseRepository {
     };
   }
 
-  private mapRowToExpense(row: any): Expense {
+  private mapRowToExpense(row: ExpenseRow): Expense {
     return {
       id: row.id,
       date: row.date,
