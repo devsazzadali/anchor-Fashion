@@ -3,7 +3,7 @@ import { OrderItem } from "@/types/oms";
 import { parseVariantAttributes } from "@/lib/utils/variant-attributes";
 
 export class OrderItemsRepository {
-  async getOrderItems(orderId: string, _?: any): Promise<OrderItem[]> {
+  async getOrderItems(orderId: string, _?: unknown): Promise<OrderItem[]> {
     try {
       const items = await prisma.orderItem.findMany({
         where: { orderId },
@@ -16,7 +16,7 @@ export class OrderItemsRepository {
 
       return items.map((item) => {
         const attrs = parseVariantAttributes(
-          (item as any).variant?.attributes
+          item.variant?.attributes
         );
         return {
           id: item.id,
@@ -42,7 +42,7 @@ export class OrderItemsRepository {
   }
 
   async createOrderItems(
-    items: Omit<OrderItem, "id" | "created_at">[]
+    items: (Omit<OrderItem, "id" | "created_at"> & { total_price?: number })[]
   ): Promise<OrderItem[]> {
     const createdItems = await Promise.all(
       items.map(async (item) => {
@@ -56,7 +56,7 @@ export class OrderItemsRepository {
             variantName: item.variant_name,
             quantity: item.quantity,
             unitPrice: item.unit_price,
-            totalPrice: item.line_total || (item as any).total_price || 0,
+            totalPrice: item.line_total || item.total_price || 0,
           },
         });
       })

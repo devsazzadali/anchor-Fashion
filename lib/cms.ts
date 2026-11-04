@@ -23,7 +23,7 @@ export interface CmsPage {
 export interface CmsPageBlock {
   id: string;
   section_type: string;
-  content_json: any;
+  content_json: unknown;
   display_order: number;
 }
 
@@ -128,12 +128,12 @@ export async function getMenuByLocation(
   const rootItems: CmsMenuItem[] = [];
   const itemMap = new Map<string, CmsMenuItem>();
 
-  items?.forEach((item: any) => {
+  items?.forEach((item: CmsMenuItem) => {
     item.subItems = [];
     itemMap.set(item.id, item);
   });
 
-  items?.forEach((item: any) => {
+  items?.forEach((item: CmsMenuItem) => {
     if (item.parent_id && itemMap.has(item.parent_id)) {
       itemMap.get(item.parent_id)!.subItems!.push(item);
     } else {

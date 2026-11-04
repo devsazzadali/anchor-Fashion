@@ -1,13 +1,13 @@
 export class ChannelManager {
-  subscribeToTable<T extends { [key: string]: any }>(
+  subscribeToTable<T extends { [key: string]: unknown }>(
     tableName: string,
-    callback: any,
+    callback: (payload: T) => void,
     filter?: string
   ) {
     return { unsubscribe: () => {} };
   }
 
-  async broadcastEvent(channelName: string, event: string, payload: any) {
+  async broadcastEvent(channelName: string, event: string, payload: unknown) {
   }
 
   async unsubscribe(channelName: string) {

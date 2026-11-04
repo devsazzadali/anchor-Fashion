@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import {
   CRMCustomer,
   CRMLead,
@@ -25,13 +26,13 @@ export class CRMRepository {
 
   async updateCustomer(
     id: string,
-    updates: Partial<CRMCustomer>
+    updates: Partial<CRMCustomer> & { notes?: string | null; status?: string }
   ): Promise<CRMCustomer> {
     const customer = await prisma.customer.update({
       where: { id },
       data: {
-        notes: (updates as any).notes,
-        status: (updates as any).status,
+        notes: updates.notes,
+        status: updates.status,
       },
       include: { profile: true },
     });
@@ -96,7 +97,9 @@ export class CRMRepository {
   }
 }
 
-function mapCustomerToCRM(customer: any) {
+function mapCustomerToCRM(
+  customer: Prisma.CustomerGetPayload<{ include: { profile: true } }>
+) {
   return {
     ...customer,
     profile_id: customer.profileId,

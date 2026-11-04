@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { Brand, CreateBrandInput, UpdateBrandInput } from "@/types/catalog.types";
 
-function toBrand(b: any): Brand {
+function toBrand(b: Prisma.BrandGetPayload<{}>): Brand {
   return {
     id: b.id,
     name: b.name,
@@ -33,8 +34,8 @@ export class BrandRepository {
   /**
    * Creates a new brand via Prisma.
    */
-  static async createBrand(input: CreateBrandInput): Promise<Brand> {
-    const logo = input.logo_url || (input as any).logoUrl || null;
+  static async createBrand(input: CreateBrandInput & { logoUrl?: string | null }): Promise<Brand> {
+    const logo = input.logo_url || input.logoUrl || null;
     const created = await prisma.brand.create({
       data: {
         name: input.name,
@@ -50,8 +51,8 @@ export class BrandRepository {
   /**
    * Updates an existing brand by ID via Prisma.
    */
-  static async updateBrand(id: string, input: UpdateBrandInput): Promise<Brand> {
-    const rawLogo = input.logo_url !== undefined ? input.logo_url : (input as any).logoUrl;
+  static async updateBrand(id: string, input: UpdateBrandInput & { logoUrl?: string | null }): Promise<Brand> {
+    const rawLogo = input.logo_url !== undefined ? input.logo_url : input.logoUrl;
     const updated = await prisma.brand.update({
       where: { id },
       data: {

@@ -21,11 +21,30 @@ export interface PushNotificationPayload {
   url?: string;
 }
 
+/** A subscription object as the frontend hands it to the save endpoint. */
+export interface PushSubscriptionInput {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
+/** A push_subscriptions row as stored (keys live in the `keys` JSON column). */
+export interface StoredPushSubscriptionRow {
+  id: string;
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
 export class PushService {
   /**
    * Save a push subscription to the database.
    */
-  static async saveSubscription(userId: string, subscription: any) {
+  static async saveSubscription(userId: string, subscription: PushSubscriptionInput) {
     const db = createAdminDbClient();
     const { keys, endpoint } = subscription;
     
@@ -76,7 +95,7 @@ export class PushService {
       data: { url: payload.url || "/" }
     });
 
-    const sendPromises = subscriptions.map(async (sub: any) => {
+    const sendPromises = subscriptions.map(async (sub: StoredPushSubscriptionRow) => {
       const pushSubscription = {
         endpoint: sub.endpoint,
         keys: {
@@ -88,8 +107,8 @@ export class PushService {
 
       try {
         await webpush.sendNotification(pushSubscription, stringPayload);
-      } catch (err: any) {
-        if (err.statusCode === 410 || err.statusCode === 404) {
+      } catch (err) {
+        if ((err as Error & { statusCode?: number }).statusCode === 410 || (err as Error & { statusCode?: number }).statusCode === 404) {
           // Subscription expired or unsubscribed, delete it from DB
           await db
             .from("push_subscriptions")

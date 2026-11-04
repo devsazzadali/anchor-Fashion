@@ -12,7 +12,26 @@ export type WorkflowTrigger =
   | "cart.abandoned"
   | "review.requested";
 
-type ActionFunction = (payload: any, config?: any) => Promise<any>;
+/**
+ * Fields a workflow action reads off its trigger payload. The three
+ * rules below each read a subset; userId, productName and sku are
+ * required because the welcome/stock-low actions pass them straight
+ * into string-typed action arguments.
+ */
+export interface WorkflowActionPayload {
+  userId: string;
+  firstName?: string;
+  productName: string;
+  sku: string;
+  quantity?: string | number;
+  orderId?: string;
+  totalAmount?: string | number;
+}
+
+type ActionFunction = (
+  payload: WorkflowActionPayload,
+  config?: Record<string, unknown>
+) => Promise<void>;
 
 /**
  * Enterprise Automation Rules Map
