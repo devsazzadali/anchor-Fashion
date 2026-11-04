@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export interface ManagerTask {
   id: string;
@@ -71,7 +72,9 @@ export class TaskRepository {
     id: string,
     updates: Partial<ManagerTask>
   ): Promise<ManagerTask | null> {
-    const data: any = {};
+    // Unchecked input: the checked update input omits raw FK scalars, and
+    // the existing assignment below already passes assigneeId through.
+    const data: Prisma.TaskUncheckedUpdateInput = {};
     if (updates.title !== undefined) data.title = updates.title;
     if (updates.description !== undefined) data.description = updates.description;
     if (updates.priority !== undefined) data.priority = updates.priority;
@@ -103,7 +106,13 @@ export class TaskRepository {
   }
 }
 
-function mapPrismaTask(task: any): ManagerTask {
+function mapPrismaTask(
+  task: Prisma.TaskGetPayload<{
+    include: {
+      assignee: { select: { firstName: true; lastName: true; email: true } };
+    };
+  }>
+): ManagerTask {
   let assigneeName = task.assignee
     ? `${task.assignee.firstName || ""} ${task.assignee.lastName || ""}`.trim() || task.assignee.email
     : "";

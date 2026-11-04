@@ -23,6 +23,10 @@ export interface EmailPayload {
 }
 
 export class EmailProvider {
+  // REG-65 holdout: the error member below stays loosely typed — callers
+  // read a message field off it (marketing campaign log, notification
+  // delivery log), so narrowing the return type forces caller changes
+  // outside this type-only batch.
   /**
    * Sends an email using the Resend API.
    * @param payload The email payload (to, subject, html, etc.)
@@ -59,7 +63,7 @@ export class EmailProvider {
       if (response.error) {
         return {
           error:
-            (response.error as any)?.message ||
+            response.error?.message ||
             JSON.stringify(response.error),
         };
       }

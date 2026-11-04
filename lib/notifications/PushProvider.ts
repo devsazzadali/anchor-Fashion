@@ -27,7 +27,7 @@ export interface PushPayload {
   icon?: string;
   badge?: string;
   url?: string;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 export class PushProvider {
@@ -39,7 +39,7 @@ export class PushProvider {
   static async send(
     subscription: PushSubscription,
     payload: PushPayload
-  ): Promise<{ success: boolean; error?: any }> {
+  ): Promise<{ success: boolean; error?: unknown }> {
     try {
       const data = JSON.stringify({
         title: payload.title,

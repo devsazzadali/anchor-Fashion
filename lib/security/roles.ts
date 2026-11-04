@@ -14,20 +14,38 @@ function roleIn(role: string, allowed: readonly string[]): boolean {
   return allowed.some((a) => normalizeRoleName(a) === n);
 }
 
-export async function getRoleForUser(user: any): Promise<string> {
+/** Minimal shape the role helpers read off a session user. The legacy
+ * metadata bag is untyped on the session record, so its role fallback is
+ * asserted at the single read site below. */
+export interface RoleUserLike {
+  id?: string | null;
+  email?: string | null;
+  role?: string | null;
+  app_metadata?: unknown;
+  emailVerified?: boolean | null;
+}
+
+export async function getRoleForUser(
+  user: RoleUserLike | null | undefined
+): Promise<string> {
   if (!user) return "CUSTOMER";
   // Single source of truth: resolveUserRole enforces that an elevated role is only
   // granted to an identity bound to the profile (or with a verified email).
   const role = await resolveUserRole({
     id: user.id,
     email: user.email,
-    role: user.role || user.app_metadata?.role,
+    role:
+      user.role ||
+      (user.app_metadata as { role?: string | null } | null | undefined)
+        ?.role,
     emailVerified: user.emailVerified,
   });
   return String(role || "CUSTOMER").toUpperCase();
 }
 
-export async function isStaffOrManager(user: any): Promise<boolean> {
+export async function isStaffOrManager(
+  user: RoleUserLike | null | undefined
+): Promise<boolean> {
   const role = await getRoleForUser(user);
   return (
     (ADMIN_ROLES as readonly string[]).includes(role) ||

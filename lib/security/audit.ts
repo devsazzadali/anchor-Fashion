@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 /**
  * REG-27: audit_logs was decorative — the only writer in the codebase
@@ -35,8 +36,8 @@ export async function recordAudit(entry: {
         action: entry.action,
         entity: entry.entity,
         entityId: entry.entityId ?? null,
-        oldValues: (entry.oldValues ?? undefined) as any,
-        newValues: (entry.newValues ?? undefined) as any,
+        oldValues: (entry.oldValues ?? undefined) as Prisma.InputJsonValue,
+        newValues: (entry.newValues ?? undefined) as Prisma.InputJsonValue,
         ipAddress: entry.ipAddress ?? null,
       },
     });

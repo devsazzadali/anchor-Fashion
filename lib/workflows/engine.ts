@@ -1,9 +1,13 @@
 import { db } from "@/lib/db/client";
-import { automationRules, WorkflowTrigger } from "./rules";
+import {
+  automationRules,
+  WorkflowActionPayload,
+  WorkflowTrigger,
+} from "./rules";
 
 export interface WorkflowEvent {
   triggerEvent: WorkflowTrigger;
-  payload: any;
+  payload: WorkflowActionPayload;
 }
 
 export interface WorkflowExecutionLog {
@@ -11,7 +15,7 @@ export interface WorkflowExecutionLog {
   trigger_event: string;
   status: "PENDING" | "SUCCESS" | "FAILED";
   error_message?: string;
-  execution_details?: any;
+  execution_details?: unknown;
 }
 
 /**

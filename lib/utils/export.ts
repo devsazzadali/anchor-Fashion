@@ -34,9 +34,13 @@ export function exportToCsv<T>(arg1: string | T[], arg2?: string | T[]) {
 
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   
-  if ((navigator as any).msSaveBlob) {
+  // Legacy IE 10+ save path; the standard Navigator type never declares it.
+  const legacyNavigator = navigator as Navigator & {
+    msSaveBlob?: (blob: Blob, filename: string) => void;
+  };
+  if (legacyNavigator.msSaveBlob) {
     // IE 10+
-    (navigator as any).msSaveBlob(blob, filename);
+    legacyNavigator.msSaveBlob(blob, filename);
   } else {
     const link = document.createElement("a");
     if (link.download !== undefined) {

@@ -1,6 +1,14 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { Review } from "@/types/catalog.types";
 import { revalidatePath } from "next/cache";
+
+/** Aggregate shape getReviewStatsByProductId returns (or null on error). */
+export interface ReviewStats {
+  product_id: string;
+  total_reviews: number;
+  average_rating: number;
+}
 
 export class ReviewRepository {
   static async getReviews(): Promise<Review[]> {
@@ -42,7 +50,7 @@ export class ReviewRepository {
     }
   }
 
-  static async getReviewStatsByProductId(productId: string): Promise<any> {
+  static async getReviewStatsByProductId(productId: string): Promise<ReviewStats | null> {
     try {
       const agg = await prisma.review.aggregate({
         where: { productId, isApproved: true },
@@ -133,7 +141,14 @@ export class ReviewRepository {
   }
 }
 
-function mapPrismaReview(r: any) {
+function mapPrismaReview(
+  r: Prisma.ReviewGetPayload<{
+    include: {
+      user: { select: { firstName: true; lastName: true; email: true } };
+      product: { select: { name: true; slug: true } };
+    };
+  }>
+) {
   return {
     ...r,
     product_id: r.productId,
