@@ -8,7 +8,7 @@ import {
   CheckoutFormValues,
   checkoutFormSchema,
 } from "@/schemas/checkout.schema";
-import { CheckoutStep } from "@/types/checkout.types";
+import { CheckoutSession, CheckoutStep, RiskLevel } from "@/types/checkout.types";
 import { CodRiskService } from "../services/fraud/cod-risk.service";
 import { CodOtpService } from "../services/fraud/cod-otp.service";
 import { prisma } from "@/lib/prisma";
@@ -48,7 +48,7 @@ export async function fetchCheckoutSessionAction(cartId: string) {
 export async function updateCheckoutStepAction(
   sessionId: string,
   step: CheckoutStep,
-  data: any
+  data: Partial<CheckoutSession>
 ) {
   try {
     const session = await CheckoutService.updateSession(sessionId, step, data);
@@ -191,7 +191,7 @@ export async function processCheckoutAction(
     if (userId) {
       try {
         const { user: currentUser } = await getServerSession();
-        let roleName = (currentUser as any)?.role || currentUser?.user_metadata?.role;
+        let roleName = currentUser?.role || currentUser?.user_metadata?.role;
         if (!roleName) {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
           const profile = await prisma.profile.findFirst({
@@ -236,7 +236,7 @@ export async function processCheckoutAction(
     );
 
     let riskMetadata: {
-      risk_level?: string;
+      risk_level?: RiskLevel;
       risk_score?: number;
       risk_reasons?: string[];
       verification_status?: string;
@@ -336,7 +336,7 @@ export async function processCheckoutAction(
       guestEmail || null,
       parsedData,
       checkoutSessionId,
-      riskMetadata as any
+      riskMetadata
     );
 
     // Trigger Real-time Admin Notification

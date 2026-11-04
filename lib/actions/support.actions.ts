@@ -7,6 +7,7 @@ import {
   SupportTicketRecord,
   TicketMessageRecord,
 } from "@/repositories/support.repository";
+import { KnowledgeBaseArticle } from "@/types/support.types";
 import { verifyStaff, verifyAuthenticated } from "@/lib/security/roles";
 
 export async function getSupportTicketsAction(): Promise<{
@@ -93,8 +94,8 @@ export async function updateTicketStatusAction(params: {
 
 export async function addTicketMessageAction(
   ticketId: string,
-  data: { message?: string; body?: string; is_internal_note?: boolean; sender_id?: string; sender_type?: any }
-): Promise<{ success: boolean; data?: any; error?: string }> {
+  data: { message?: string; body?: string; is_internal_note?: boolean; sender_id?: string; sender_type?: string }
+): Promise<{ success: boolean; data?: TicketMessageRecord; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyAuthenticated();
   try {
@@ -121,7 +122,7 @@ export async function addTicketMessageAction(
 
 export async function getKnowledgeBaseAction(): Promise<{
   success: boolean;
-  data?: any[];
+  data?: KnowledgeBaseArticle[];
   error?: string;
 }> {
   try {

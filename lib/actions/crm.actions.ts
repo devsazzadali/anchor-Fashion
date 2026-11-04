@@ -68,11 +68,12 @@ export async function createLeadAction(data: unknown) {
     const lead = await crmService.createLead(data);
     revalidatePath("/admin/crm/leads");
     return { data: lead };
-  } catch (error: any) {
-    if (error?.errors && Array.isArray(error.errors) && error.errors.length > 0) {
-      return { error: error.errors[0]?.message || "Validation failed" };
+  } catch (error) {
+    const err = error as Error & { errors?: { message?: string }[] };
+    if (err?.errors && Array.isArray(err.errors) && err.errors.length > 0) {
+      return { error: err.errors[0]?.message || "Validation failed" };
     }
-    return { error: error.message || "Failed to create lead" };
+    return { error: err.message || "Failed to create lead" };
   }
 }
 
@@ -94,12 +95,16 @@ export async function submitContactMessageAction(data: unknown) {
     const lead = await crmService.submitContactMessage(data);
     revalidatePath("/admin/crm/leads");
     return { data: lead };
-  } catch (error: any) {
-    const issues = error?.errors || error?.issues;
+  } catch (error) {
+    const err = error as Error & {
+      errors?: { message?: string }[];
+      issues?: { message?: string }[];
+    };
+    const issues = err?.errors || err?.issues;
     if (issues && Array.isArray(issues) && issues.length > 0) {
       return { error: issues[0]?.message || "Validation failed" };
     }
-    return { error: error.message || "Failed to send message" };
+    return { error: err.message || "Failed to send message" };
   }
 }
 
@@ -110,11 +115,12 @@ export async function updateLeadAction(id: string, data: unknown) {
     const lead = await crmService.updateLead(id, data);
     revalidatePath("/admin/crm/leads");
     return { data: lead };
-  } catch (error: any) {
-    if (error?.errors && Array.isArray(error.errors) && error.errors.length > 0) {
-      return { error: error.errors[0]?.message || "Validation failed" };
+  } catch (error) {
+    const err = error as Error & { errors?: { message?: string }[] };
+    if (err?.errors && Array.isArray(err.errors) && err.errors.length > 0) {
+      return { error: err.errors[0]?.message || "Validation failed" };
     }
-    return { error: error.message || "Failed to update lead" };
+    return { error: err.message || "Failed to update lead" };
   }
 }
 

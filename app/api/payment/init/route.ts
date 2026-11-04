@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     // FIX ROUND 28 (M-2): the order_addresses table does not exist —
     // the address lives in the order's shipping_address JSON. The old
     // read always resolved null, so gateways got "Customer" / "" / "".
-    const shippingAddr = ((order as any).shipping_address || {}) as any;
+    const shippingAddr = order.shipping_address || {};
     const customerName =
       (
         [shippingAddr.first_name, shippingAddr.last_name]
@@ -325,7 +325,7 @@ export async function GET(req: Request) {
       });
       const paypalData = await orderRes.json();
       const approveLink = paypalData.links?.find(
-        (link: any) => link.rel === "approve"
+        (link: { rel?: string; href?: string }) => link.rel === "approve"
       );
       if (approveLink) {
         return NextResponse.redirect(approveLink.href);

@@ -6,6 +6,7 @@ import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { parseVariantAttributes } from "@/lib/utils/variant-attributes";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
+import { Prisma } from "@prisma/client";
 
 /**
  * Shape a Prisma variant (+ product + inventory levels) into exactly the
@@ -13,7 +14,9 @@ import { verifyStaff } from "@/lib/security/roles";
  * and `inventory_levels[].warehouse`. Decimals become plain numbers so
  * the result can cross the server → client boundary.
  */
-function mapScannedVariant(v: any) {
+function mapScannedVariant(
+  v: Prisma.VariantGetPayload<{ include: typeof scannedVariantInclude }> | null
+) {
   if (!v) return null;
   const product = v.product ?? null;
   // REG-48: surface size/colour as first-class fields (parsed with the
@@ -45,7 +48,7 @@ function mapScannedVariant(v: any) {
           sku: product.sku ?? null,
         }
       : null,
-    inventory_levels: (v.inventoryLevels || []).map((l: any) => ({
+    inventory_levels: (v.inventoryLevels || []).map((l) => ({
       id: l.id,
       quantity_available: l.quantityAvailable,
       quantity_reserved: l.quantityReserved,
@@ -91,7 +94,7 @@ export async function lookupBarcodeAction(query: string) {
     // real barcode (same failure the Stock Control page comment records).
     // 1. Search variant by barcode or SKU (contains, case-insensitive —
     //    same semantics as the previous `barcode.ilike.%q%,sku.ilike.%q%`).
-    let variant: any = await prisma.variant.findFirst({
+    let variant = await prisma.variant.findFirst({
       where: {
         OR: [
           { barcode: { contains: trimmed, mode: "insensitive" } },

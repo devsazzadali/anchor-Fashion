@@ -75,7 +75,7 @@ export async function transferStock(
       quantity,
       reason,
       notes,
-      (user as any)?.id
+      user?.id
     );
     return { success: true };
   } catch (error) {
@@ -210,7 +210,7 @@ export async function addStockAction(data: {
   quantity: number;
   reason: string;
   notes?: string;
-}): Promise<{ success: boolean; data?: any; error?: string }> {
+}): Promise<{ success: boolean; data?: { id: string; quantity_available: number }; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
@@ -515,7 +515,7 @@ export async function recordManualMovementAction(data: {
   reason: string;
   toWarehouseId?: string;
   notes?: string;
-}): Promise<{ success: boolean; data?: any; error?: string }> {
+}): Promise<{ success: boolean; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {

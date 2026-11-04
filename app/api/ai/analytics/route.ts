@@ -5,6 +5,13 @@ import { authErrorResponse } from "@/lib/api/auth-error";
 
 export const dynamic = "force-dynamic";
 
+// REG-65: the three fields this route's aggregates read off ai_request_logs rows.
+interface AiRequestLogRow {
+  cost_estimated_usd?: number | string | null;
+  latency_ms?: number | null;
+  status?: string | null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     await verifyStaff();
@@ -18,17 +25,17 @@ export async function GET(req: NextRequest) {
     if (error) throw error;
 
     // Calculate quick aggregates
-    const safeData = data || [];
+    const safeData: AiRequestLogRow[] = data || [];
     const aggregates = {
       totalRequests: safeData.length,
       totalCost: safeData.reduce(
-        (acc: number, log: any) => acc + Number(log.cost_estimated_usd || 0),
+        (acc: number, log: AiRequestLogRow) => acc + Number(log.cost_estimated_usd || 0),
         0
       ),
       avgLatency: safeData.length
-        ? safeData.reduce((acc: number, log: any) => acc + (log.latency_ms || 0), 0) / safeData.length
+        ? safeData.reduce((acc: number, log: AiRequestLogRow) => acc + (log.latency_ms || 0), 0) / safeData.length
         : 0,
-      errors: safeData.filter((log: any) => log.status === "error").length,
+      errors: safeData.filter((log: AiRequestLogRow) => log.status === "error").length,
     };
 
     return NextResponse.json({

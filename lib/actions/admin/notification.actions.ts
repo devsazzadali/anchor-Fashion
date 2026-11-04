@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -40,7 +41,7 @@ export async function getAdminHeaderNotificationsAction(): Promise<{
       take: 15,
     });
 
-    const notifications: AdminNotification[] = list.map((n: any) => ({
+    const notifications: AdminNotification[] = list.map((n) => ({
       id: n.id,
       user_id: n.userId,
       title: n.title,
@@ -74,7 +75,7 @@ export async function getAllAdminNotificationsAction(filters?: {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
-    const where: any = {};
+    const where: Prisma.NotificationWhereInput = {};
     if (filters?.type && filters.type !== "all") {
       where.type = filters.type.toLowerCase();
     }
@@ -96,7 +97,7 @@ export async function getAllAdminNotificationsAction(filters?: {
       prisma.notification.count({ where: { ...where, readAt: null } }),
     ]);
 
-    const notifications: AdminNotification[] = list.map((n: any) => ({
+    const notifications: AdminNotification[] = list.map((n) => ({
       id: n.id,
       user_id: n.userId,
       title: n.title,
