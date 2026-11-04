@@ -134,7 +134,7 @@ export class CourierGatewayService {
   private static buildError(
     code: CourierProviderCode,
     message: string
-  ): ProviderResponse<any> {
+  ): ProviderResponse<never> {
     return {
       success: false,
       providerId: code,

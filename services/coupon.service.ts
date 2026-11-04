@@ -212,7 +212,7 @@ export class CouponService {
   static async validatePromoRule(
     code: string,
     subtotal: number,
-    cartItems: any[]
+    cartItems: unknown[]
   ) {
     const db = this.getAdminClient();
     const { data: promo, error } = await db

@@ -44,7 +44,7 @@ export class MarketingRepository {
   ): Promise<Record<string, any>[]> {
     if (campaigns.length === 0) return campaigns;
     const ids = campaigns.map((c) => c.id).filter(Boolean);
-    const audiencesByCampaign = new Map<string, any[]>();
+    const audiencesByCampaign = new Map<string, unknown[]>();
     if (ids.length > 0) {
       const { data: audiences } = await db
         .from("campaign_audiences")

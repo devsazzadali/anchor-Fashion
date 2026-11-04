@@ -27,7 +27,7 @@ export async function resolveCourierWebhookSecret(
       .maybeSingle();
     if (error || !data) return null;
     const creds = decryptCredentialsObject(
-      (((data as any).config ?? {}).credentials ?? {}) as Record<string, any>,
+      ((data.config ?? {}).credentials ?? {}) as Record<string, any>,
     );
     const secret = creds.webhookSecret;
     return typeof secret === "string" && secret.trim() !== "" ? secret : null;

@@ -102,7 +102,9 @@ export class BKashProvider extends BasePaymentProvider {
 
   async processRefund(params: RefundRequestParams): Promise<RefundResult> {
     try {
-      const paymentID = (params as any).paymentID || params.transactionId;
+      const paymentID =
+        (params as RefundRequestParams & { paymentID?: string }).paymentID ||
+        params.transactionId;
       const refundRes = await BKashService.refundPayment({
         paymentID,
         amount: params.amount,

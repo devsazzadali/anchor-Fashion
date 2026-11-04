@@ -230,7 +230,7 @@ export class SandboxProvider implements ICourierProvider {
     };
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse(code: string, message: string): ProviderResponse<never> {
     return {
       success: false,
       providerId: this.id,

@@ -62,7 +62,7 @@ export class ConfigService {
       return [];
     }
 
-    return data.map((provider: any) => ({
+    return data.map((provider: ProviderConfig) => ({
       ...provider,
       config: this.decryptConfigObject(provider.config || {}),
     })) as ProviderConfig[];

@@ -4,6 +4,12 @@ import {
   IntegrationResponse,
 } from "@/types/integration.types";
 
+interface GeminiGenerateContentPayload {
+  contents: { parts: { text: string }[] }[];
+  systemInstruction?: { parts: { text: string }[] };
+  generationConfig?: { temperature?: number; maxOutputTokens?: number };
+}
+
 export class GeminiProvider implements AIProvider {
   id = "gemini";
   name = "Google Gemini";
@@ -28,7 +34,7 @@ export class GeminiProvider implements AIProvider {
       const model = request.model || this.defaultModel;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
 
-      const payload: any = {
+      const payload: GeminiGenerateContentPayload = {
         contents: [
           {
             parts: [

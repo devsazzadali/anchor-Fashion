@@ -93,7 +93,17 @@ export class AuthService {
    * Reset Password Request (Forgot Password)
    */
   static async requestPasswordReset(email: string) {
-    const { error } = await (authClient as any).forgetPassword({
+    const { error } = await (
+      authClient as typeof authClient & {
+        forgetPassword: (opts: {
+          email: string;
+          redirectTo: string;
+        }) => Promise<{
+          data?: unknown;
+          error?: { message: string } | null;
+        }>;
+      }
+    ).forgetPassword({
       email,
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/reset-password`,
     });
