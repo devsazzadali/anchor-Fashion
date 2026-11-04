@@ -1,10 +1,17 @@
 import prisma from "@/lib/prisma";
 import {
+  CourierProviderCode,
   CourierProviderRecord,
   DeliveryZone,
   Shipment,
   ShipmentStatus,
 } from "@/types/shipping.types";
+
+/** courier_providers.config JSON — the two bags getCouriers reads. */
+interface CourierConfigJson {
+  credentials?: Record<string, any>;
+  settings?: Record<string, any>;
+}
 
 export class ShippingRepository {
 
@@ -17,7 +24,7 @@ export class ShippingRepository {
       });
       return data.map((r) => ({
         id: String(r.id),
-        code: r.code as any,
+        code: r.code as CourierProviderCode,
         name: r.name,
         display_name: r.name,
         logo_url: null,
@@ -26,8 +33,8 @@ export class ShippingRepository {
         is_sandbox: true,
         priority: 1,
         max_weight_kg: 10,
-        credentials: (r.config as any)?.credentials ?? {},
-        settings: (r.config as any)?.settings ?? {},
+        credentials: (r.config as CourierConfigJson | null)?.credentials ?? {},
+        settings: (r.config as CourierConfigJson | null)?.settings ?? {},
         webhook_secret: null,
         supported_zones: null,
         created_at: r.created_at?.toISOString() ?? new Date().toISOString(),
@@ -145,15 +152,15 @@ export class ShippingRepository {
     try {
       const data = await prisma.shipment.create({
         data: {
-          shipmentNumber: (shipmentData as any).shipment_number ?? `SHP-${Date.now()}`,
-          orderId: (shipmentData as any).order_id ?? null,
+          shipmentNumber: shipmentData.shipment_number ?? `SHP-${Date.now()}`,
+          orderId: shipmentData.order_id ?? null,
           status: shipmentData.status ?? "created",
-          recipientName: (shipmentData as any).recipient_name ?? null,
-          recipientPhone: (shipmentData as any).recipient_phone ?? null,
-          recipientAddress: (shipmentData as any).recipient_address ?? null,
-          recipientCity: (shipmentData as any).recipient_city ?? null,
-          trackingNumber: (shipmentData as any).tracking_number ?? null,
-          courier: (shipmentData as any).courier_provider_code ?? null,
+          recipientName: shipmentData.recipient_name ?? null,
+          recipientPhone: shipmentData.recipient_phone ?? null,
+          recipientAddress: shipmentData.recipient_address ?? null,
+          recipientCity: shipmentData.recipient_city ?? null,
+          trackingNumber: shipmentData.tracking_number ?? null,
+          courier: shipmentData.courier_provider_code ?? null,
         },
       });
       return {

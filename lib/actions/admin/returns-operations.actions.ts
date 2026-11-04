@@ -4,6 +4,55 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
+/** Shim row shapes (builder-serialized values). Returns and return_items
+ *  are read with select("*"), so the interfaces carry the columns this
+ *  file reads plus an index signature for the rest of the row. */
+interface ReturnItemDbRow {
+  id: string;
+  return_id: string;
+  order_item_id?: string | null;
+  variant_id?: string | null;
+  quantity?: number | null;
+  condition?: string | null;
+  restocked?: boolean | null;
+  [key: string]: unknown;
+}
+
+interface OpsCustomerRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+interface OperationsReturnRow {
+  id: string;
+  return_number?: string | null;
+  order_id?: string | null;
+  customer_id?: string | null;
+  status?: string | null;
+  items?: ReturnItemDbRow[];
+  customer?: OpsCustomerRow | null;
+  [key: string]: unknown;
+}
+
+/** getOrdersForReturnAction's orders select, verbatim. */
+interface ReturnPickerOrderRow {
+  id: string;
+  order_number: string;
+  total_amount: number | null;
+  status: string | null;
+  customer_id: string | null;
+  profile_id: string | null;
+}
+
+interface OpsProfileRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+}
+
 export interface ReturnItemInput {
   orderItemId?: string;
   variantId?: string;
@@ -55,25 +104,25 @@ export async function getOperationsReturnsAction(filters: {
     const { data: returns, error } = await query;
     if (error) return { success: false, error: error.message };
 
-    const rows: any[] = returns || [];
+    const rows: OperationsReturnRow[] = returns || [];
     if (rows.length > 0) {
-      const returnIds = rows.map((r: any) => r.id).filter(Boolean);
-      const customerIds = [...new Set(rows.map((r: any) => r.customer_id).filter(Boolean))];
+      const returnIds = rows.map((r) => r.id).filter(Boolean);
+      const customerIds = [...new Set(rows.map((r) => r.customer_id).filter(Boolean))];
       const [{ data: itemRows }, { data: customerRows }] = await Promise.all([
         returnIds.length
           ? db.from("return_items").select("*").in("return_id", returnIds)
-          : Promise.resolve({ data: [] as any[] }),
+          : Promise.resolve({ data: [] as ReturnItemDbRow[] }),
         customerIds.length
           ? db.from("customers").select("id, name, email, phone").in("id", customerIds)
-          : Promise.resolve({ data: [] as any[] }),
+          : Promise.resolve({ data: [] as OpsCustomerRow[] }),
       ]);
-      const itemsByReturn = new Map<string, any[]>();
+      const itemsByReturn = new Map<string, ReturnItemDbRow[]>();
       for (const item of itemRows || []) {
         if (!itemsByReturn.has(item.return_id)) itemsByReturn.set(item.return_id, []);
         itemsByReturn.get(item.return_id)!.push(item);
       }
-      const customerById = new Map<string, any>(
-        (customerRows || []).map((c: any) => [c.id, c] as [string, any])
+      const customerById = new Map<string, OpsCustomerRow>(
+        (customerRows || []).map((c: OpsCustomerRow) => [c.id, c] as [string, OpsCustomerRow])
       );
       for (const row of rows) {
         row.items = itemsByReturn.get(row.id) || [];
@@ -179,7 +228,7 @@ export async function updateOperationsReturnStatusAction(
       .from("return_items")
       .select("*")
       .eq("return_id", returnId);
-    const updated: any = { ...updatedRow, items: returnItems || [] };
+    const updated: OperationsReturnRow = { ...updatedRow, items: returnItems || [] };
 
     // If status is marked as RECEIVED and items exist, restock "good" condition items
     if (newStatus === "RECEIVED" && updated.items?.length) {
@@ -264,15 +313,15 @@ export async function getOrdersForReturnAction(search: string = "") {
     // never attaches (unsupported pair), so the customer name/email were
     // always missing from the operations return picker. Fetch orders
     // plainly and attach the profile fields with one batched lookup.
-    const attachProfiles = async (rows: any[]) => {
+    const attachProfiles = async (rows: ReturnPickerOrderRow[]) => {
       const profileIds = [
         ...new Set(
           rows
-            .map((o: any) => o.profile_id ?? o.customer_id)
+            .map((o) => o.profile_id ?? o.customer_id)
             .filter(Boolean)
         ),
       ];
-      const profileById = new Map<string, any>();
+      const profileById = new Map<string | null, OpsProfileRow>();
       if (profileIds.length > 0) {
         const { data: profiles } = await db
           .from("profiles")
@@ -282,7 +331,7 @@ export async function getOrdersForReturnAction(search: string = "") {
           if (p?.id) profileById.set(p.id, p);
         }
       }
-      return rows.map((o: any) => {
+      return rows.map((o) => {
         const p = profileById.get(o.profile_id ?? o.customer_id);
         return {
           ...o,

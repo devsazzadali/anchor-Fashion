@@ -2,7 +2,7 @@ import { OrderRepository } from "../repositories/order.repository";
 import { CheckoutRepository } from "../repositories/checkout.repository";
 import { CartService } from "./cart.service";
 import { CheckoutFormValues } from "@/schemas/checkout.schema";
-import { Order, OrderItem, PaymentPayload, OrderStatus, RiskLevel } from "@/types/checkout.types";
+import { Order, OrderItem, PaymentPayload, OrderStatus, RiskLevel, CartItem } from "@/types/checkout.types";
 import { InventoryService, ReservationItem } from "@/services/inventory.service";
 import { WarehouseService } from "@/services/warehouse.service";
 import { CouponService } from "@/services/coupon.service";
@@ -152,7 +152,7 @@ export class OrderService {
     userId?: string | null,
     shippingMethod?: string,
     sessionId?: string | null,
-    shippingAddress?: { city?: string | null; state?: string | null; district?: string | null } | null
+    shippingAddress?: { city?: string | null; state?: string | null; district?: string | null; phone?: string | null } | null
   ): Promise<{
     subtotal: number;
     shipping_fee: number;
@@ -172,7 +172,7 @@ export class OrderService {
       };
     }
 
-    const resolvePrice = (item: any) =>
+    const resolvePrice = (item: CartItem) =>
       item.variant?.sale_price ||
       item.variant?.price ||
       item.product?.sale_price ||
@@ -188,7 +188,7 @@ export class OrderService {
     // checkout UI displayed a hardcoded 15% "estimated tax" the server never
     // actually charged.
     const vat_amount = totalVatAmount(
-      (cart.items as any[]).map((item) => ({
+      cart.items.map((item) => ({
         unitPrice: resolvePrice(item),
         quantity: item.quantity,
         vatPercent: item.product?.vat_percent ?? 0,
@@ -235,7 +235,7 @@ export class OrderService {
       userId,
       subtotal,
       sessionId,
-      (shippingAddress as any)?.phone || null
+      shippingAddress?.phone || null
     );
     const discount_amount = coupon?.discount ?? 0;
 
@@ -348,7 +348,7 @@ export class OrderService {
       payment_method: checkoutData.payment.payment_method,
       reservation_expires_at: reservationExpiresAt,
       notes: checkoutData.notes,
-      risk_level: (riskMetadata?.risk_level || "LOW") as any,
+      risk_level: riskMetadata?.risk_level || "LOW",
       risk_score: riskMetadata?.risk_score ?? 0,
       risk_reasons: riskMetadata?.risk_reasons || [],
       verification_status:
@@ -357,7 +357,7 @@ export class OrderService {
       verification_verified_at: riskMetadata?.verification_verified_at || null,
     };
 
-    const orderItems: Partial<OrderItem>[] = (cart.items as any[]).map((item: any) => {
+    const orderItems: Partial<OrderItem>[] = cart.items.map((item) => {
       const price =
         item.variant?.sale_price ||
         item.variant?.price ||
@@ -373,7 +373,7 @@ export class OrderService {
         product_name: item.product?.title || "Unknown Product",
         variant_name: item.variant?.sku ? `SKU: ${item.variant.sku}` : null,
         sku: item.variant?.sku || "N/A",
-      } as any;
+      };
     });
 
     // Phase 8: persist the checkout email onto the order's shipping
@@ -384,17 +384,17 @@ export class OrderService {
     const rawShippingAddress = checkoutData.information.shipping_address;
     // Stamp the resolved delivery zone onto the persisted address so the
     // order record (and invoice) shows which zone set the charge.
-    const resolvedZone = await this.zoneForAddress(rawShippingAddress as any);
+    const resolvedZone = await this.zoneForAddress(rawShippingAddress);
     const withZone = resolvedZone
       ? {
-          ...(rawShippingAddress as any),
+          ...rawShippingAddress,
           delivery_zone: resolvedZone.name,
           delivery_zone_id: resolvedZone.id,
         }
       : rawShippingAddress;
     const shippingAddress =
-      guestEmail && !(withZone as any)?.email
-        ? { ...(withZone as any), email: guestEmail }
+      guestEmail && !withZone?.email
+        ? { ...withZone, email: guestEmail }
         : withZone;
     const billingAddress = checkoutData.payment.billing_address_same_as_shipping
       ? shippingAddress
@@ -418,7 +418,7 @@ export class OrderService {
         defaultWarehouse?.id || "85bf6ad1-be55-47b2-ab31-07b05c43bcfc";
 
       const reservationItems: ReservationItem[] = [];
-      for (const item of (cart.items as any[])) {
+      for (const item of cart.items) {
         const variantId = (item.variant_id || item.product_id) as string;
         if (!variantId) continue;
 
@@ -483,7 +483,7 @@ export class OrderService {
         // (below), so a granted discount can no longer go unrecorded.
         await CouponService.consumeCoupon(
           appliedCoupon.code,
-          userId || (order as any).user_id || couponCustomerId,
+          userId || order.user_id || couponCustomerId,
           order.id,
           appliedCoupon.discount
         );

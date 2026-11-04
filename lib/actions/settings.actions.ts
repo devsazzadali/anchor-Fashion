@@ -152,7 +152,7 @@ const DEFAULTS: {
 };
 
 const getCachedSetting = unstable_cache(
-  async (key: string, defaultValue): Promise<any> => {
+  async <T>(key: string, defaultValue: T): Promise<T> => {
     try {
       const db = await createDbClient();
       const { data } = await db
@@ -161,9 +161,9 @@ const getCachedSetting = unstable_cache(
         .eq("key", key)
         .single();
       if (data?.value && typeof data.value === "object") {
-        return { ...defaultValue, ...(data.value as any) };
+        return { ...defaultValue, ...data.value };
       }
-      return (data?.value as any) ?? defaultValue;
+      return data?.value ?? defaultValue;
     } catch {
       return defaultValue;
     }
@@ -250,7 +250,7 @@ export async function updateInvoiceInfo(info: InvoiceInfo) {
       .upsert(
         {
           key: "invoice_info",
-          value: legalInfo as any,
+          value: legalInfo,
           description: "Legal company identity printed on invoices (name, BIN, address). Contacts come from store_info.",
         },
         { onConflict: "key" }
@@ -284,7 +284,7 @@ export async function updateStoreInfo(info: StoreInfo) {
       .upsert(
         {
           key: "store_info",
-          value: info as any,
+          value: info,
           description: "Global store contact and branding info",
         },
         { onConflict: "key" }
@@ -314,7 +314,7 @@ export async function updateSocialLinks(links: SocialLinks) {
       .upsert(
         {
           key: "social_links",
-          value: links as any,
+          value: links,
           description: "Store social media profile URLs",
         },
         { onConflict: "key" }
@@ -358,7 +358,7 @@ export async function updateStoreConfig(config: StoreConfig) {
       .upsert(
         {
           key: "store_config",
-          value: config as any,
+          value: config,
           description: "Global store configuration",
         },
         { onConflict: "key" }
@@ -378,13 +378,13 @@ export async function updateStoreConfig(config: StoreConfig) {
         .single();
       const currentInfo = {
         ...DEFAULTS.store_info,
-        ...((currentInfoRow?.value as any) || {}),
+        ...((currentInfoRow?.value) || {}),
       };
       if (config.store_name && config.store_name !== currentInfo.store_name) {
         await db.from("settings").upsert(
           {
             key: "store_info",
-            value: { ...currentInfo, store_name: config.store_name } as any,
+            value: { ...currentInfo, store_name: config.store_name },
             description: "Global store contact and branding info",
           },
           { onConflict: "key" }
@@ -419,7 +419,7 @@ export async function updateSeoSettings(settings: SeoSettings) {
       .upsert(
         {
           key: "seo_settings",
-          value: settings as any,
+          value: settings,
           description: "Default SEO and Meta tag configuration",
         },
         { onConflict: "key" }
@@ -464,7 +464,7 @@ export async function updateSecuritySettings(config: SecuritySettingsConfig) {
       .upsert(
         {
           key: "security_settings",
-          value: config as any,
+          value: config,
           description: "Security and authentication policies",
         },
         { onConflict: "key" }
@@ -505,7 +505,7 @@ export async function updateEmailSettings(config: EmailSettingsConfig) {
       .upsert(
         {
           key: "email_settings",
-          value: config as any,
+          value: config,
           description: "Outgoing email SMTP configuration",
         },
         { onConflict: "key" }
@@ -546,7 +546,7 @@ export async function updateAnalyticsSettings(config: AnalyticsSettingsConfig) {
       .upsert(
         {
           key: "analytics_settings",
-          value: config as any,
+          value: config,
           description: "Third-party analytics and tracking IDs",
         },
         { onConflict: "key" }

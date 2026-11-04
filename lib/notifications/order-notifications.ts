@@ -14,6 +14,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { EmailProvider } from "./EmailProvider";
 import { EmailTemplates } from "./EmailTemplates";
 import { getInvoiceInfo } from "@/lib/actions/settings.actions";
@@ -24,8 +25,24 @@ function storeUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || "https://anchor.com.bd";
 }
 
-function customerNameFrom(order: any): string | null {
-  const addr = (order.shippingAddress || {}) as Record<string, any>;
+/** The loadOrder payload — every order read in this file goes through it. */
+type OrderForNotification = Prisma.OrderGetPayload<{
+  include: {
+    items: true;
+    profile: { select: { email: true; firstName: true; lastName: true } };
+    customer: { select: { email: true; name: true } };
+  };
+}>;
+
+/** orders.shipping_address JSON — the keys read in this file. */
+interface OrderAddressJson {
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+}
+
+function customerNameFrom(order: OrderForNotification): string | null {
+  const addr = (order.shippingAddress || {}) as OrderAddressJson;
   const fromAddr = [addr.first_name, addr.last_name]
     .filter(Boolean)
     .join(" ")
@@ -42,10 +59,10 @@ function customerNameFrom(order: any): string | null {
 }
 
 /** Resolve the best customer email for an order (profile → shipping JSON → customer record). */
-function resolveCustomerEmail(order: any): string | null {
+function resolveCustomerEmail(order: OrderForNotification): string | null {
   const candidates = [
     order.profile?.email,
-    (order.shippingAddress as any)?.email,
+    (order.shippingAddress as OrderAddressJson | null)?.email,
     order.customer?.email,
   ];
   for (const c of candidates) {
@@ -71,7 +88,8 @@ async function recordOrderEmailLog(entry: {
   status: "SENT" | "FAILED" | "SKIPPED";
   providerId?: string | null;
   reason?: string | null;
-  error?: string | null;
+  // Callers pass provider strings AND raw caught values (err?.message || err).
+  error?: unknown;
 }): Promise<void> {
   try {
     await prisma.communicationLog.create({
@@ -94,7 +112,7 @@ async function recordOrderEmailLog(entry: {
           provider_id: entry.providerId ?? null,
           reason: entry.reason ?? null,
           error: entry.error
-            ? String((entry.error as any)?.message || entry.error)
+            ? String((entry.error as { message?: unknown })?.message || entry.error)
             : null,
         },
       },
@@ -114,7 +132,7 @@ async function loadOrder(orderId: string) {
   });
 }
 
-function toTemplateOrder(order: any) {
+function toTemplateOrder(order: OrderForNotification) {
   return {
     id: order.id,
     invoice_token: order.invoiceToken || null,
@@ -127,7 +145,7 @@ function toTemplateOrder(order: any) {
     shipping_cost: Number(order.shippingFee || 0),
     vat_amount: Number(order.vatAmount || 0),
     total_amount: Number(order.totalAmount || 0),
-    order_items: (order.items || []).map((i: any) => ({
+    order_items: (order.items || []).map((i) => ({
       product_name: i.productName,
       variant_sku: i.sku,
       quantity: i.quantity,
@@ -142,7 +160,7 @@ function toTemplateOrder(order: any) {
  */
 export async function sendOrderCompletionInvoiceEmail(orderId: string) {
   const event = "order_completion_invoice";
-  let order: any = null;
+  let order: OrderForNotification | null = null;
   let to: string | null = null;
   let subject = "";
   try {
@@ -166,7 +184,7 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
         event,
         orderId,
         orderNumber: order.orderNumber,
-        profileId: (order as any).profileId ?? null,
+        profileId: order.profileId ?? null,
         recipients: [],
         subject,
         status: "SKIPPED",
@@ -190,7 +208,7 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
         event,
         orderId,
         orderNumber: order.orderNumber,
-        profileId: (order as any).profileId ?? null,
+        profileId: order.profileId ?? null,
         recipients: [to],
         subject,
         status: "FAILED",
@@ -204,26 +222,26 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
       event,
       orderId,
       orderNumber: order.orderNumber,
-      profileId: (order as any).profileId ?? null,
+      profileId: order.profileId ?? null,
       recipients: [to],
       subject,
       status: "SENT",
       providerId: res.id ?? null,
     });
     return { sent: true, id: res.id, to };
-  } catch (err: any) {
+  } catch (err) {
     await recordOrderEmailLog({
       event,
       orderId,
       orderNumber: order?.orderNumber ?? null,
-      profileId: (order as any)?.profileId ?? null,
+      profileId: order?.profileId ?? null,
       recipients: to ? [to] : [],
       subject: subject || "(not composed)",
       status: "FAILED",
       reason: "exception",
-      error: err?.message || err,
+      error: (err as Error)?.message || err,
     });
-    return { sent: false, reason: "exception", error: err?.message };
+    return { sent: false, reason: "exception", error: (err as Error)?.message };
   }
 }
 
@@ -238,7 +256,7 @@ export async function notifyStaffOrderEvent(opts: {
   previousStatus?: string | null;
 }) {
   const event = `staff_order_event:${opts.kind}`;
-  let order: any = null;
+  let order: OrderForNotification | null = null;
   let recipients: string[] = [];
   let subject = "";
   try {
@@ -329,7 +347,7 @@ export async function notifyStaffOrderEvent(opts: {
       providerId: res.id ?? null,
     });
     return { sent: true, id: res.id, recipients: recipients.length };
-  } catch (err: any) {
+  } catch (err) {
     await recordOrderEmailLog({
       event,
       orderId: opts.orderId,
@@ -338,8 +356,8 @@ export async function notifyStaffOrderEvent(opts: {
       subject: subject || "(not composed)",
       status: "FAILED",
       reason: "exception",
-      error: err?.message || err,
+      error: (err as Error)?.message || err,
     });
-    return { sent: false, reason: "exception", error: err?.message };
+    return { sent: false, reason: "exception", error: (err as Error)?.message };
   }
 }

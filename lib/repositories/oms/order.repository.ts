@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { Order, OrderStatus } from "@/types/oms";
 import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { parseVariantAttributes } from "@/lib/utils/variant-attributes";
@@ -7,8 +8,128 @@ import {
   ensureOrderPaymentSuccess,
 } from "@/lib/payments/order-payment-record";
 
+/** Address JSON as stored on orders.shipping_address / shippingAddress —
+ *  every key the readers in this file look up, in both the snake_case and
+ *  camelCase spellings the writers have used. */
+interface OmsShippingAddressJson {
+  recipient_name?: string | null;
+  recipientName?: string | null;
+  name?: string | null;
+  first_name?: string | null;
+  firstName?: string | null;
+  last_name?: string | null;
+  lastName?: string | null;
+  address_line_1?: string | null;
+  addressLine1?: string | null;
+  address_line_2?: string | null;
+  addressLine2?: string | null;
+  street?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  district?: string | null;
+  state?: string | null;
+}
+
+/** Snake-case shipment snapshot attached to the OMS detail payload
+ *  (REG-17) — the exact literal built in getOrderById. */
+interface OmsShipmentSnapshot {
+  id: string;
+  shipment_number: string | null;
+  status: string | null;
+  tracking_number: string | null;
+  courier_provider_code: string | null;
+  courier: string | null;
+  courier_name: string | null;
+  recipient_name: string | null;
+  recipient_city: string | null;
+  is_cod: boolean;
+  cod_amount: number | null;
+  created_at: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+}
+
+/** createOrder input — the snake_case fields the method actually reads
+ *  (OMS callers pass tax_total, checkout passes vat_amount). */
+interface CreateOmsOrderInput {
+  order_number: string;
+  user_id?: string | null;
+  customer_id?: string | null;
+  status?: string | null;
+  subtotal?: number | null;
+  shipping_fee?: number | null;
+  shipping_total?: number | null;
+  discount_amount?: number | null;
+  discount_total?: number | null;
+  vat_amount?: number | null;
+  tax_total?: number | null;
+  total_amount?: number | null;
+  grand_total?: number | null;
+  payment_method?: string | null;
+  payment_status?: string | null;
+  shipping_address?: Prisma.InputJsonValue | null;
+  billing_address?: Prisma.InputJsonValue | null;
+  notes?: string | null;
+}
+
+/** Mapper input row — the Order scalar fields mapPrismaOrderToOms reads.
+ *  Relations are optional because not every query includes them (the
+ *  mapper reads them defensively). */
+interface OmsOrderItemRecord {
+  id: string;
+  orderId: string;
+  productId: string | null;
+  variantId: string | null;
+  sku: string;
+  productName: string;
+  variantName: string | null;
+  quantity: number;
+  unitPrice: Prisma.Decimal;
+  totalPrice: Prisma.Decimal;
+  createdAt: Date;
+  variant?: { attributes: Prisma.JsonValue } | null;
+}
+
+interface OmsOrderHistoryRecord {
+  status: string;
+  notes: string | null;
+  changedBy: string | null;
+  createdAt: Date;
+}
+
+interface OmsOrderRecord {
+  id: string;
+  customerId: string | null;
+  profileId: string | null;
+  orderNumber: string;
+  status: string;
+  subtotal: Prisma.Decimal;
+  vatAmount: Prisma.Decimal;
+  shippingFee: Prisma.Decimal;
+  discount: Prisma.Decimal;
+  totalAmount: Prisma.Decimal;
+  paymentMethod: string;
+  paymentStatus: string;
+  notes: string | null;
+  shippingAddress: Prisma.JsonValue;
+  billingAddress: Prisma.JsonValue | null;
+  riskLevel: string | null;
+  riskScore: number | null;
+  riskReasons: Prisma.JsonValue | null;
+  verificationStatus: string | null;
+  verificationVerifiedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  paidAt: Date | null;
+  shippedAt: Date | null;
+  deliveredAt: Date | null;
+  cancelledAt: Date | null;
+  items?: OmsOrderItemRecord[];
+  statusHistory?: OmsOrderHistoryRecord[];
+}
+
 export class OrderRepository {
-  async getOrderById(id: string, _?: any): Promise<Order | null> {
+  async getOrderById(id: string, _?: unknown): Promise<Order | null> {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     let order;
 
@@ -31,7 +152,8 @@ export class OrderRepository {
     }
 
     if (!order) return null;
-    const mapped = mapPrismaOrderToOms(order);
+    const mapped: Order & { shipment?: OmsShipmentSnapshot } =
+      mapPrismaOrderToOms(order);
 
     // REG-17: surface the order's shipment on the detail payload. The
     // shipment row is born on the SHIPPED transition (S5-8) but nothing
@@ -59,7 +181,7 @@ export class OrderRepository {
             .catch(() => null);
           courierName = provider?.name ?? null;
         }
-        (mapped as any).shipment = {
+        mapped.shipment = {
           id: shipment.id,
           shipment_number: shipment.shipmentNumber,
           status: shipment.status,
@@ -82,7 +204,7 @@ export class OrderRepository {
     return mapped;
   }
 
-  async getOrderByNumber(orderNumber: string, _?: any): Promise<Order | null> {
+  async getOrderByNumber(orderNumber: string, _?: unknown): Promise<Order | null> {
     const order = await prisma.order.findUnique({
       where: { orderNumber },
       include: {
@@ -102,12 +224,12 @@ export class OrderRepository {
     search?: string;
     page?: number;
     limit?: number;
-  }, _?: any) {
+  }, _?: unknown) {
     const page = Math.max(1, options?.page || 1);
     const limit = Math.min(100, Math.max(1, options?.limit || 20));
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
     if (options?.customerId) {
       const isCustUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.customerId);
       if (isCustUuid) {
@@ -174,9 +296,12 @@ export class OrderRepository {
       prisma.order.count({ where }),
     ]);
 
-    const enrichedOrders = orders.map((o: any) => {
+    const enrichedOrders = orders.map((o) => {
       const mapped = mapPrismaOrderToOms(o);
-      const shippingAddr = mapped.shipping_address as any;
+      const shippingAddr = mapped.shipping_address as
+        | OmsShippingAddressJson
+        | null
+        | undefined;
       let customerName = "Guest Customer";
       
       if (shippingAddr?.first_name || shippingAddr?.last_name || shippingAddr?.firstName) {
@@ -188,8 +313,8 @@ export class OrderRepository {
         customer_name: customerName,
         customer_phone: shippingAddr?.phone || null,
         customer_city: shippingAddr?.city || null,
-        items_count: o.items.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0),
-        items_preview: o.items.map((i: any) => i.productName).filter(Boolean).slice(0, 3).join(", "),
+        items_count: o.items.reduce((sum: number, i) => sum + (Number(i.quantity) || 1), 0),
+        items_preview: o.items.map((i) => i.productName).filter(Boolean).slice(0, 3).join(", "),
       } as Order;
     });
 
@@ -199,7 +324,7 @@ export class OrderRepository {
     };
   }
 
-  async getOrderMetrics(_?: any) {
+  async getOrderMetrics(_?: unknown) {
     // REG-84 (Round 19): was fetch-all + JS aggregation over every
     // order row. Per-status counts and revenue sums are now computed
     // by the database (one groupBy) and bucketed here under the exact
@@ -250,7 +375,7 @@ export class OrderRepository {
   }
 
   async createOrder(
-    orderData: any
+    orderData: CreateOmsOrderInput
   ): Promise<Order> {
     const isProfileUuid =
       orderData.user_id &&
@@ -274,8 +399,8 @@ export class OrderRepository {
         totalAmount: orderData.total_amount || orderData.grand_total || 0,
         paymentMethod: orderData.payment_method || "COD",
         paymentStatus: orderData.payment_status || "UNPAID",
-        shippingAddress: (orderData.shipping_address as any) || {},
-        billingAddress: (orderData.billing_address as any) || undefined,
+        shippingAddress: orderData.shipping_address || {},
+        billingAddress: orderData.billing_address || undefined,
         notes: orderData.notes,
         statusHistory: {
           create: {
@@ -416,7 +541,7 @@ export class OrderRepository {
           select: { id: true },
         });
         if (!existing) {
-          const addr = (current?.shippingAddress ?? {}) as Record<string, any>;
+          const addr = (current?.shippingAddress ?? {}) as OmsShippingAddressJson;
           const recipientName =
             addr.recipient_name ||
             addr.recipientName ||
@@ -548,7 +673,7 @@ export class OrderRepository {
   }
 }
 
-function mapPrismaOrderToOms(record: any): Order {
+function mapPrismaOrderToOms(record: OmsOrderRecord): Order {
   const shippingAddr = record.shippingAddress as Record<string, any> | null;
   const billingAddr = record.billingAddress as Record<string, any> | null;
 
@@ -577,9 +702,11 @@ function mapPrismaOrderToOms(record: any): Order {
     // Phase 8: real persisted fraud-risk evaluation (was hard-coded "LOW"
     // for every order). Falls back to LOW only when no evaluation exists
     // (e.g. legacy orders created before risk persistence).
-    risk_level: (record.riskLevel || "LOW") as any,
+    risk_level: record.riskLevel || "LOW",
     risk_score: record.riskScore ?? null,
-    risk_reasons: (record.riskReasons as any) ?? null,
+    // risk_reasons is a Json column; the fraud writers store a string
+    // array, which is the shape Order declares.
+    risk_reasons: (record.riskReasons as string[] | null) ?? null,
     verification_status: record.verificationStatus ?? null,
     verification_verified_at:
       record.verificationVerifiedAt?.toISOString?.() ?? null,
@@ -591,7 +718,7 @@ function mapPrismaOrderToOms(record: any): Order {
     delivered_at: record.deliveredAt?.toISOString() || null,
     cancelled_at: record.cancelledAt?.toISOString() || null,
     updated_by: null,
-    items: (record.items || []).map((item: any) => {
+    items: (record.items || []).map((item) => {
       // S5-1: readable size/colour from the variant's attribute JSON
       // when the query included it; nulls otherwise.
       const attrs = parseVariantAttributes(item.variant?.attributes);
@@ -613,14 +740,14 @@ function mapPrismaOrderToOms(record: any): Order {
         created_at: item.createdAt?.toISOString(),
       };
     }),
-    shipping_address: shippingAddr ? (shippingAddr as any) : undefined,
-    billing_address: billingAddr ? (billingAddr as any) : undefined,
+    shipping_address: shippingAddr ? shippingAddr : undefined,
+    billing_address: billingAddr ? billingAddr : undefined,
     // FIX ROUND 29 (D8): the queries include statusHistory but the
     // mapper dropped it, so the admin detail could never show a
     // cancellation reason or a status timeline. Snake-case shape,
     // matching what deriveCancellationDisplay consumes on the
     // customer side.
-    order_status_history: (record.statusHistory || []).map((h: any) => ({
+    order_status_history: (record.statusHistory || []).map((h) => ({
       status: h.status,
       notes: h.notes ?? null,
       changed_by: h.changedBy ?? null,

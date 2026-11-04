@@ -4,6 +4,36 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
+/** Shim row shapes (builder-serialized values) for the batched relation
+ *  fetches in getPickListsAction. The pick_lists rows themselves stay
+ *  untyped on purpose (REG-65 Batch 3 holdout): the processed payload is
+ *  consumed by features/fulfillment/components/PickListsClient.tsx
+ *  against a PickListRecord whose required created_at, status union and
+ *  non-null warehouses are narrower than the honest row shape, so a
+ *  precise row type breaks that out-of-scope consumer. */
+interface PickListItemDbRow {
+  id: string;
+  pick_list_id: string;
+  variant_id?: string | null;
+  quantity_required?: number | null;
+  quantity_picked?: number | null;
+  status?: string | null;
+  [key: string]: unknown;
+}
+
+interface FulfillmentWarehouseRow {
+  id: string;
+  name: string;
+  code: string | null;
+}
+
+interface PickerProfileRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+}
+
 export async function getPickListsAction() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
@@ -36,39 +66,39 @@ export async function getPickListsAction() {
       await Promise.all([
         listIds.length
           ? db.from("pick_list_items").select("*").in("pick_list_id", listIds)
-          : Promise.resolve({ data: [] as any[] }),
+          : Promise.resolve({ data: [] as PickListItemDbRow[] }),
         warehouseIds.length
           ? db.from("warehouses").select("id, name, code").in("id", warehouseIds)
-          : Promise.resolve({ data: [] as any[] }),
+          : Promise.resolve({ data: [] as FulfillmentWarehouseRow[] }),
         pickerIds.length
           ? db
               .from("profiles")
               .select("id, first_name, last_name, email")
               .in("id", pickerIds)
-          : Promise.resolve({ data: [] as any[] }),
+          : Promise.resolve({ data: [] as PickerProfileRow[] }),
       ]);
 
-    const itemsByList = new Map<string, any[]>();
+    const itemsByList = new Map<string, PickListItemDbRow[]>();
     for (const item of itemRows || []) {
       if (!itemsByList.has(item.pick_list_id)) itemsByList.set(item.pick_list_id, []);
       itemsByList.get(item.pick_list_id)!.push(item);
     }
-    const warehouseById = new Map<string, any>(
-      (warehouseRows || []).map((w: any) => [w.id, w] as [string, any])
+    const warehouseById = new Map<string, FulfillmentWarehouseRow>(
+      (warehouseRows || []).map((w: FulfillmentWarehouseRow) => [w.id, w] as [string, FulfillmentWarehouseRow])
     );
     const profileMap: Record<string, string> = {};
-    (profiles || []).forEach((p: any) => {
+    (profiles || []).forEach((p: PickerProfileRow) => {
       profileMap[p.id] = `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.email;
     });
 
     const processed = rows.map((list: any) => {
       const items = itemsByList.get(list.id) || [];
       const totalRequired = items.reduce(
-        (sum: number, i: any) => sum + (Number(i.quantity_required) || 0),
+        (sum: number, i) => sum + (Number(i.quantity_required) || 0),
         0
       );
       const totalPicked = items.reduce(
-        (sum: number, i: any) => sum + (Number(i.quantity_picked) || 0),
+        (sum: number, i) => sum + (Number(i.quantity_picked) || 0),
         0
       );
       const wh = list.warehouse_id ? warehouseById.get(list.warehouse_id) : null;
@@ -106,7 +136,7 @@ export async function getPickersAction() {
     if (error) return { success: false, error: error.message };
     return {
       success: true,
-      data: (data || []).map((p: any) => ({
+      data: (data || []).map((p: PickerProfileRow) => ({
         id: p.id,
         name: `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.email,
         email: p.email,
@@ -281,7 +311,7 @@ export async function updatePickListStatusAction(
       dbStatus = "IN_PROGRESS";
     }
 
-    const updates: any = {
+    const updates: { status: string; completed_at?: string } = {
       status: dbStatus,
     };
 
