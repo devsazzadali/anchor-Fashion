@@ -6,8 +6,8 @@ import { AIPredictionSchema } from "@/schemas/operations.schemas";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function generateSalesForecast(
-  historicalData: any[]
-): Promise<{ forecast?: any; error?: string }> {
+  historicalData: unknown[]
+): Promise<{ forecast?: unknown; error?: string }> {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
     const prompt = `Based on the following historical sales data, provide a 30-day forecast and highlight any seasonal trends or anomalies.\n\nData:\n${JSON.stringify(historicalData)}\n\nFormat the response as a JSON object with 'forecastedRevenue', 'trendAnalysis', and 'confidence' fields.`;
@@ -29,8 +29,8 @@ export async function generateSalesForecast(
 }
 
 export async function generateInventoryInsights(
-  inventoryData: any[]
-): Promise<{ insights?: any; error?: string }> {
+  inventoryData: unknown[]
+): Promise<{ insights?: unknown; error?: string }> {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
     const prompt = `Analyze this inventory data and identify products at risk of stockout, overstock items, and recommend reorder quantities.\n\nData:\n${JSON.stringify(inventoryData)}\n\nFormat as JSON with 'stockoutRisks', 'overstockItems', and 'recommendations'.`;

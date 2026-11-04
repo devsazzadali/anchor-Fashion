@@ -1,6 +1,13 @@
 import { createDbClient } from "@/lib/db/client";
 import { PaymentProvider, PaymentProviderCode } from "@/types/payment.types";
 
+// REG-65: row shape for the untyped db shim — only is_active is read;
+// the rest of the row passes through the spread untouched.
+interface PaymentProviderDbRow {
+  is_active?: boolean | null;
+  [key: string]: unknown;
+}
+
 export class PaymentProviderRepository {
   /**
    * Get all payment providers.
@@ -23,7 +30,7 @@ export class PaymentProviderRepository {
       throw new Error(`Failed to fetch payment providers: ${error.message}`);
     }
 
-    return (data || []).map((p: any) => ({
+    return (data || []).map((p: PaymentProviderDbRow) => ({
       ...p,
       status: p.is_active ? "active" : "inactive",
     })) as PaymentProvider[];
@@ -62,7 +69,7 @@ export class PaymentProviderRepository {
     data: Partial<PaymentProvider>
   ): Promise<void> {
     const db = await createDbClient();
-    const payload: Record<string, any> = { ...(data as any) };
+    const payload: Record<string, unknown> = { ...data };
     if (payload.status !== undefined) {
       payload.is_active = payload.status === "active";
       delete payload.status;
@@ -100,8 +107,8 @@ export class PaymentProviderRepository {
     }
     if (!data) return null;
     return {
-      ...(data as any),
-      status: (data as any).is_active ? "active" : "inactive",
+      ...data,
+      status: data.is_active ? "active" : "inactive",
     } as PaymentProvider;
   }
 }

@@ -27,8 +27,8 @@ const DELIVERY_ZONE_REAL_COLUMNS = [
   "sort_order",
 ] as const;
 
-function sanitizeZonePayload(data: Record<string, any>): Record<string, any> {
-  const sanitized: Record<string, any> = {};
+function sanitizeZonePayload(data: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
   for (const column of DELIVERY_ZONE_REAL_COLUMNS) {
     if (data[column] !== undefined) {
       sanitized[column] = data[column];
@@ -45,9 +45,23 @@ function sanitizeZonePayload(data: Record<string, any>): Record<string, any> {
  * Normalize a raw zone row for callers: guarantee `rate` is present as a
  * plain number (the builder may hand back a Decimal / numeric string).
  */
-function withRate(zone: any): any {
-  if (!zone) return zone;
-  return { ...zone, rate: Number(zone.rate ?? 0) };
+// REG-65: typed to the DeliveryZone the call sites already claim. The
+// internal cast is the pre-existing call-site assertion, centralized:
+// probe-verified, an intersected `Record<string, any> & { rate }` return
+// is NOT comparable to DeliveryZone (TS2352), while a plain
+// Record<string, any> is — so the return type is declared, not derived
+// from the spread. Note the type/table mismatch this preserves (not
+// fixed here): DeliveryZone declares description / is_cod_available /
+// estimated_days_min / estimated_days_max, which are not delivery_zones
+// columns per this file's own header comment, so those fields arrive
+// undefined at runtime.
+function withRate(zone: Record<string, any> | null): DeliveryZone | null {
+  if (!zone) return null;
+  // The spread alone infers to { rate: number } (the index signature
+  // does not survive spreading), so the row is re-anchored to its
+  // record type before the pre-existing DeliveryZone assertion.
+  const row: Record<string, any> = { ...zone, rate: Number(zone.rate ?? 0) };
+  return row as DeliveryZone;
 }
 
 export class DeliveryZoneRepository {
@@ -170,7 +184,7 @@ export class DeliveryZoneRepository {
 
     const { data: zone, error } = await db
       .from("delivery_zones")
-      .insert(sanitizeZonePayload(data as Record<string, any>) as any)
+      .insert(sanitizeZonePayload(data as Record<string, any>))
       .select()
       .single();
 
@@ -189,7 +203,7 @@ export class DeliveryZoneRepository {
 
     const { data: zone, error } = await db
       .from("delivery_zones")
-      .update(sanitizeZonePayload(data as Record<string, any>) as any)
+      .update(sanitizeZonePayload(data as Record<string, any>))
       .eq("id", id)
       .select()
       .single();
@@ -228,7 +242,7 @@ export class DeliveryZoneRepository {
 
     const { data: rate, error } = await db
       .from("shipping_rates")
-      .upsert(data as any, { onConflict: "zone_id,name,is_cod_rate" })
+      .upsert(data, { onConflict: "zone_id,name,is_cod_rate" })
       .select()
       .single();
 

@@ -57,6 +57,8 @@ interface SupportAgentDbRow {
   active_tickets_count: number | null;
 }
 
+
+
 interface CreateTicketInput {
   profile_id?: string | null;
   customer_id?: string | null;
@@ -440,6 +442,13 @@ export class SupportRepository {
     return null;
   }
 
+  // REG-65 holdout: this return stays `any`. The honest record type
+  // (SupportTicketRecord) is not assignable to the types/support.types
+  // SupportTicket the service layer promises (string vs TicketPriority /
+  // TicketStatus unions, and profile_id: string | null vs optional
+  // string), so typing it errors in services/support.service.ts — the
+  // same type-universe conflict as the Batch-2 lib/repositories mapper
+  // holdouts. Reconciling the two type universes is out of scope.
   async createTicket(data: CreateTicketInput): Promise<any> {
     const db = await SupportRepository.getClient();
     const allowed = [
@@ -483,6 +492,9 @@ export class SupportRepository {
     return ticket;
   }
 
+  // REG-65 holdout: same type-universe conflict as createTicket above —
+  // SupportTicketRecord is not assignable to types/support.types
+  // SupportTicket, so this return stays `any`.
   async updateTicket(id: string, data: UpdateTicketInput): Promise<any> {
     const db = await SupportRepository.getClient();
     // Only columns that actually exist on support_tickets may be sent. The
@@ -547,6 +559,11 @@ export class SupportRepository {
     return true;
   }
 
+  // REG-65 holdout: this return stays `any`. normalizeTicketMessage
+  // produces a TicketMessageRecord, but types/support.types TicketMessage
+  // requires updated_at, which the record never carries — typing it
+  // errors in services/support.service.ts. Same out-of-scope
+  // reconciliation as the ticket holdouts above.
   async createTicketMessage(data: CreateTicketMessageInput): Promise<any> {
     const db = await SupportRepository.getClient();
     const messageText = (data.message || data.body || "").trim();
@@ -592,6 +609,13 @@ export class SupportRepository {
     return data || [];
   }
 
+  // REG-65 holdout: this return stays untyped. The admin support page
+  // reads current_status / auth_users off the agents, fields getAgents
+  // never produces (it maps rows into id / user_id / first_name /
+  // last_name / full_name / status) — typing the return errors in
+  // app/(admin)/admin/support/page.tsx. Those page reads are dead reads
+  // (they always resolve undefined today); reconciling producer and
+  // consumer is a functional fix, out of scope for a type-only batch.
   async getAgents(): Promise<any[]> {
     const db = await SupportRepository.getClient();
     let { data: agents } = await db

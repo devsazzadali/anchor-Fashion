@@ -20,6 +20,26 @@ export type UserData = {
   phone?: string | null;
 };
 
+// REG-65: row shapes for the untyped db shim, derived from this file's
+// own reads (roles select "*", profiles select "*, roles(*)").
+interface RoleRow {
+  id: string;
+}
+
+interface ProfileRoleRow {
+  name?: string | null;
+}
+
+interface ProfileRow {
+  id: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  is_active?: boolean | null;
+  roles?: ProfileRoleRow | ProfileRoleRow[] | null;
+}
+
 export async function getUsersByRoleAction(roleNames: string[]) {
   try {
     await verifyAdmin();
@@ -34,7 +54,7 @@ export async function getUsersByRoleAction(roleNames: string[]) {
     if (rolesError) throw rolesError;
     if (!roles || roles.length === 0) return { success: true, data: [] };
 
-    const roleIds = roles.map((r: any) => r.id);
+    const roleIds = roles.map((r: RoleRow) => r.id);
 
     // 2. Get profiles
     const { data: profiles, error: profilesError } = await db
@@ -84,12 +104,12 @@ export async function getUsersByRoleAction(roleNames: string[]) {
     }
 
     // Merge data
-    const mappedUsers: UserData[] = (profiles || []).map((profile: any) => {
-      const authUser: any = users.find((u: any) => u.id === profile.id);
+    const mappedUsers: UserData[] = (profiles || []).map((profile: ProfileRow) => {
+      const authUser = users.find((u) => u.id === profile.id);
 
       const roleName = Array.isArray(profile.roles)
         ? profile.roles[0]?.name
-        : (profile.roles as any)?.name || "Unknown";
+        : profile.roles?.name || "Unknown";
 
       // REG-26: "Never" only when the account has genuinely never
       // signed in (no Neon Auth session rows at all).

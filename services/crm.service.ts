@@ -50,7 +50,11 @@ export class CRMService {
       throw new Error(`A lead with email "${validData.email}" already exists.`);
     }
 
-    const { notes, custom_fields, assigned_agent_id, ...rest } = validData as any;
+    // REG-65: zod strips unknown keys, so the legacy notes/custom_fields
+    // destructure reads fields the schema never declares (always undefined
+    // at runtime); the intersection types that legacy shape without
+    // changing what parse returns.
+    const { notes, custom_fields, assigned_agent_id, ...rest } = validData as typeof validData & { notes?: string; custom_fields?: unknown };
     const leadFields: Record<string, any> = {
       first_name: rest.first_name,
       last_name: rest.last_name || null,
@@ -132,7 +136,9 @@ export class CRMService {
 
   async updateLead(id: string, data: unknown): Promise<CRMLead> {
     const validData = updateCRMLeadSchema.parse(data);
-    const { notes, custom_fields, assigned_agent_id, ...rest } = validData as any;
+    // REG-65: same legacy-shape intersection as createLead above — zod
+    // strips the undeclared notes/custom_fields keys.
+    const { notes, custom_fields, assigned_agent_id, ...rest } = validData as typeof validData & { notes?: string; custom_fields?: unknown };
     const updateFields: Record<string, any> = {};
     if (rest.first_name !== undefined) updateFields.first_name = rest.first_name;
     if (rest.last_name !== undefined) updateFields.last_name = rest.last_name || null;
@@ -270,7 +276,7 @@ export class CRMService {
 
   async addNoteToCustomer(profileId: string, data: unknown): Promise<CRMNote> {
     const validData = createCRMNoteSchema.parse({
-      ...(data as any),
+      ...(data as Record<string, unknown>),
       profile_id: profileId,
     });
     return await crmRepository.createNote(validData);
@@ -293,8 +299,8 @@ export class CRMService {
     return await crmRepository.getCommunicationLogs(undefined, leadId);
   }
 
-  async logCommunication(data: unknown): Promise<CommunicationLog> {
-    return await crmRepository.createCommunicationLog(data as any);
+  async logCommunication(data: Partial<CommunicationLog>): Promise<CommunicationLog> {
+    return await crmRepository.createCommunicationLog(data);
   }
 
   async getCommunicationLogs(): Promise<CommunicationLog[]> {

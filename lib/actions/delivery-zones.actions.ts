@@ -13,13 +13,21 @@ import {
   createShippingRateSchema,
 } from "@/schemas/shipping.schema";
 import { verifyStaff } from "@/lib/security/roles";
+import {
+  DeliveryZone,
+  ShippingChargeCalculation,
+} from "@/types/shipping.types";
 
 type ActionResponse<T = void> =
   { success: true; data: T } | { success: false; error: string };
 
+// REG-65: the no-zone branch returns the calculation shape plus a message;
+// the calculator's own returns carry no message.
+type ShippingRateActionData = ShippingChargeCalculation & { message?: string };
+
 export async function calculateShippingRateAction(
   raw: Record<string, any>
-): Promise<ActionResponse<any>> {
+): Promise<ActionResponse<ShippingRateActionData>> {
   const parse = shippingRateQuerySchema.safeParse(raw);
   if (!parse.success) {
     return {
@@ -65,7 +73,7 @@ export async function calculateShippingRateAction(
 }
 
 export async function fetchDeliveryZonesAction(): Promise<
-  ActionResponse<any[]>
+  ActionResponse<DeliveryZone[]>
 > {
   try {
     const calculator = new RateCalculatorService();
@@ -78,7 +86,7 @@ export async function fetchDeliveryZonesAction(): Promise<
 
 export async function getDeliveryZoneAction(
   zoneId: string
-): Promise<ActionResponse<any>> {
+): Promise<ActionResponse<DeliveryZone>> {
   try {
     const repo = new DeliveryZoneRepository();
     const zone = await repo.getZoneById(zoneId);
@@ -104,6 +112,12 @@ export async function createDeliveryZoneAction(
 
   try {
     const repo = new DeliveryZoneRepository();
+    // REG-65 holdout: parse.data keeps its cast — the schema's
+    // description is optional (string | undefined) while DeliveryZone
+    // requires description: string | null, so the payload is not
+    // assignable to createZone's input without reconciling the schema /
+    // type universes (same class as the Batch-4 products.actions
+    // holdouts).
     const zone = await repo.createZone(parse.data as any);
 
     revalidatePath("/admin/shipping/zones");
@@ -150,7 +164,7 @@ export async function createShippingRateAction(
       zone_id: zoneId,
       courier_provider_id: courierProviderId ?? null,
       ...rest,
-    } as any);
+    });
 
     revalidatePath("/admin/shipping/zones");
     return { success: true, data: { rateId: rate.id } };

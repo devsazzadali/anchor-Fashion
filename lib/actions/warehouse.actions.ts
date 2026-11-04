@@ -8,6 +8,7 @@ import {
   WarehouseZone,
   WarehouseBin,
   WarehouseRack,
+  InventoryLevel,
   StockInPayload,
   StockOutPayload,
   StockAdjustmentPayload,
@@ -146,7 +147,20 @@ export async function getOverallWarehouseStatsAction() {
   }
 }
 
-export async function getWarehouseInventoryAction(warehouseId: string, filters?: any) {
+// REG-65: mirrors the filter shape repositories/warehouse.repository.ts
+// getWarehouseInventory actually reads (search/category/status/zone_id/
+// page/limit); the service in between takes `any`, so this annotation
+// only narrows what the action accepts, never what runs.
+type WarehouseInventoryFilters = {
+  search?: string;
+  category?: string;
+  status?: string;
+  zone_id?: string;
+  page?: number;
+  limit?: number;
+};
+
+export async function getWarehouseInventoryAction(warehouseId: string, filters?: WarehouseInventoryFilters) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
@@ -376,7 +390,7 @@ export async function deleteWarehouseBinAction(
 // STOCK OPERATIONS ACTIONS (IN, OUT, ADJUST, TRANSFER, MOVEMENTS)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function stockInAction(payload: StockInPayload): Promise<{ success: boolean; data?: any; error?: string }> {
+export async function stockInAction(payload: StockInPayload): Promise<{ success: boolean; data?: InventoryLevel; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
@@ -394,7 +408,7 @@ export async function stockInAction(payload: StockInPayload): Promise<{ success:
   }
 }
 
-export async function stockOutAction(payload: StockOutPayload): Promise<{ success: boolean; data?: any; error?: string }> {
+export async function stockOutAction(payload: StockOutPayload): Promise<{ success: boolean; data?: InventoryLevel; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
@@ -412,7 +426,7 @@ export async function stockOutAction(payload: StockOutPayload): Promise<{ succes
   }
 }
 
-export async function stockAdjustmentAction(payload: StockAdjustmentPayload): Promise<{ success: boolean; data?: any; error?: string }> {
+export async function stockAdjustmentAction(payload: StockAdjustmentPayload): Promise<{ success: boolean; data?: { updated: InventoryLevel; variance: number }; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
@@ -442,7 +456,7 @@ export async function stockTransferAction(payload: StockTransferPayload): Promis
       payload.quantity,
       payload.reason || "WAREHOUSE_TRANSFER",
       payload.notes,
-      (user as any)?.id
+      user?.id
     );
     revalidatePath("/admin/inventory/warehouses");
     revalidatePath(`/admin/inventory/warehouses/${payload.from_warehouse_id}`);

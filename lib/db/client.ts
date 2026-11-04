@@ -20,23 +20,41 @@ import { callRpc } from "./rpc";
 import { dbStorage } from "./storage";
 import { dbAuth } from "./auth";
 
+// REG-65: the realtime channel surface is a no-op stub (the Supabase-style
+// API the app's notification/chat hooks call). The stub never invokes the
+// `on` callback and its subscribe only ever reports "SUBSCRIBED", so these
+// annotations describe the call shapes the two in-repo consumers use
+// (postgres_changes event name, filter object, payload callback) without
+// changing what any of them does at runtime.
+type DbRealtimeChannel = {
+  on: (
+    _event: string,
+    _filter: Record<string, unknown>,
+    _callback?: (payload: Record<string, unknown>) => void
+  ) => { subscribe: () => { unsubscribe: () => void } };
+  subscribe: (cb?: (status: string) => void) => { unsubscribe: () => void };
+  unsubscribe: () => void;
+};
+
 export function createDbClient() {
   return {
     from: (table: string) => new DbQueryBuilder(table),
     rpc: callRpc,
     storage: dbStorage,
     auth: dbAuth,
-    channel: (name: string) => ({
-      on: (_event: any, _filter: any, _callback?: any) => ({
+    channel: (name: string): DbRealtimeChannel => ({
+      on: (_event, _filter, _callback?) => ({
         subscribe: () => ({ unsubscribe: () => {} }),
       }),
-      subscribe: (cb?: any) => {
+      subscribe: (cb?) => {
         if (typeof cb === "function") cb("SUBSCRIBED");
         return { unsubscribe: () => {} };
       },
       unsubscribe: () => {},
     }),
-    removeChannel: (_channel: any) => {},
+    // Callers pass the subscription object (.on(...).subscribe()), not
+    // the channel itself — see the support chat page and ticket thread.
+    removeChannel: (_channel: { unsubscribe: () => void }) => {},
     getChannels: () => [],
   };
 }
