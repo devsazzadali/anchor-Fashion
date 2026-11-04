@@ -1,8 +1,28 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { Order, OrderAddress, OrderItem, OrderStatus } from "@/types/checkout.types";
 import { recordOrderPayment } from "@/lib/payments/order-payment-record";
 
-function mapPrismaOrderToCheckoutOrder(record: any): Order {
+type OrderRowForMapping = Prisma.OrderGetPayload<{
+  include: { items: true; statusHistory: true };
+}>;
+
+// createOrder callers pass these extra fields alongside Partial<Order> /
+// Partial<OrderAddress> (guest identity + POS aliases + camelCase address
+// fallbacks); the intersections tell the truth about what is read below.
+type OrderCreateInput = Partial<Order> & {
+  customer_id?: string | null;
+  guest_email?: string | null;
+  email?: string | null;
+};
+
+type OrderCreateAddressInput = Partial<OrderAddress> & {
+  firstName?: string | null;
+  lastName?: string | null;
+  phone_number?: string | null;
+};
+
+function mapPrismaOrderToCheckoutOrder(record: OrderRowForMapping): Order {
   const shippingAddr = record.shippingAddress as Record<string, any> | null;
   const billingAddr = record.billingAddress as Record<string, any> | null;
 
@@ -35,10 +55,12 @@ function mapPrismaOrderToCheckoutOrder(record: any): Order {
     risk_level: "LOW",
     created_at: record.createdAt ? new Date(record.createdAt).toISOString() : new Date().toISOString(),
     updated_at: record.updatedAt ? new Date(record.updatedAt).toISOString() : new Date().toISOString(),
-    items: (record.items || []).map((item: any) => ({
+    items: (record.items || []).map((item) => ({
       id: item.id,
       order_id: item.orderId,
-      product_id: item.productId,
+      // OrderItem declares product_id non-null; the column is nullable and
+      // the value passes through unchanged (narrowing assertion only).
+      product_id: item.productId as string,
       variant_id: item.variantId,
       sku: item.sku,
       product_name: item.productName,
@@ -49,8 +71,8 @@ function mapPrismaOrderToCheckoutOrder(record: any): Order {
       total_price: Number(item.totalPrice || 0),
       created_at: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
     })),
-    shipping_address: shippingAddr ? (shippingAddr as any) : undefined,
-    billing_address: billingAddr ? (billingAddr as any) : undefined,
+    shipping_address: shippingAddr ? (shippingAddr as OrderAddress) : undefined,
+    billing_address: billingAddr ? (billingAddr as OrderAddress) : undefined,
   };
 }
 
@@ -59,12 +81,12 @@ export class OrderRepository {
    * Create an order with items and addresses authoritative in Neon PostgreSQL via Prisma.
    */
   static async createOrder(
-    orderData: Partial<Order>,
+    orderData: OrderCreateInput,
     items: Partial<OrderItem>[],
-    shippingAddress: Partial<OrderAddress>,
-    billingAddress?: Partial<OrderAddress>
+    shippingAddress: OrderCreateAddressInput,
+    billingAddress?: OrderCreateAddressInput
   ): Promise<Order> {
-    const customerId = orderData.user_id ?? (orderData as any).customer_id ?? null;
+    const customerId = orderData.user_id ?? orderData.customer_id ?? null;
     const customerNote = orderData.notes;
     const orderNumber = orderData.order_number || `AF-${Date.now()}`;
     const statusNote = customerNote
@@ -74,9 +96,9 @@ export class OrderRepository {
     // 0. Resolve valid profileId in Neon PostgreSQL to satisfy orders_profile_id_fkey
     let validProfileId: string | null = null;
     const candidateEmail =
-      (shippingAddress as any)?.email ||
-      (orderData as any)?.guest_email ||
-      (orderData as any)?.email ||
+      shippingAddress?.email ||
+      orderData?.guest_email ||
+      orderData?.email ||
       null;
 
     if (customerId) {
@@ -103,14 +125,14 @@ export class OrderRepository {
                 id: customerId,
                 email: candidateEmail,
                 firstName:
-                  (shippingAddress as any)?.first_name ||
-                  (shippingAddress as any)?.firstName ||
+                  shippingAddress?.first_name ||
+                  shippingAddress?.firstName ||
                   null,
                 lastName:
-                  (shippingAddress as any)?.last_name ||
-                  (shippingAddress as any)?.lastName ||
+                  shippingAddress?.last_name ||
+                  shippingAddress?.lastName ||
                   null,
-                phone: (shippingAddress as any)?.phone || null,
+                phone: shippingAddress?.phone || null,
               },
               select: { id: true },
             });
@@ -142,14 +164,14 @@ export class OrderRepository {
     // profile problem must never block the order itself.
     if (!customerId) {
       try {
-        const ship: any = shippingAddress || {};
+        const ship: OrderCreateAddressInput = shippingAddress || {};
         const identity = {
           phone: ship.phone || ship.phone_number || null,
           email: candidateEmail,
           firstName: ship.first_name || ship.firstName || null,
           lastName: ship.last_name || ship.lastName || null,
           phoneVerified:
-            (orderData as any).verification_status === "VERIFIED",
+            orderData.verification_status === "VERIFIED",
         };
         const { findOrCreateGuestProfile, enrichProfileFromCheckout } =
           await import("@/lib/services/customer/guest-profile.service");
@@ -196,35 +218,35 @@ export class OrderRepository {
           : "UNPAID",
         paymentMethod: orderData.payment_method || "COD",
         subtotal: orderData.subtotal ?? 0,
-        discount: orderData.discount_amount ?? (orderData as any).discount_total ?? 0,
+        discount: orderData.discount_amount ?? orderData.discount_total ?? 0,
         // VAT: checkout passes vat_amount; POS passes tax_total (same meaning).
         vatAmount:
-          orderData.vat_amount ?? (orderData as any).tax_total ?? 0,
-        shippingFee: orderData.shipping_fee ?? (orderData as any).shipping_total ?? 0,
+          orderData.vat_amount ?? orderData.tax_total ?? 0,
+        shippingFee: orderData.shipping_fee ?? orderData.shipping_total ?? 0,
         // POS passes grand_total instead of total_amount — accept both so POS
         // orders no longer persist a 0 total.
         totalAmount:
-          orderData.total_amount ?? (orderData as any).grand_total ?? 0,
+          orderData.total_amount ?? orderData.grand_total ?? 0,
         reservationExpiresAt: orderData.reservation_expires_at
           ? new Date(orderData.reservation_expires_at)
           : null,
-        couponCode: (orderData as any).coupon_code || undefined,
+        couponCode: orderData.coupon_code || undefined,
         // Phase 8: persist the COD fraud-risk evaluation. placeOrder has
         // always computed these fields, but createOrder silently dropped
         // them (the orders table had no columns until Phase 8's DDL).
-        riskLevel: (orderData as any).risk_level || undefined,
+        riskLevel: orderData.risk_level || undefined,
         riskScore:
-          typeof (orderData as any).risk_score === "number"
-            ? (orderData as any).risk_score
+          typeof orderData.risk_score === "number"
+            ? orderData.risk_score
             : undefined,
-        riskReasons: (orderData as any).risk_reasons || undefined,
-        verificationStatus: (orderData as any).verification_status || undefined,
-        verificationVerifiedAt: (orderData as any).verification_verified_at
-          ? new Date((orderData as any).verification_verified_at)
+        riskReasons: orderData.risk_reasons || undefined,
+        verificationStatus: orderData.verification_status || undefined,
+        verificationVerifiedAt: orderData.verification_verified_at
+          ? new Date(orderData.verification_verified_at)
           : undefined,
         notes: customerNote || null,
-        shippingAddress: shippingAddress as any,
-        billingAddress: billingAddress ? (billingAddress as any) : undefined,
+        shippingAddress: shippingAddress as Prisma.InputJsonValue,
+        billingAddress: billingAddress ? (billingAddress as Prisma.InputJsonValue) : undefined,
         items: {
           create: items.map((item) => ({
             productId: item.product_id && validProductIds.has(item.product_id) ? item.product_id : null,
@@ -359,10 +381,10 @@ export class OrderRepository {
     return OrderRepository.getOrdersByUserId(userId);
   }
   async createOrder(
-    orderData: Partial<Order>,
+    orderData: OrderCreateInput,
     items: Partial<OrderItem>[],
-    shippingAddress: Partial<OrderAddress>,
-    billingAddress?: Partial<OrderAddress>
+    shippingAddress: OrderCreateAddressInput,
+    billingAddress?: OrderCreateAddressInput
   ): Promise<Order> {
     return OrderRepository.createOrder(orderData, items, shippingAddress, billingAddress);
   }

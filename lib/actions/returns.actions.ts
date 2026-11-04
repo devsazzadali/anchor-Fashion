@@ -11,7 +11,9 @@ import {
 } from "@/schemas/shipping.schema";
 import { createAdminDbClient } from "@/lib/db/client";
 import {
+  PaginatedResult,
   ReturnEligibilityResult,
+  ReturnRequest,
   ReturnWithItems,
 } from "@/types/shipping.types";
 import { verifyAuthenticated, verifyStaff } from "@/lib/security/roles";
@@ -85,8 +87,8 @@ export async function checkReturnEligibilityAction(
     const service = new ReturnsService();
     const result = await service.checkReturnEligibility(orderId, user.id);
     return { success: true, data: result };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -114,7 +116,7 @@ export async function submitCustomerReturnAction(
 
     const service = new ReturnsService();
     const returnRecord = await service.submitCustomerReturn(
-      parse.data as any,
+      parse.data,
       user.id
     );
 
@@ -129,8 +131,8 @@ export async function submitCustomerReturnAction(
         returnNumber: returnRecord.return_number,
       },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -151,8 +153,8 @@ export async function fetchCustomerReturnsAction(): Promise<
     const service = new ReturnsService();
     const returns = await service.getCustomerReturns(user.id);
     return { success: true, data: returns };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -177,8 +179,8 @@ export async function fetchCustomerReturnDetailAction(
     }
 
     return { success: true, data: returnRecord };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -246,13 +248,13 @@ export async function uploadReturnProofAction(
     return {
       success: true,
       data: {
-        url: (uploadData as any)?.path?.startsWith("http")
-          ? (uploadData as any).path
+        url: uploadData?.path?.startsWith("http")
+          ? uploadData.path
           : publicData.publicUrl,
       },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -277,7 +279,7 @@ export async function createReturnRequestAction(
     const user = await getCurrentUser();
     const service = new ReturnsService();
     const returnRecord = await service.createReturnRequest(
-      parse.data as any,
+      parse.data,
       user?.id,
       user?.id
     );
@@ -292,8 +294,8 @@ export async function createReturnRequestAction(
         returnNumber: returnRecord.return_number,
       },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -320,8 +322,8 @@ export async function approveReturnAction(
     revalidatePath(`/admin/shipping/returns/${returnId}`);
 
     return { success: true, data: { returnId } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -351,14 +353,14 @@ export async function rejectReturnAction(
     revalidatePath(`/admin/shipping/returns/${returnId}`);
 
     return { success: true, data: { returnId } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
 export async function fetchReturnsAction(
   rawFilters: Record<string, any> = {}
-): Promise<ActionResponse<any>> {
+): Promise<ActionResponse<PaginatedResult<ReturnRequest>>> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   const parse = returnFiltersSchema.safeParse(rawFilters);
@@ -382,10 +384,10 @@ export async function fetchReturnsAction(
     const filters = { ...parse.data, branchId };
 
     const service = new ReturnsService();
-    const result = await service.listReturns(filters as any);
+    const result = await service.listReturns(filters);
     return { success: true, data: result };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -404,8 +406,8 @@ export async function fetchReturnByIdAction(
 
     if (!returnRecord) return { success: false, error: "Return not found" };
     return { success: true, data: returnRecord };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -426,8 +428,8 @@ export async function markReturnReceivedAction(
     revalidatePath(`/admin/shipping/returns/${returnId}`);
 
     return { success: true, data: { returnId } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -449,8 +451,8 @@ export async function syncReturnInventoryAction(
     revalidatePath(`/admin/shipping/returns/${returnId}`);
 
     return { success: true, data: { returnId } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -471,8 +473,8 @@ export async function completeReturnAction(
     revalidatePath(`/admin/shipping/returns/${returnId}`);
 
     return { success: true, data: { returnId } };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -492,8 +494,8 @@ export async function processReturnRefundAction(
     revalidatePath("/admin/shipping/returns");
     revalidatePath(`/admin/shipping/returns/${returnId}`);
     return { success: true, data: result };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 
@@ -520,7 +522,7 @@ export async function resolveReturnRefundAction(
     revalidatePath(`/account/returns/${returnId}`);
 
     return { success: true, data: result };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }

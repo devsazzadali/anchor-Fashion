@@ -1,9 +1,124 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { CreateProductInput, Product } from "@/types/catalog.types";
 import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { cache } from "react";
 import { generateUniqueProductCode } from "@/lib/utils/product-code";
 import { generateEAN13Sync } from "@/lib/utils/barcode";
+
+// The barcode helpers only ever use the variant delegate of the client
+// they are handed (always a transaction client at the call sites).
+type VariantBarcodeDb = Pick<Prisma.TransactionClient, "variant">;
+
+// Row shapes for mapToAdminProduct / getTrashedProducts, derived from the
+// Prisma schema fields and the relations the queries include. Relations
+// are optional because the mapper reads them defensively (`|| []` /
+// ternaries) and not every caller includes all of them.
+interface AdminProductCategoryRow {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface AdminProductVariantRow {
+  id: string;
+  productId: string;
+  sku: string;
+  barcode: string | null;
+  priceOverride: Prisma.Decimal | null;
+  salePrice: Prisma.Decimal | null;
+  costPrice: Prisma.Decimal | null;
+  weight: Prisma.Decimal | null;
+  attributes: Prisma.JsonValue;
+  isActive: boolean;
+  inventoryLevels?: Array<{
+    id: string;
+    variantId: string;
+    warehouseId: string;
+    quantityAvailable: number;
+    quantityReserved: number;
+    reorderPoint: number;
+  }> | null;
+  orderItems?: Array<{ quantity: number }> | null;
+}
+
+interface AdminProductMediaRow {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  url: string;
+  urlWebp: string | null;
+  altText: string | null;
+  displayOrder: number;
+  isPrimary: boolean;
+  mediaType: string;
+}
+
+interface AdminProductSeoRow {
+  id: string;
+  productId: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  canonicalUrl: string | null;
+  ogTitle: string | null;
+  ogDescription: string | null;
+  ogImageUrl: string | null;
+  twitterCardType: string | null;
+  structuredData: Prisma.JsonValue | null;
+  keywords: string[];
+}
+
+interface AdminProductRow {
+  id: string;
+  name: string;
+  slug: string;
+  shortDescription: string | null;
+  description: string | null;
+  categoryId: string | null;
+  brandId: string | null;
+  basePrice: Prisma.Decimal;
+  costPrice: Prisma.Decimal | null;
+  salePrice: Prisma.Decimal | null;
+  vatPercent: Prisma.Decimal;
+  sku: string | null;
+  barcode: string | null;
+  status: string;
+  gender: string | null;
+  season: string | null;
+  careInstructions: string | null;
+  countryOfOrigin: string | null;
+  isFeatured: boolean;
+  isNewArrival: boolean;
+  rating: Prisma.Decimal;
+  reviewCount: number;
+  imageUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  category?: AdminProductCategoryRow | null;
+  brand?: AdminProductCategoryRow | null;
+  productCategories?: Array<{
+    categoryId: string;
+    category: AdminProductCategoryRow | null;
+  }> | null;
+  variants?: AdminProductVariantRow[] | null;
+  media?: AdminProductMediaRow[] | null;
+  seo?: AdminProductSeoRow | null;
+  productTags?: Array<{ tag: Prisma.TagGetPayload<object> }> | null;
+}
+
+interface TrashedProductRow {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  // Read defensively by the mapper; the Product model has no `price`
+  // column today, so this is undefined at runtime (price falls back to 0).
+  price?: Prisma.Decimal | number | null;
+  preTrashStatus: string | null;
+  deletedAt: Date | null;
+  category: { name: string } | null;
+  media: Array<{ url: string }>;
+}
 
 /**
  * Barcode guarantee for variant writes: a variant must NEVER be persisted
@@ -13,7 +128,7 @@ import { generateEAN13Sync } from "@/lib/utils/barcode";
  * (never overwritten/cleared); only a genuinely new, empty variant gets a
  * freshly generated EAN-13, collision-checked against the unique index.
  */
-async function generateUniqueVariantBarcode(db: any): Promise<string> {
+async function generateUniqueVariantBarcode(db: VariantBarcodeDb): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt++) {
     const candidate = generateEAN13Sync();
     const clash = await db.variant.findUnique({
@@ -26,7 +141,7 @@ async function generateUniqueVariantBarcode(db: any): Promise<string> {
 }
 
 async function resolveVariantBarcode(
-  db: any,
+  db: VariantBarcodeDb,
   incoming?: string | null,
   existingBarcode?: string | null
 ): Promise<string> {
@@ -36,20 +151,20 @@ async function resolveVariantBarcode(
   return generateUniqueVariantBarcode(db);
 }
 
-function mapToAdminProduct(p: any): Product {
+function mapToAdminProduct(p: AdminProductRow): Product {
   const variants = p.variants || [];
   let totalStock = 0;
   let totalSold = 0;
 
-  const mappedVariants = variants.map((v: any) => {
+  const mappedVariants = variants.map((v) => {
     const vStock = (v.inventoryLevels || []).reduce(
-      (sum: number, lvl: any) => sum + (lvl.quantityAvailable || 0),
+      (sum: number, lvl) => sum + (lvl.quantityAvailable || 0),
       0
     );
     totalStock += vStock;
 
     const vSold = (v.orderItems || []).reduce(
-      (sum: number, oi: any) => sum + (Number(oi.quantity) || 0),
+      (sum: number, oi) => sum + (Number(oi.quantity) || 0),
       0
     );
     totalSold += vSold;
@@ -67,7 +182,7 @@ function mapToAdminProduct(p: any): Product {
       isActive: v.isActive,
       stockQuantity: vStock,
       soldQuantity: vSold,
-      inventory_levels: (v.inventoryLevels || []).map((il: any) => ({
+      inventory_levels: (v.inventoryLevels || []).map((il) => ({
         id: il.id,
         variant_id: il.variantId,
         warehouse_id: il.warehouseId,
@@ -78,7 +193,7 @@ function mapToAdminProduct(p: any): Product {
     };
   });
 
-  const mediaList = (p.media || []).map((m: any) => ({
+  const mediaList = (p.media || []).map((m) => ({
     id: m.id,
     productId: m.productId,
     variantId: m.variantId,
@@ -90,7 +205,7 @@ function mapToAdminProduct(p: any): Product {
     mediaType: m.mediaType,
   }));
 
-  const primaryImage = mediaList.find((m: any) => m.isPrimary)?.url || mediaList[0]?.url || p.imageUrl || null;
+  const primaryImage = mediaList.find((m) => m.isPrimary)?.url || mediaList[0]?.url || p.imageUrl || null;
 
   return {
     id: p.id,
@@ -129,9 +244,9 @@ function mapToAdminProduct(p: any): Product {
     updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
     updated_at: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
     category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
-    categoryIds: (p.productCategories || []).map((pc: any) => pc.categoryId).filter(Boolean),
+    categoryIds: (p.productCategories || []).map((pc) => pc.categoryId).filter(Boolean),
     additionalCategories: (p.productCategories || [])
-      .map((pc: any) => (pc.category ? { id: pc.category.id, name: pc.category.name, slug: pc.category.slug } : null))
+      .map((pc) => (pc.category ? { id: pc.category.id, name: pc.category.name, slug: pc.category.slug } : null))
       .filter(Boolean),
     brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
     variants: mappedVariants,
@@ -151,7 +266,7 @@ function mapToAdminProduct(p: any): Product {
           keywords: p.seo.keywords,
         }
       : null,
-    tags: (p.productTags || []).map((pt: any) => pt.tag).filter(Boolean),
+    tags: (p.productTags || []).map((pt) => pt.tag).filter(Boolean),
     stockQuantity: totalStock,
     soldCount: totalSold,
     totalSold: totalSold,
@@ -208,7 +323,7 @@ export class ProductRepository {
       status?: string;
     }) => {
       const offset = (page - 1) * limit;
-      const where: any = {
+      const where: Prisma.ProductWhereInput & { AND?: Prisma.ProductWhereInput[] } = {
         deletedAt: null,
       };
 
@@ -333,7 +448,7 @@ export class ProductRepository {
   /**
    * Creates a new product along with variants, media, SEO, and inventory.
    */
-  static async createProduct(input: CreateProductInput) {
+  static async createProduct(input: CreateProductInput & { reorderPoint?: number | null }) {
     const { seo, tags, media, variants, categoryIds, ...productData } = input;
 
     // 1. Auto-generate slug if missing
@@ -384,11 +499,11 @@ export class ProductRepository {
       }
     }
 
-    const defaultWarehouseId = (productData as any).warehouseId || (await ProductRepository.getDefaultWarehouseId());
-    const reorderPoint = Number((productData as any).alertQuantity ?? (productData as any).reorderPoint ?? 10);
+    const defaultWarehouseId = productData.warehouseId || (await ProductRepository.getDefaultWarehouseId());
+    const reorderPoint = Number(productData.alertQuantity ?? productData.reorderPoint ?? 10);
 
     // Primary image from media
-    const primaryMediaUrl = media?.find((m: any) => m.isPrimary)?.url || media?.[0]?.url || null;
+    const primaryMediaUrl = media?.find((m) => m.isPrimary)?.url || media?.[0]?.url || null;
 
     let productId = "";
 
@@ -419,7 +534,7 @@ export class ProductRepository {
           countryOfOrigin: productData.countryOfOrigin || null,
           isFeatured: productData.isFeatured || false,
           imageUrl: primaryMediaUrl,
-          galleryUrls: media?.map((m: any) => m.url) || [],
+          galleryUrls: media?.map((m) => m.url) || [],
         },
       });
 
@@ -471,7 +586,7 @@ export class ProductRepository {
       // Create Media
       if (media && media.length > 0) {
         await tx.productMedia.createMany({
-          data: media.map((m: any, idx: number) => ({
+          data: media.map((m, idx: number) => ({
             productId,
             url: m.url,
             urlWebp: m.urlWebp || null,
@@ -584,7 +699,7 @@ export class ProductRepository {
   static async updateProduct(id: string, input: Partial<CreateProductInput>) {
     const { seo, tags, media, variants, categoryIds, ...productData } = input;
 
-    const primaryMediaUrl = media?.find((m: any) => m.isPrimary)?.url || media?.[0]?.url || undefined;
+    const primaryMediaUrl = media?.find((m) => m.isPrimary)?.url || media?.[0]?.url || undefined;
 
     await prisma.$transaction(async (tx) => {
       // 1. Update core product fields
@@ -610,7 +725,7 @@ export class ProductRepository {
           ...(productData.countryOfOrigin !== undefined && { countryOfOrigin: productData.countryOfOrigin }),
           ...(productData.isFeatured !== undefined && { isFeatured: productData.isFeatured }),
           ...(primaryMediaUrl !== undefined && { imageUrl: primaryMediaUrl }),
-          ...(media !== undefined && { galleryUrls: media.map((m: any) => m.url) }),
+          ...(media !== undefined && { galleryUrls: media.map((m) => m.url) }),
         },
       });
 
@@ -685,7 +800,7 @@ export class ProductRepository {
         await tx.productMedia.deleteMany({ where: { productId: id } });
         if (media.length > 0) {
           await tx.productMedia.createMany({
-            data: media.map((m: any, idx: number) => ({
+            data: media.map((m, idx: number) => ({
               productId: id,
               url: m.url,
               urlWebp: m.urlWebp || null,
@@ -896,7 +1011,7 @@ export class ProductRepository {
   }) {
     const page = Math.max(1, params?.page || 1);
     const limit = Math.min(100, Math.max(1, params?.limit || 20));
-    const where: any = { deletedAt: { not: null } };
+    const where: Prisma.ProductWhereInput = { deletedAt: { not: null } };
     if (params?.search?.trim()) {
       const term = escapeLikeWildcards(params.search.trim()); // REG-43
       where.OR = [
@@ -923,7 +1038,7 @@ export class ProductRepository {
       }),
     ]);
     const now = Date.now();
-    const data = rows.map((p: any) => {
+    const data = rows.map((p: TrashedProductRow) => {
       const deletedAt = p.deletedAt ? new Date(p.deletedAt) : null;
       const daysInTrash = deletedAt
         ? Math.floor((now - deletedAt.getTime()) / 86_400_000)
@@ -957,7 +1072,7 @@ export class ProductRepository {
       where: { id },
       data: {
         deletedAt: null,
-        status: (current?.preTrashStatus as any) || "DRAFT",
+        status: current?.preTrashStatus || "DRAFT",
         preTrashStatus: null,
       },
     });
@@ -1036,7 +1151,7 @@ export class ProductRepository {
         data: {
           deletedAt: new Date(),
           status: "ARCHIVED",
-          preTrashStatus: status as any,
+          preTrashStatus: status,
         },
       });
       count += result.count;
@@ -1048,7 +1163,7 @@ export class ProductRepository {
    * Bulk delete all products in Neon matching criteria.
    */
   static async deleteAllProducts(filters?: { status?: string; search?: string }): Promise<number> {
-    const where: any = { deletedAt: null };
+    const where: Prisma.ProductWhereInput = { deletedAt: null };
 
     if (filters?.status && filters.status !== "ALL") {
       where.status = filters.status;

@@ -1,5 +1,113 @@
 import { createDbClient } from "@/lib/db/client";
 import { createAdminDbClient } from "@/lib/db/client";
+import { KnowledgeBaseArticle } from "@/types/support.types";
+
+// REG-65 batch 2: row/input shapes for the untyped db shim, derived from
+// this file's own select lists and reads.
+interface TicketMessageDbRow {
+  id: string;
+  ticket_id: string;
+  sender_id: string | null;
+  sender_type: "CUSTOMER" | "AGENT" | "SYSTEM" | "AI";
+  body?: string | null;
+  is_internal?: boolean | null;
+  created_at: string;
+  // Legacy aliases the normalizer still accepts defensively.
+  message?: string | null;
+  is_internal_note?: boolean | null;
+  read_at?: string | null;
+}
+
+interface SupportTicketDbRow {
+  id: string;
+  ticket_number: number;
+  profile_id: string | null;
+  subject: string;
+  description: string | null;
+  category: string;
+  priority: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface SupportTicketDetailRecord extends SupportTicketRecord {
+  ticket_messages?: TicketMessageRecord[];
+  customer?: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    full_name: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
+}
+
+interface ProfileContactRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+}
+
+interface SupportAgentDbRow {
+  id: string;
+  user_id: string;
+  is_online: boolean | null;
+  active_tickets_count: number | null;
+}
+
+interface CreateTicketInput {
+  profile_id?: string | null;
+  customer_id?: string | null;
+  subject?: string;
+  description?: string | null;
+  category?: string;
+  priority?: string;
+  status?: string;
+  department_id?: string | null;
+  assigned_agent_id?: string | null;
+  order_id?: string | null;
+  sla_breach_at?: string | null;
+  first_response_at?: string | null;
+  resolved_at?: string | null;
+  closed_at?: string | null;
+  [key: string]: string | null | undefined;
+}
+
+interface UpdateTicketInput {
+  customer_id?: string | null;
+  profile_id?: string | null;
+  subject?: string;
+  description?: string | null;
+  category?: string;
+  priority?: string;
+  status?: string;
+  assigned_agent_id?: string | null;
+  [key: string]: string | null | undefined;
+}
+
+interface CreateTicketMessageInput {
+  ticket_id: string;
+  sender_id?: string | null;
+  sender_type?: string;
+  message?: string | null;
+  body?: string | null;
+  is_internal_note?: boolean | null;
+  is_internal?: boolean | null;
+}
+
+interface CreateTicketAttachmentInput {
+  ticket_id: string;
+  file_url: string;
+  file_type: string;
+  file_name: string;
+}
+
+interface TicketAttachmentRecord extends CreateTicketAttachmentInput {
+  id: string;
+  created_at: string;
+}
 
 export interface SupportTicketRecord {
   id: string;
@@ -38,7 +146,7 @@ export interface TicketMessageRecord {
  * the DB layer come back keyed by the real columns, so normalize them into
  * the record shape the consoles render.
  */
-function normalizeTicketMessage(row: any): TicketMessageRecord {
+function normalizeTicketMessage(row: TicketMessageDbRow): TicketMessageRecord {
   if (!row) return row;
   return {
     ...row,
@@ -70,7 +178,7 @@ export class SupportRepository {
 
     // Collect profile IDs
     const profileIds = Array.from(
-      new Set(tickets.map((t: any) => t.profile_id).filter(Boolean))
+      new Set(tickets.map((t: SupportTicketDbRow) => t.profile_id).filter(Boolean))
     ) as string[];
 
     let profilesMap: Record<string, { full_name: string; phone?: string | null }> = {};
@@ -81,7 +189,7 @@ export class SupportRepository {
         .in("id", profileIds);
 
       if (profiles) {
-        profilesMap = profiles.reduce((acc: any, p: any) => {
+        profilesMap = profiles.reduce((acc: Record<string, { full_name: string; phone?: string | null }>, p: ProfileContactRow) => {
           const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Customer";
           acc[p.id] = { full_name: name, phone: p.phone };
           return acc;
@@ -91,7 +199,7 @@ export class SupportRepository {
 
     // Attach customer and message stats
     const enriched: SupportTicketRecord[] = await Promise.all(
-      tickets.map(async (t: any) => {
+      tickets.map(async (t: SupportTicketDbRow) => {
         // Fetch recent messages (real column is `body`; there is no
         // `message` / `read_at` column on ticket_messages). The unread
         // count is derived from the same rows: customer messages sent
@@ -213,11 +321,11 @@ export class SupportRepository {
   }
 
   // --- Instance methods for SupportService compatibility ---
-  async getTickets(): Promise<any[]> {
+  async getTickets(): Promise<SupportTicketRecord[]> {
     return SupportRepository.getTickets();
   }
 
-  async getTicketById(id: string): Promise<any> {
+  async getTicketById(id: string): Promise<SupportTicketDetailRecord | null> {
     const db = await SupportRepository.getClient();
     // REG-83 cleanup: the embedded `ticket_messages(*)` select was never
     // attached by the DB layer (and now fails loudly in dev) — the plain
@@ -332,7 +440,7 @@ export class SupportRepository {
     return null;
   }
 
-  async createTicket(data: any): Promise<any> {
+  async createTicket(data: CreateTicketInput): Promise<any> {
     const db = await SupportRepository.getClient();
     const allowed = [
       "profile_id",
@@ -375,7 +483,7 @@ export class SupportRepository {
     return ticket;
   }
 
-  async updateTicket(id: string, data: any): Promise<any> {
+  async updateTicket(id: string, data: UpdateTicketInput): Promise<any> {
     const db = await SupportRepository.getClient();
     // Only columns that actually exist on support_tickets may be sent. The
     // DB layer silently discards the WHOLE update when the payload contains
@@ -439,7 +547,7 @@ export class SupportRepository {
     return true;
   }
 
-  async createTicketMessage(data: any): Promise<any> {
+  async createTicketMessage(data: CreateTicketMessageInput): Promise<any> {
     const db = await SupportRepository.getClient();
     const messageText = (data.message || data.body || "").trim();
     const isInternal = !!(data.is_internal_note ?? data.is_internal);
@@ -474,7 +582,7 @@ export class SupportRepository {
     return normalizeTicketMessage(msg);
   }
 
-  async getKnowledgeBaseArticles(): Promise<any[]> {
+  async getKnowledgeBaseArticles(): Promise<KnowledgeBaseArticle[]> {
     const db = await SupportRepository.getClient();
     const { data } = await db
       .from("knowledge_base_articles")
@@ -496,7 +604,7 @@ export class SupportRepository {
       .eq("is_active", true)
       .limit(30);
 
-    const existingUserIds = new Set((agents || []).map((a: any) => a.user_id));
+    const existingUserIds = new Set((agents || []).map((a: SupportAgentDbRow) => a.user_id));
 
     if (profiles && profiles.length > 0) {
       for (const p of profiles) {
@@ -519,12 +627,12 @@ export class SupportRepository {
       }
     }
 
-    const profileMap = (profiles || []).reduce((acc: any, p: any) => {
+    const profileMap = (profiles || []).reduce((acc: Record<string, ProfileContactRow>, p: ProfileContactRow) => {
       acc[p.id] = p;
       return acc;
     }, {});
 
-    return (agents || []).map((a: any) => {
+    return (agents || []).map((a: SupportAgentDbRow) => {
       const p = profileMap[a.user_id];
       const name = p
         ? [p.first_name, p.last_name].filter(Boolean).join(" ")
@@ -540,7 +648,7 @@ export class SupportRepository {
     });
   }
 
-  async createTicketAttachment(data: any): Promise<any> {
+  async createTicketAttachment(data: CreateTicketAttachmentInput): Promise<TicketAttachmentRecord> {
     const db = await SupportRepository.getClient();
     const { data: att, error } = await db
       .from("ticket_attachments")

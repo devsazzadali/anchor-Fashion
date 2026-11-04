@@ -1,12 +1,119 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { CMSPage, CMSSection, CMSNavigation, CMSPageBlock, CMSMediaItem } from "@/types/cms.types";
-import { BlogPost, BlogCategory } from "@/types/blog.types";
+import { BlogPost, BlogCategory, BlogPostStatus } from "@/types/blog.types";
+
+// ============================================================================
+// ROW TYPES
+// ============================================================================
+
+type CMSPageRow = Prisma.CMSPageGetPayload<object>;
+
+type BlogPostRow = Prisma.BlogPostGetPayload<{ include: { category: true } }>;
+
+// The section/media/navigation mappers defensively read fields the current
+// Prisma models do not carry (updatedAt, altText, target, icon, camelCase
+// fallbacks); these interfaces declare exactly the fields the mappers read.
+interface CmsSectionDbRow {
+  id: string;
+  title: string | null;
+  type: string | null;
+  content: Prisma.JsonValue | null;
+  isActive: boolean | null;
+  createdAt: Date | null;
+  updatedAt?: Date | null;
+}
+
+interface MediaDbRow {
+  id: string;
+  filename?: string | null;
+  fileName?: string | null;
+  publicUrl?: string | null;
+  fileUrl?: string | null;
+  mimeType?: string | null;
+  fileType?: string | null;
+  size?: number | null;
+  fileSizeBytes?: number | null;
+  altText?: string | null;
+  storagePath?: string | null;
+  folderPath?: string | null;
+  uploadedBy?: string | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+}
+
+interface CmsMenuItemDbRow {
+  label: string;
+  url: string;
+  target?: string | null;
+  icon?: string | null;
+  sortOrder?: number | null;
+}
+
+interface CmsMenuDbRow {
+  id: string;
+  title: string;
+  location: string;
+  items?: CmsMenuItemDbRow[] | null;
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+}
+
+// createPage/updatePage callers pass the snake_case write fields alongside
+// Partial<CMSPage>; the intersection tells the truth about what is read.
+type CMSPageWriteInput = Partial<CMSPage> & {
+  meta_title?: string | null;
+  meta_description?: string | null;
+  is_published?: boolean;
+};
+
+// savePageBlocks callers may pass the alternate `type` / `content` keys the
+// mapper falls back to; the intersection tells the truth about what is read.
+type CMSPageBlockWriteInput = Partial<CMSPageBlock> & {
+  type?: string;
+  content?: Record<string, any>;
+};
+
+interface BannerView {
+  id: string;
+  title: string | null;
+  subtitle: string | null;
+  description: string | null;
+  cta_text: string | null;
+  link_url: string;
+  image_url: string;
+  media_url: string | null;
+  alt_text: string | null;
+  placement: string;
+  type: string | null;
+  display_order: number;
+  is_active: boolean;
+  is_video: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BannerUpsertView {
+  id: string;
+  title: string | null;
+  subtitle: string | null;
+  description: string | null;
+  cta_text: string | null;
+  link_url: string;
+  image_url: string;
+  media_url: string | null;
+  placement: string;
+  is_active: boolean;
+  display_order: number;
+}
 
 // ============================================================================
 // MAPPERS
 // ============================================================================
 
-function mapPrismaPage(data: any): CMSPage {
+function mapPrismaPage(data: CMSPageRow): CMSPage {
   return {
     id: data.id,
     title: data.title,
@@ -22,7 +129,7 @@ function mapPrismaPage(data: any): CMSPage {
   } as CMSPage;
 }
 
-function mapPrismaBlogPost(data: any): BlogPost {
+function mapPrismaBlogPost(data: BlogPostRow): BlogPost {
   return {
     id: data.id,
     title: data.title,
@@ -33,7 +140,7 @@ function mapPrismaBlogPost(data: any): BlogPost {
     category_id: data.categoryId ?? null,
     author_id: data.authorId ?? null,
     tags: data.tags ?? [],
-    status: data.status as any,
+    status: data.status as BlogPostStatus,
     reading_time_minutes: null,
     published_at: data.publishedAt ? new Date(data.publishedAt) : null,
     created_at: data.createdAt ? new Date(data.createdAt) : new Date(),
@@ -51,7 +158,7 @@ function mapPrismaBlogPost(data: any): BlogPost {
   } as BlogPost;
 }
 
-function mapPrismaSection(data: any): CMSSection {
+function mapPrismaSection(data: CmsSectionDbRow): CMSSection {
   return {
     id: data.id,
     name: data.title,
@@ -63,7 +170,7 @@ function mapPrismaSection(data: any): CMSSection {
   } as CMSSection;
 }
 
-function mapPrismaMedia(data: any): CMSMediaItem {
+function mapPrismaMedia(data: MediaDbRow): CMSMediaItem {
   return {
     id: data.id,
     file_name: data.filename || data.fileName || "",
@@ -78,14 +185,14 @@ function mapPrismaMedia(data: any): CMSMediaItem {
   };
 }
 
-function mapPrismaNavigation(menu: any): CMSNavigation {
+function mapPrismaNavigation(menu: CmsMenuDbRow): CMSNavigation {
   return {
     id: menu.id,
     name: menu.title,
     location: menu.location,
     items: (menu.items || [])
-      .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      .map((it: any) => ({
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      .map((it) => ({
         label: it.label,
         url: it.url,
         target: it.target ?? "_self",
@@ -139,31 +246,31 @@ export class CMSRepository {
     }
   }
 
-  async createPage(page: Partial<CMSPage>): Promise<CMSPage> {
+  async createPage(page: CMSPageWriteInput): Promise<CMSPage> {
     const created = await prisma.cMSPage.create({
       data: {
         id: page.id,
         title: page.title || "Untitled",
         slug: page.slug || `page-${Date.now()}`,
-        metaTitle: (page as any).meta_title,
-        metaDescription: (page as any).meta_description,
-        isPublished: (page as any).is_published || false,
-        publishedAt: (page as any).published_at ? new Date((page as any).published_at) : null,
+        metaTitle: page.meta_title,
+        metaDescription: page.meta_description,
+        isPublished: page.is_published || false,
+        publishedAt: page.published_at ? new Date(page.published_at) : null,
       },
     });
     return mapPrismaPage(created);
   }
 
-  async updatePage(id: string, page: Partial<CMSPage>): Promise<CMSPage> {
+  async updatePage(id: string, page: CMSPageWriteInput): Promise<CMSPage> {
     const updated = await prisma.cMSPage.update({
       where: { id },
       data: {
         title: page.title,
         slug: page.slug,
-        metaTitle: (page as any).meta_title,
-        metaDescription: (page as any).meta_description,
-        isPublished: (page as any).is_published,
-        publishedAt: (page as any).published_at ? new Date((page as any).published_at) : undefined,
+        metaTitle: page.meta_title,
+        metaDescription: page.meta_description,
+        isPublished: page.is_published,
+        publishedAt: page.published_at ? new Date(page.published_at) : undefined,
       },
     });
     return mapPrismaPage(updated);
@@ -187,7 +294,7 @@ export class CMSRepository {
         id: b.id,
         page_id: b.pageId,
         section_type: b.sectionType,
-        content_json: b.contentJson as any,
+        content_json: b.contentJson as Record<string, any>,
         display_order: b.displayOrder,
         is_active: true,
         created_at: b.createdAt,
@@ -198,16 +305,16 @@ export class CMSRepository {
     }
   }
 
-  async savePageBlocks(pageId: string, blocks: Partial<CMSPageBlock>[]): Promise<void> {
+  async savePageBlocks(pageId: string, blocks: CMSPageBlockWriteInput[]): Promise<void> {
     try {
       await prisma.cMSPageBlock.deleteMany({ where: { pageId } });
       if (blocks.length > 0) {
         await prisma.cMSPageBlock.createMany({
           data: blocks.map((b, idx) => ({
             pageId,
-            sectionType: (b as any).section_type || (b as any).type || "custom",
-            contentJson: ((b as any).content_json || (b as any).content || {}) as any,
-            displayOrder: (b as any).display_order ?? b.display_order ?? idx,
+            sectionType: b.section_type || b.type || "custom",
+            contentJson: b.content_json || b.content || {},
+            displayOrder: b.display_order ?? b.display_order ?? idx,
           })),
         });
       }
@@ -245,7 +352,7 @@ export class CMSRepository {
           data: {
             title: data.title,
             type: data.type,
-            content: (data.content || {}) as any,
+            content: (data.content || {}) as Prisma.InputJsonValue,
             isActive: data.isActive ?? true,
           },
         })
@@ -253,7 +360,7 @@ export class CMSRepository {
           data: {
             title: data.title,
             type: data.type,
-            content: (data.content || {}) as any,
+            content: (data.content || {}) as Prisma.InputJsonValue,
             isActive: data.isActive ?? true,
           },
         });
@@ -311,7 +418,7 @@ export class CMSRepository {
     isActive?: boolean;
   }): Promise<CMSNavigation> {
     try {
-      let menu: any;
+      let menu: Prisma.CmsMenuGetPayload<object>;
 
       if (data.id) {
         // Update existing menu
@@ -529,7 +636,7 @@ export class CMSRepository {
   // Banners — 100% Prisma
   // --------------------------------------------------------------------------
 
-  async getBanners(placement?: string): Promise<any[]> {
+  async getBanners(placement?: string): Promise<BannerView[]> {
     const banners = await prisma.banner.findMany({
       where: placement
         ? {
@@ -582,7 +689,7 @@ export class CMSRepository {
     targetAudience?: string;
     startDate?: string | null;
     endDate?: string | null;
-  }): Promise<any> {
+  }): Promise<BannerUpsertView> {
     const payload = {
       title: data.title?.trim() || "Banner",
       subtitle: data.subtitle || null,

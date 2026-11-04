@@ -1,6 +1,95 @@
 import { createAdminDbClient } from "@/lib/db/client";
 import { Supplier, PurchaseOrder, PurchaseOrderItem } from "@/types/inventory.types";
 
+// REG-65 batch 2: row/input shapes for the untyped db shim, derived from
+// this file's own select lists, inserts and reads.
+interface WarehouseDbRow {
+  id: string;
+  name: string;
+  code: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  capacity: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PurchaseOrderDbRow {
+  id: string;
+  po_number: string;
+  supplier_id: string | null;
+  warehouse_id: string | null;
+  status: string;
+  total_amount: number;
+  expected_date: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface IdNameRow {
+  id: string;
+  name: string;
+}
+
+interface PurchaseOrderItemDbRow {
+  id: string;
+  purchase_order_id: string;
+  variant_id: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+}
+
+interface PurchaseOrderDetailRow extends PurchaseOrderDbRow {
+  supplier: Supplier | null;
+  warehouse: WarehouseDbRow | null;
+  items: PurchaseOrderItemDbRow[];
+}
+
+// The create form posts the legacy PurchaseOrder field names; the S4-6
+// translation below also accepts the real column names as fallbacks.
+interface PurchaseOrderInputRow {
+  po_number: string;
+  supplier_id: string | null;
+  destination_warehouse_id?: string | null;
+  warehouse_id?: string | null;
+  status?: string;
+  expected_delivery_date?: string | null;
+  expected_date?: string | null;
+  ordered_by?: string | null;
+  created_by?: string | null;
+  total_amount?: number;
+  notes?: string | null;
+}
+
+interface PurchaseOrderInsertRow {
+  po_number: string;
+  supplier_id: string | null;
+  warehouse_id: string | null | undefined;
+  status: string;
+  total_amount: number;
+  expected_date: string | null;
+  notes: string | null;
+  created_by: string | null;
+}
+
+// quantity/total_cost are the legacy aliases the item mapper also reads.
+type PurchaseOrderItemInput = Omit<
+  PurchaseOrderItem,
+  "id" | "po_id" | "created_at" | "updated_at"
+> & {
+  quantity?: number;
+  total_cost?: number;
+};
+
 export class ProcurementRepository {
   private getAdminClient() {
     return createAdminDbClient();
@@ -86,27 +175,27 @@ export class ProcurementRepository {
     const rows = data || [];
 
     // The DB layer does not attach embedded relations; join names manually.
-    const supplierIds = [...new Set(rows.map((p: any) => p.supplier_id).filter(Boolean))];
-    const warehouseIds = [...new Set(rows.map((p: any) => p.warehouse_id).filter(Boolean))];
+    const supplierIds = [...new Set(rows.map((p: PurchaseOrderDbRow) => p.supplier_id).filter(Boolean))];
+    const warehouseIds = [...new Set(rows.map((p: PurchaseOrderDbRow) => p.warehouse_id).filter(Boolean))];
     const [suppliersRes, warehousesRes] = await Promise.all([
       supplierIds.length
         ? db.from("suppliers").select("id, name").in("id", supplierIds)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as IdNameRow[] }),
       warehouseIds.length
         ? db.from("warehouses").select("id, name").in("id", warehouseIds)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as IdNameRow[] }),
     ]);
-    const supplierById = new Map<string, any>((((suppliersRes as any).data || []) as any[]).map((s: any) => [s.id, s] as [string, any]));
-    const warehouseById = new Map<string, any>((((warehousesRes as any).data || []) as any[]).map((w: any) => [w.id, w] as [string, any]));
+    const supplierById = new Map<string | null, IdNameRow>(((suppliersRes.data || []) as IdNameRow[]).map((s: IdNameRow) => [s.id, s] as [string, IdNameRow]));
+    const warehouseById = new Map<string | null, IdNameRow>(((warehousesRes.data || []) as IdNameRow[]).map((w: IdNameRow) => [w.id, w] as [string, IdNameRow]));
 
-    return rows.map((po: any) => ({
+    return rows.map((po: PurchaseOrderDbRow) => ({
       ...po,
       supplier: supplierById.get(po.supplier_id) || null,
       warehouse: warehouseById.get(po.warehouse_id) || null,
     }));
   }
 
-  async getPurchaseOrderById(id: string): Promise<any | null> {
+  async getPurchaseOrderById(id: string): Promise<PurchaseOrderDetailRow | null> {
     const db = this.getAdminClient();
     const { data, error } = await db
       .from("purchase_orders")
@@ -144,8 +233,8 @@ export class ProcurementRepository {
     // columns (warehouse_id / expected_date — not
     // destination_warehouse_id / expected_delivery_date). Sending the
     // legacy keys made the DB layer silently discard the whole insert.
-    const raw: any = poData as any;
-    const orderRow: any = {
+    const raw: PurchaseOrderInputRow = poData;
+    const orderRow: PurchaseOrderInsertRow = {
       po_number: raw.po_number,
       supplier_id: raw.supplier_id,
       warehouse_id: raw.destination_warehouse_id ?? raw.warehouse_id,
@@ -167,7 +256,7 @@ export class ProcurementRepository {
     if (!po) throw new Error("Failed to create PO: no row was persisted.");
 
     if (items && items.length > 0) {
-      const itemsToInsert = items.map((item: any) => ({
+      const itemsToInsert = items.map((item: PurchaseOrderItemInput) => ({
         purchase_order_id: po.id,
         variant_id: item.variant_id,
         quantity: item.quantity_ordered ?? item.quantity ?? 0,
