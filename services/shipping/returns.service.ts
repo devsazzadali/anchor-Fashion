@@ -9,6 +9,7 @@ import { WalletService } from "@/services/wallet.service";
 import { BKashService } from "@/lib/services/payment/bkash.service";
 import { SSLCommerzService } from "@/lib/services/payment/sslcommerz.service";
 import {
+  ReturnItem,
   ReturnRequest,
   ReturnWithItems,
   CreateReturnInput,
@@ -18,6 +19,32 @@ import {
   ReturnEligibilityItem,
   SubmitCustomerReturnInput,
 } from "@/types/shipping.types";
+
+/**
+ * REG-65 batch 1: the order_items row shape the eligibility mapper
+ * consumes (ReturnEligibilityItem.productId is required — the mapper
+ * has always read product_id as present), and the legacy payment
+ * transaction shape the gateway refund branches consume.
+ */
+interface OrderItemForReturnEligibility {
+  id: string;
+  product_id: string;
+  variant_id?: string | null;
+  sku?: string | null;
+  product_name?: string | null;
+  variant_name?: string | null;
+  quantity?: number | string | null;
+  unit_price?: number | string | null;
+  line_total?: number | string | null;
+  total_price?: number | string | null;
+}
+
+interface LegacyPaymentTransactionRow {
+  gateway: string;
+  gateway_transaction_id?: string | null;
+  gateway_payment_id?: string | null;
+  [key: string]: unknown;
+}
 
 export interface ReturnPolicySettings {
   return_window_days: number;
@@ -193,7 +220,7 @@ export class ReturnsService {
     const orderSubtotal = Number(order.subtotal || 0);
     const orderDiscountTotal = Number(order.discount_total || 0);
 
-    const items: ReturnEligibilityItem[] = (order.order_items || []).map((item: any) => {
+    const items: ReturnEligibilityItem[] = (order.order_items || []).map((item: OrderItemForReturnEligibility) => {
       const lineTotal = Number(
         item.line_total ?? item.total_price ?? Number(item.quantity) * Number(item.unit_price)
       );
@@ -391,7 +418,7 @@ export class ReturnsService {
     };
 
     const createdReturn = await this.returnRepo.createReturn(
-      returnData as any,
+      returnData,
       returnItemsPayload.map((it) => ({
         order_item_id: it.orderItemId,
         variant_id: it.variantId || null,
@@ -399,7 +426,7 @@ export class ReturnsService {
         reason: it.reason,
         condition: it.condition,
         restocked: false,
-      })) as any
+      }))
     );
 
     // 6. Write to order status history and events
@@ -537,7 +564,7 @@ export class ReturnsService {
       if (condition !== item.condition) {
         await db
           .from("return_items")
-          .update({ condition } as any)
+          .update({ condition })
           .eq("id", item.id);
       }
 
@@ -546,7 +573,7 @@ export class ReturnsService {
         // ATOMIC LOCK: Try to set restocked = true where restocked = false
         const { data: updatedItem, error: updateErr } = await db
           .from("return_items")
-          .update({ restocked: true } as any)
+          .update({ restocked: true })
           .eq("id", item.id)
           .eq("restocked", false)
           .select("id")
@@ -554,8 +581,8 @@ export class ReturnsService {
           
         if (updateErr) {}
 
-        if (updatedItem && (item.order_item_id || (item as any).variant_id)) {
-          let variantId = (item as any).variant_id;
+        if (updatedItem && (item.order_item_id || (item as ReturnItem & { variant_id?: string | null }).variant_id)) {
+          let variantId = (item as ReturnItem & { variant_id?: string | null }).variant_id;
           let warehouseId: string | null = null;
 
           if (item.order_item_id) {
@@ -676,10 +703,10 @@ export class ReturnsService {
     // compare-and-swap on the real status/notes columns; it also
     // returns the row whose notes become the base for the settle-line
     // appends below.
-    let notesBase: string | null = (returnRecord as any).notes ?? null;
+    let notesBase: string | null = returnRecord.notes ?? null;
     try {
       const claimed = await this.returnRepo.claimRefundProcessing(returnId, adminUserId);
-      notesBase = (claimed as any).notes ?? notesBase;
+      notesBase = claimed.notes ?? notesBase;
     } catch (lockError) {
       return { success: false, method: "UNKNOWN", error: "Refund is already being processed or was completed." };
     }
@@ -702,7 +729,7 @@ export class ReturnsService {
     // to the legacy shape the branches consume, with `gateway` derived
     // from the payments method and `gateway_payment_id` from the
     // session id recorded in gateway_response (bKash paymentID).
-    let paymentTransactions: any[] = [];
+    let paymentTransactions: LegacyPaymentTransactionRow[] = [];
     try {
       const { data } = await db
         .from("payments")
@@ -711,20 +738,25 @@ export class ReturnsService {
       const { paymentRowToLegacyTransaction } = await import(
         "@/lib/payments/order-payment-record"
       );
-      paymentTransactions = (data || []).map((row: any) => {
-        const mapped = paymentRowToLegacyTransaction(row);
-        const gw = (row.gateway_response || {}) as Record<string, any>;
-        return {
-          ...mapped,
-          gateway: String(row.method || "").toLowerCase(),
-          gateway_payment_id: gw.session_id ?? null,
-        };
-      });
+      paymentTransactions = (data || []).map(
+        (row: {
+          method?: string | null;
+          gateway_response?: { session_id?: string | null } | null;
+        }) => {
+          const mapped = paymentRowToLegacyTransaction(row);
+          const gw = row.gateway_response || {};
+          return {
+            ...mapped,
+            gateway: String(row.method || "").toLowerCase(),
+            gateway_payment_id: gw.session_id ?? null,
+          };
+        }
+      );
     } catch {
       paymentTransactions = [];
     }
 
-    (order as any).payment_transactions = paymentTransactions;
+    order.payment_transactions = paymentTransactions;
 
     const refundAmount = Number(returnRecord.refund_amount || 0);
     const refundMethod = returnRecord.refund_method || "ORIGINAL_PAYMENT";
@@ -781,7 +813,7 @@ export class ReturnsService {
     // 3. bKash Gateway Refund
     if (order.payment_method === "BKASH") {
       const bKashTx = order.payment_transactions?.find(
-        (tx: any) => tx.gateway === "bkash" && tx.gateway_transaction_id
+        (tx: LegacyPaymentTransactionRow) => tx.gateway === "bkash" && tx.gateway_transaction_id
       );
 
       if (bKashTx?.gateway_transaction_id) {
@@ -827,7 +859,7 @@ export class ReturnsService {
     // 4. SSLCommerz Gateway Refund
     if (order.payment_method === "SSLCOMMERZ") {
       const sslTx = order.payment_transactions?.find(
-        (tx: any) => tx.gateway === "sslcommerz" && tx.gateway_transaction_id
+        (tx: LegacyPaymentTransactionRow) => tx.gateway === "sslcommerz" && tx.gateway_transaction_id
       );
 
       if (sslTx?.gateway_transaction_id) {
@@ -907,15 +939,15 @@ export class ReturnsService {
           input.customerNote || null,
           refundMethodLine(input.refundMethod || "ORIGINAL_PAYMENT")
         ),
-      } as any,
+      },
       input.items.map((item) => ({
         order_item_id: item.orderItemId ?? null,
-        variant_id: (item as any).variantId ?? null,
+        variant_id: (item as { variantId?: string | null }).variantId ?? null,
         quantity: item.quantity,
         reason: item.reason ?? null,
         condition: item.condition ?? "unknown",
         restocked: false,
-      })) as any
+      }))
     );
 
     return returnRecord;
@@ -1043,7 +1075,7 @@ export class ReturnsService {
     await this.returnRepo.updateReturn(returnRecord.id, {
       status: "completed",
       notes: appendNoteLine(
-        (returnRecord as any).notes,
+        returnRecord.notes,
         options?.note || refundSettledLine(chosenMethod, refundAmount)
       ),
     });

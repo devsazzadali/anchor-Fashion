@@ -3,6 +3,30 @@ import { PromotionRepository } from "@/lib/repositories/marketing/promotion.repo
 import { priceWithVat } from "@/lib/utils/vat";
 import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { expandSearchTerms } from "@/lib/utils/bengali-search";
+import { Prisma } from "@prisma/client";
+
+/**
+ * REG-65 batch 1: the Prisma product row the storefront mapper
+ * consumes — exactly the include set every list query in this file
+ * fetches (getProductBySlug's wider include is a structural
+ * superset, and its null case is checked before the call).
+ */
+type StorefrontProductRow = Prisma.ProductGetPayload<{
+  include: {
+    category: { select: { id: true; name: true; slug: true } };
+    brand: { select: { id: true; name: true; slug: true } };
+    productCategories: {
+      include: { category: { select: { id: true; name: true; slug: true } } };
+    };
+    media: true;
+    variants: { include: { inventoryLevels: true } };
+  };
+}>;
+
+/** The mapped storefront DTO the list helpers sort / price on. */
+type StorefrontProduct = NonNullable<
+  ReturnType<typeof mapProductToStorefront>
+>;
 
 /**
  * The unit price a product card actually displays: the effective selling
@@ -11,7 +35,13 @@ import { expandSearchTerms } from "@/lib/utils/bengali-search";
  * VAT added on top. Mirrors components/product/product-card.tsx exactly so
  * price sorting orders by what the customer sees.
  */
-function displayedUnitPrice(p: any): number {
+function displayedUnitPrice(
+  p: {
+    sale_price?: number | null;
+    base_price?: number | null;
+    vat_percent?: number | null;
+  } | null | undefined
+): number {
   const price = Number(p?.sale_price ?? p?.base_price ?? 0);
   return priceWithVat(price, Number(p?.vat_percent ?? 0));
 }
@@ -31,7 +61,10 @@ export interface ProductListParams {
   colors?: string[];
 }
 
-function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
+function mapProductToStorefront(
+  p: StorefrontProductRow,
+  activePromoDiscount?: number | null
+) {
   if (!p) return null;
 
   const variants = p.variants || [];
@@ -42,9 +75,9 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
   // This per-variant figure is computed once, here on the server, and is
   // the only stock number the storefront displays; the product total is
   // simply its sum.
-  const variantAvailableStock = variants.map((variant: any) =>
+  const variantAvailableStock = variants.map((variant) =>
     (variant.inventoryLevels || []).reduce(
-      (vSum: number, level: any) => vSum + (level.quantityAvailable || 0),
+      (vSum: number, level) => vSum + (level.quantityAvailable || 0),
       0
     )
   );
@@ -53,7 +86,7 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
     0
   );
 
-  const mediaList = (p.media || []).map((m: any) => ({
+  const mediaList = (p.media || []).map((m) => ({
     id: m.id,
     url: m.url,
     url_webp: m.urlWebp,
@@ -63,7 +96,7 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
     media_type: m.mediaType,
   }));
 
-  const primaryMedia = mediaList.find((m: any) => m.is_primary) || mediaList[0] || null;
+  const primaryMedia = mediaList.find((m) => m.is_primary) || mediaList[0] || null;
 
   const basePriceNum = Number(p.basePrice);
   let salePriceNum = p.salePrice ? Number(p.salePrice) : null;
@@ -112,16 +145,16 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
     brand_id: p.brandId,
     category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
     categories: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
-    category_ids: (p.productCategories || []).map((pc: any) => pc.categoryId).filter(Boolean),
+    category_ids: (p.productCategories || []).map((pc) => pc.categoryId).filter(Boolean),
     additional_categories: (p.productCategories || [])
-      .map((pc: any) => (pc.category ? { id: pc.category.id, name: pc.category.name, slug: pc.category.slug } : null))
+      .map((pc) => (pc.category ? { id: pc.category.id, name: pc.category.name, slug: pc.category.slug } : null))
       .filter(Boolean),
     brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
     brands: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
     product_media: mediaList,
     media: mediaList,
     primary_image_url: primaryMedia ? primaryMedia.url : p.imageUrl || "/placeholder.png",
-    variants: variants.map((v: any, variantIndex: number) => ({
+    variants: variants.map((v, variantIndex: number) => ({
       id: v.id,
       sku: v.sku,
       barcode: v.barcode,
@@ -132,7 +165,7 @@ function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
       is_active: v.isActive,
       // Server-computed purchasable stock for THIS variant (see above).
       available_stock: variantAvailableStock[variantIndex],
-      inventory_levels: (v.inventoryLevels || []).map((il: any) => ({
+      inventory_levels: (v.inventoryLevels || []).map((il) => ({
         id: il.id,
         warehouse_id: il.warehouseId,
         quantity_available: il.quantityAvailable,
@@ -255,7 +288,7 @@ export const CatalogRepository = {
       const promoDiscount = bestPromo?.discount_percentage ?? null;
       return products
         .map((p) => mapProductToStorefront(p, promoDiscount))
-        .filter((p): p is NonNullable<typeof p> => p !== null) as any;
+        .filter((p): p is NonNullable<typeof p> => p !== null);
     } catch (e) {
       return [];
     }
@@ -292,7 +325,7 @@ export const CatalogRepository = {
       const promoDiscount = bestPromo?.discount_percentage ?? null;
       return products
         .map((p) => mapProductToStorefront(p, promoDiscount))
-        .filter((p): p is NonNullable<typeof p> => p !== null) as any;
+        .filter((p): p is NonNullable<typeof p> => p !== null);
     } catch (e) {
       return [];
     }
@@ -303,7 +336,7 @@ export const CatalogRepository = {
    */
   async getProducts(params: ProductListParams) {
     try {
-      const andClauses: any[] = [
+      const andClauses: Prisma.ProductWhereInput[] = [
         { status: "ACTIVE" },
         { deletedAt: null },
       ];
@@ -349,7 +382,7 @@ export const CatalogRepository = {
         andClauses.push({ brand: { slug: params.brand } });
       }
       if (params.minPrice !== undefined || params.maxPrice !== undefined) {
-        const priceFilter: any = {};
+        const priceFilter: Prisma.DecimalFilter = {};
         if (params.minPrice !== undefined) priceFilter.gte = params.minPrice;
         if (params.maxPrice !== undefined) priceFilter.lte = params.maxPrice;
         andClauses.push({ basePrice: priceFilter });
@@ -362,7 +395,7 @@ export const CatalogRepository = {
       const SIZE_KEYS = ["Size", "size"];
       const COLOR_KEYS = ["Color", "color", "Colour", "colour"];
       if (params.sizes?.length || params.colors?.length) {
-        const variantConds: any[] = [];
+        const variantConds: Prisma.VariantWhereInput[] = [];
         if (params.sizes?.length) {
           variantConds.push({
             OR: params.sizes.flatMap((s) =>
@@ -414,9 +447,9 @@ export const CatalogRepository = {
         });
       }
 
-      const where: any = { AND: andClauses };
+      const where: Prisma.ProductWhereInput = { AND: andClauses };
 
-      let orderBy: any = { createdAt: "desc" };
+      let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
       if (params.sortBy === "price_asc") {
         orderBy = { basePrice: "asc" };
       } else if (params.sortBy === "price_desc") {
@@ -472,7 +505,7 @@ export const CatalogRepository = {
         const dir = params.sortBy === "price_asc" ? 1 : -1;
         mapped = mapped
           .slice()
-          .sort((a: any, b: any) => {
+          .sort((a, b) => {
             const diff = displayedUnitPrice(a) - displayedUnitPrice(b);
             if (diff !== 0) return diff * dir;
             // Deterministic tie-break: newest first, then id.
@@ -491,7 +524,7 @@ export const CatalogRepository = {
         // tier, id as the final deterministic tie-break.
         const term = params.search!.trim().toLowerCase();
         const words = term.split(/\s+/).filter(Boolean);
-        const tierOf = (p: any): number => {
+        const tierOf = (p: StorefrontProduct | null): number => {
           const name = String(p?.name || "").toLowerCase();
           if (name === term) return 0;
           if (name.startsWith(term)) return 1;
@@ -499,16 +532,16 @@ export const CatalogRepository = {
           if (words.length > 1 && words.every((w) => name.includes(w))) return 3;
           const catNames = [
             p?.category?.name,
-            ...((p?.additional_categories || []) as any[]).map((c) => c?.name),
+            ...(p?.additional_categories || []).map((c) => c?.name),
           ]
-            .filter(Boolean)
+            .filter((n): n is string => Boolean(n))
             .map((n: string) => n.toLowerCase());
           if (catNames.some((n) => n.includes(term) || words.some((w) => n.includes(w)))) return 4;
           return 5;
         };
         mapped = mapped
           .slice()
-          .sort((a: any, b: any) => {
+          .sort((a, b) => {
             const dt = tierOf(a) - tierOf(b);
             if (dt !== 0) return dt;
             const ca = String(a?.created_at || "");
@@ -531,6 +564,12 @@ export const CatalogRepository = {
   /**
    * Fetch single product by slug from Neon PostgreSQL
    */
+  // REG-65 batch 1 HOLDOUT: the return stays Promise<any> — the PDP
+  // page (app/(shop)/products/[slug]/page.tsx) reads seo_title /
+  // seo_description off the result, fields the storefront mapper has
+  // never included (they are undefined at runtime today). A precise
+  // return type forces a page or mapper change — a runtime-visible
+  // decision outside this type-only batch.
   async getProductBySlug(slug: string): Promise<any> {
     try {
       const [product, bestPromo] = await Promise.all([

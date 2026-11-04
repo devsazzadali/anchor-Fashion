@@ -2,6 +2,108 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { prisma } from "@/lib/prisma";
 import { InventoryLevel, InventoryMovement } from "@/types/inventory.types";
 
+/**
+ * REG-65 batch 1: caller-input and row shapes this repository
+ * actually uses. (types/inventory.types' InventoryMovement does not
+ * fit recordMovement's callers — they pass reason / quantity_change /
+ * previous_quantity / new_quantity / user_id, which that DTO lacks.)
+ */
+interface RecordMovementInput {
+  variant_id: string;
+  warehouse_id: string;
+  movement_type?: string | null;
+  quantity?: number | null;
+  quantity_change?: number | null;
+  reason?: string | null;
+  reason_code?: string | null;
+  notes?: string | null;
+  reference_id?: string | null;
+  reference_type?: string | null;
+  previous_quantity?: number | null;
+  new_quantity?: number | null;
+  to_warehouse_id?: string | null;
+  from_bin_id?: string | null;
+  to_bin_id?: string | null;
+  user_id?: string | null;
+  [key: string]: unknown;
+}
+
+interface CreateAuditInput {
+  warehouse_id: string;
+  status?: string | null;
+  notes?: string | null;
+  scheduled_date?: string | null;
+  blind_count?: boolean | null;
+  created_by?: string | null;
+  [key: string]: unknown;
+}
+
+interface CreateAuditItemInput {
+  audit_id: string;
+  variant_id: string;
+  expected_quantity?: number | null;
+  actual_quantity?: number | null;
+  counted_quantity?: number | null;
+  variance?: number | null;
+  [key: string]: unknown;
+}
+
+/** stock_movements row (real columns per the S4-9 note below);
+ * variant_id / warehouse_id are NOT NULL (prisma StockMovement). */
+interface StockMovementRow {
+  id: string;
+  created_at: string;
+  variant_id: string;
+  warehouse_id: string;
+  movement_type?: string | null;
+  quantity?: number | string | null;
+  previous_quantity?: number | null;
+  new_quantity?: number | null;
+  reference_type?: string | null;
+  reference_id?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
+  [key: string]: unknown;
+}
+
+type MovementVariantRow = {
+  id: string;
+  sku: string;
+  product: { name: string } | null;
+};
+type MovementWarehouseRow = {
+  id: string;
+  name: string;
+  code?: string | null;
+};
+type MovementProfileRow = {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+};
+
+/** The enriched row getDetailedMovements returns per movement. */
+interface DetailedMovementRow {
+  id: string;
+  created_at: string;
+  product_name: string;
+  sku: string;
+  warehouse_name: string;
+  warehouse_code: string;
+  to_warehouse_name?: string;
+  zone_name: string;
+  bin_code: string;
+  movement_type: string;
+  raw_type: string;
+  quantity: number;
+  previous_quantity?: number | null;
+  new_quantity?: number | null;
+  reference_id: string;
+  user_id: string;
+  notes: string;
+}
+
 export class InventoryRepository {
   private getAdminClient() {
     return createAdminDbClient();
@@ -104,7 +206,7 @@ export class InventoryRepository {
    * Record an inventory movement (audit log).
    */
   async recordMovement(
-    movement: any
+    movement: RecordMovementInput
   ): Promise<void> {
     const db = this.getAdminClient();
     const rawReason =
@@ -490,7 +592,11 @@ export class InventoryRepository {
       .from("warehouses")
       .select("id, name")
       .in("id", ids);
-    const byId = new Map<string, any>((warehouses || []).map((w: any) => [w.id, w] as [string, any]));
+    const byId = new Map<string, { id: string; name: string }>(
+      (warehouses || []).map(
+        (w: { id: string; name: string }): [string, { id: string; name: string }] => [w.id, w]
+      )
+    );
     return rows.map((r: any) => {
       const w = byId.get(r.warehouse_id);
       const wh = w ? { id: w.id, name: w.name } : null;
@@ -526,7 +632,7 @@ export class InventoryRepository {
     return withWh;
   }
 
-  async createAudit(auditData: any): Promise<any> {
+  async createAudit(auditData: CreateAuditInput): Promise<any> {
     const db = this.getAdminClient();
     // S4-7: inventory_audits' real columns are only id, warehouse_id,
     // status, notes, created_by, created_at. The previous payload always
@@ -541,7 +647,12 @@ export class InventoryRepository {
     if (auditData.blind_count !== undefined) {
       noteParts.push(auditData.blind_count ? "Blind count" : "Open count");
     }
-    const payload: any = {
+    const payload: {
+      warehouse_id: string;
+      status: string;
+      notes: string | null;
+      created_by?: string;
+    } = {
       warehouse_id: auditData.warehouse_id,
       status: auditData.status === "PLANNED" ? "SCHEDULED" : (auditData.status || "SCHEDULED"),
       notes: noteParts.length > 0 ? noteParts.join(" · ") : null,
@@ -568,7 +679,7 @@ export class InventoryRepository {
         .from("inventory_levels")
         .select("variant_id, quantity_available")
         .eq("warehouse_id", auditData.warehouse_id);
-      const items = (levels || []).map((l: any) => ({
+      const items = (levels || []).map((l: { variant_id: string; quantity_available?: number | null }) => ({
         audit_id: data.id,
         variant_id: l.variant_id,
         expected_quantity: Number(l.quantity_available || 0),
@@ -591,7 +702,7 @@ export class InventoryRepository {
     const dbStatus = status === "PLANNED" ? "SCHEDULED" : status;
     // S4-7: inventory_audits has no `updated_at` column — including it
     // made the DB layer silently discard the whole status update.
-    const updates: any = {
+    const updates = {
       status: dbStatus,
     };
 
@@ -619,7 +730,7 @@ export class InventoryRepository {
     // status under the key names the perform form renders
     // (`counted_quantity`, `status`) — the real columns are
     // `actual_quantity` and there is no status column.
-    const variantIds: string[] = [...new Set(items.map((i: any) => i.variant_id).filter(Boolean))] as string[];
+    const variantIds: string[] = [...new Set(items.map((i: { variant_id?: string | null }) => i.variant_id).filter(Boolean))] as string[];
     const variants = await prisma.variant.findMany({
       where: { id: { in: variantIds } },
       select: {
@@ -628,7 +739,9 @@ export class InventoryRepository {
         product: { select: { name: true } },
       },
     });
-    const byId = new Map<string, any>(variants.map((v: any) => [v.id, v] as [string, any]));
+    const byId = new Map<string, MovementVariantRow>(
+      variants.map((v): [string, MovementVariantRow] => [v.id, v])
+    );
     return items.map((i: any) => {
       const v = byId.get(i.variant_id);
       const counted = i.actual_quantity;
@@ -647,14 +760,20 @@ export class InventoryRepository {
     });
   }
 
-  async createAuditItems(items: any[]): Promise<void> {
+  async createAuditItems(items: CreateAuditItemInput[]): Promise<void> {
     if (items.length === 0) return;
     const db = this.getAdminClient();
     // Real columns only: audit_id, variant_id, expected_quantity,
     // actual_quantity, variance. Translate the legacy `counted_quantity`
     // key if a caller still sends it.
-    const rows = items.map((i: any) => {
-      const row: any = {
+    const rows = items.map((i) => {
+      const row: {
+        audit_id: string;
+        variant_id: string;
+        expected_quantity: number;
+        actual_quantity?: number | null;
+        variance?: number;
+      } = {
         audit_id: i.audit_id,
         variant_id: i.variant_id,
         expected_quantity: Number(i.expected_quantity || 0),
@@ -811,7 +930,7 @@ export class InventoryRepository {
       movement_type: "RECEIVE",
       quantity: qty,
       previous_quantity: existingLevels && existingLevels.length > 0 ? Number(existingLevels[0].quantity_available || 0) : 0,
-      new_quantity: Number((updatedLevel as any).quantity_available ?? qty),
+      new_quantity: Number(updatedLevel.quantity_available ?? qty),
       to_bin_id: payload.bin_id || null,
       reference_id: payload.purchase_order_id || null,
       reference_type: payload.purchase_order_id ? "PURCHASE_ORDER" : null,
@@ -1036,7 +1155,7 @@ export class InventoryRepository {
     type?: string;
     search?: string;
   }): Promise<{
-    data: any[];
+    data: DetailedMovementRow[];
     total: number;
     page: number;
     totalPages: number;
@@ -1065,7 +1184,7 @@ export class InventoryRepository {
     const { data, count, error } = await query;
     if (error) throw new Error(`Failed to fetch stock movements: ${error.message}`);
 
-    const rows = data || [];
+    const rows: StockMovementRow[] = data || [];
 
     // S4-9: stock_movements' real columns are movement_type, quantity,
     // previous_quantity, new_quantity, reference_type, reference_id,
@@ -1075,15 +1194,15 @@ export class InventoryRepository {
     // rendered as Quantity 0, type "Movement", product "Product",
     // warehouse "Warehouse", user "System". Resolve the real relations
     // manually in batch instead.
-    const variantIds: string[] = [...new Set(rows.map((m: any) => m.variant_id).filter(Boolean))] as string[];
+    const variantIds: string[] = [...new Set(rows.map((m) => m.variant_id).filter(Boolean))] as string[];
     const warehouseIds = [
       ...new Set(
         rows
-          .flatMap((m: any) => [m.warehouse_id, m.reference_type === "TRANSFER" ? m.reference_id : null])
+          .flatMap((m) => [m.warehouse_id, m.reference_type === "TRANSFER" ? m.reference_id : null])
           .filter(Boolean)
       ),
     ];
-    const userIds = [...new Set(rows.map((m: any) => m.created_by).filter(Boolean))];
+    const userIds = [...new Set(rows.map((m) => m.created_by).filter(Boolean))];
 
     const [variantRows, warehouseRows, profileRows] = await Promise.all([
       variantIds.length
@@ -1093,17 +1212,26 @@ export class InventoryRepository {
           })
         : Promise.resolve([]),
       warehouseIds.length
-        ? db.from("warehouses").select("id, name, code").in("id", warehouseIds).then((r: any) => r.data || [])
+        ? db.from("warehouses").select("id, name, code").in("id", warehouseIds).then((r: { data: MovementWarehouseRow[] | null }) => r.data || [])
         : Promise.resolve([]),
       userIds.length
-        ? db.from("profiles").select("id, first_name, last_name, email").in("id", userIds).then((r: any) => r.data || [])
+        ? db.from("profiles").select("id, first_name, last_name, email").in("id", userIds).then((r: { data: MovementProfileRow[] | null }) => r.data || [])
         : Promise.resolve([]),
     ]);
-    const variantById = new Map<string, any>((variantRows as any[]).map((v: any) => [v.id, v] as [string, any]));
-    const warehouseById = new Map<string, any>((warehouseRows as any[]).map((w: any) => [w.id, w] as [string, any]));
-    const profileById = new Map<string, any>((profileRows as any[]).map((p: any) => [p.id, p] as [string, any]));
+    const variantById = new Map<string, MovementVariantRow>(
+      variantRows.map((v): [string, MovementVariantRow] => [v.id, v])
+    );
+    // Keyed string | null | undefined: transfer rows probe the map
+    // with a possibly-absent reference_id and a miss yields undefined,
+    // exactly as before.
+    const warehouseById = new Map<string | null | undefined, MovementWarehouseRow>(
+      warehouseRows.map((w): [string, MovementWarehouseRow] => [w.id, w])
+    );
+    const profileById = new Map<string, MovementProfileRow>(
+      profileRows.map((p): [string, MovementProfileRow] => [p.id, p])
+    );
 
-    const movements = rows.map((m: any) => {
+    const movements = rows.map((m) => {
       const t = String(m.movement_type || "").toUpperCase();
       let friendlyType = "Movement";
       if (t.includes("DAMAGE")) {

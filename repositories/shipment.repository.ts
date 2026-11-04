@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { createAdminDbClient } from "@/lib/db/client";
 import { prisma } from "@/lib/prisma";
 import {
@@ -84,7 +85,10 @@ function toShipmentRow(data: Record<string, any>): Record<string, any> {
  */
 function toTrackingEventRow(
   shipmentId: string,
-  event: Record<string, any>
+  event: Omit<ShipmentTrackingEvent, "id" | "shipment_id" | "created_at"> & {
+    notes?: string | null;
+    timestamp?: string;
+  }
 ): Record<string, any> {
   const row: Record<string, any> = {
     shipment_id: shipmentId,
@@ -117,7 +121,30 @@ function coupleShipmentRow(payload: Record<string, any>): void {
  * listShipments + getShipmentWithDetails so the queue and the detail
  * can never disagree about the same shipment again.
  */
-function mapShipmentRow(s: any): Record<string, any> {
+/**
+ * REG-65 batch 1: the Prisma Shipment row mapShipmentRow consumes —
+ * the order-number include both callers fetch, plus the legacy
+ * snake_case `order_number` key one fallback path reads.
+ */
+type ShipmentRowForMapping = Prisma.ShipmentGetPayload<{
+  include: { order: { select: { orderNumber: true } } };
+}> & { order_number?: string | null };
+
+/** REG-65 batch 1: createShipment item input — the DTO fields plus
+ * the camelCase orderItemId callers actually pass. */
+type ShipmentItemInput = Omit<
+  Partial<ShipmentItem>,
+  "id" | "shipment_id" | "created_at"
+> & { orderItemId?: string | null };
+
+/** REG-65 batch 1: saveLabel input — the DTO fields plus the
+ * tracking_number / courier values callers actually pass. */
+type ShipmentLabelInput = Omit<
+  ShipmentLabel,
+  "id" | "shipment_id" | "generated_at" | "printed_at" | "print_count" | "created_at"
+> & { tracking_number?: string | null; courier?: string | null };
+
+function mapShipmentRow(s: ShipmentRowForMapping): Record<string, any> {
   return {
     id: s.id,
     order_id: s.orderId,
@@ -161,13 +188,13 @@ export class ShipmentRepository {
       Partial<Shipment>,
       "id" | "shipment_number" | "created_at" | "updated_at"
     >,
-    items: Omit<Partial<ShipmentItem>, "id" | "shipment_id" | "created_at">[]
+    items: ShipmentItemInput[]
   ): Promise<Shipment> {
     const db = this.getAdminClient();
 
     // FIX ROUND 23B: build the insert from real columns only (see the
     // guard note at the top of this file).
-    const payload: any = toShipmentRow({ ...data });
+    const payload: Record<string, any> = toShipmentRow({ ...data });
     coupleShipmentRow(payload);
 
     const { data: shipment, error } = await db
@@ -187,14 +214,14 @@ export class ShipmentRepository {
       // persisted. Map the two persistable fields explicitly — sku,
       // product name, variant and unit price have no column and are
       // dropped (they remain on the order's own items).
-      const itemRows = items.map((item: any) => ({
+      const itemRows = items.map((item) => ({
         shipment_id: shipment.id,
         order_item_id: item.order_item_id ?? item.orderItemId ?? null,
         quantity: item.quantity ?? 1,
       }));
       const { error: itemError } = await db
         .from("shipment_items")
-        .insert(itemRows as any);
+        .insert(itemRows);
 
       if (itemError) {
       }
@@ -208,7 +235,7 @@ export class ShipmentRepository {
    */
   async updateShipment(
     id: string,
-    data: Partial<Shipment> & { [key: string]: any }
+    data: Partial<Shipment> & { [key: string]: unknown }
   ): Promise<Shipment> {
     const db = this.getAdminClient();
 
@@ -219,7 +246,7 @@ export class ShipmentRepository {
     // generateLabel's label bookkeeping (label_url / label_generated_at
     // — no columns on shipments; the label itself persists via
     // saveLabel) no longer poisons anything.
-    const payload: any = toShipmentRow({ ...data });
+    const payload: Record<string, any> = toShipmentRow({ ...data });
     coupleShipmentRow(payload);
 
     if (Object.keys(payload).length === 0) {
@@ -323,7 +350,7 @@ export class ShipmentRepository {
     // page does. The detail page previously rendered the raw provider
     // code (or "—"), so a booked shipment never showed its courier name.
     const courierCode =
-      (row as any).courierProviderCode ?? (row as any).courier ?? null;
+      row.courierProviderCode ?? row.courier ?? null;
     let courierName: string | null = null;
     if (courierCode) {
       const provider = await prisma.courier_providers
@@ -338,26 +365,26 @@ export class ShipmentRepository {
           where: { shipment_id: id },
           orderBy: { timestamp: "desc" },
         })
-        .catch(() => [] as any[]),
+        .catch(() => []),
       prisma.shipment_events
         .findMany({
           where: { shipment_id: id },
           orderBy: { created_at: "desc" },
         })
-        .catch(() => [] as any[]),
+        .catch(() => []),
     ]);
 
     return {
       ...mapShipmentRow(row),
       courier_name: courierName,
-      items: (row.items ?? []).map((it: any) => ({
+      items: (row.items ?? []).map((it) => ({
         id: it.id,
         shipment_id: it.shipmentId,
         order_item_id: it.orderItemId,
         quantity: it.quantity,
         created_at: it.createdAt?.toISOString() ?? null,
       })),
-      labels: (row.labels ?? []).map((l: any) => ({
+      labels: (row.labels ?? []).map((l) => ({
         id: l.id,
         shipment_id: l.shipmentId,
         label_url: l.labelUrl,
@@ -366,7 +393,7 @@ export class ShipmentRepository {
         print_count: l.printCount,
         created_at: l.createdAt?.toISOString() ?? null,
       })),
-      tracking_events: trackingEvents.map((e: any) => ({
+      tracking_events: trackingEvents.map((e) => ({
         id: e.id,
         shipment_id: e.shipment_id,
         status: e.status,
@@ -374,7 +401,7 @@ export class ShipmentRepository {
         location: e.location,
         notes: e.notes,
       })),
-      events: events.map((e: any) => ({
+      events: events.map((e) => ({
         id: e.id,
         shipment_id: e.shipment_id,
         status: e.status,
@@ -457,7 +484,7 @@ export class ShipmentRepository {
     // / provider_raw) made the builder discard every tracking event.
     await db
       .from("shipment_tracking_events")
-      .insert(toTrackingEventRow(shipmentId, event as any) as any);
+      .insert(toTrackingEventRow(shipmentId, event));
   }
 
   async upsertTrackingEvent(
@@ -471,7 +498,7 @@ export class ShipmentRepository {
     // before the payload was even examined.
     const { error } = await db
       .from("shipment_tracking_events")
-      .upsert(toTrackingEventRow(shipmentId, event as any) as any, {
+      .upsert(toTrackingEventRow(shipmentId, event), {
         onConflict: "shipment_id,timestamp,status",
         ignoreDuplicates: true,
       });
@@ -498,15 +525,7 @@ export class ShipmentRepository {
 
   async saveLabel(
     shipmentId: string,
-    label: Omit<
-      ShipmentLabel,
-      | "id"
-      | "shipment_id"
-      | "generated_at"
-      | "printed_at"
-      | "print_count"
-      | "created_at"
-    >
+    label: ShipmentLabelInput
   ): Promise<ShipmentLabel> {
     const db = this.getAdminClient();
     // FIX ROUND 23B: `shipment_labels` real columns are shipment_id /
@@ -516,13 +535,13 @@ export class ShipmentRepository {
     // label was ever saved. Persist the real fields only.
     const row: Record<string, any> = {
       shipment_id: shipmentId,
-      label_url: (label as any).label_url ?? null,
-      tracking_number: (label as any).tracking_number ?? null,
-      courier: (label as any).courier ?? null,
+      label_url: label.label_url ?? null,
+      tracking_number: label.tracking_number ?? null,
+      courier: label.courier ?? null,
     };
     const { data, error } = await db
       .from("shipment_labels")
-      .insert(row as any)
+      .insert(row)
       .select()
       .single();
 
@@ -588,6 +607,6 @@ export class ShipmentRepository {
       location,
       notes:
         Object.keys(notesData).length > 0 ? JSON.stringify(notesData) : null,
-    } as any);
+    });
   }
 }

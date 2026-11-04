@@ -9,6 +9,56 @@
 import prisma from "@/lib/prisma";
 
 /**
+ * REG-65 batch 1: payload shapes the auth admin surface actually
+ * consumes. Callers may pass further fields (they ride the index
+ * signature untouched); the fields below are the ones read here.
+ */
+interface DbAuthUserUpdates {
+  password?: string;
+  phone?: string;
+  data?: {
+    first_name?: string;
+    last_name?: string;
+    [key: string]: unknown;
+  };
+  user_metadata?: {
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+    [key: string]: unknown;
+  };
+  role?: string;
+  role_id?: string;
+  roleId?: string;
+  [key: string]: unknown;
+}
+
+interface DbAuthCreateUserInput {
+  email?: string;
+  password?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  role?: string;
+  role_id?: string;
+  roleId?: string;
+  user_metadata?: {
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** The created / updated user handle returned by the admin methods. */
+interface DbAuthUserHandle {
+  id: string;
+  email?: string | null;
+  [key: string]: unknown;
+}
+
+/**
  * Sets an EXISTING Neon Auth user's password through the auth layer's own
  * reset-token flow — the supported server-side mechanism for changing an
  * existing credential:
@@ -62,13 +112,13 @@ async function setNeonAuthPassword(params: {
   }
 
   // 2. Read back the token just stored for THIS user.
-  const rows: any[] = await prisma.$queryRawUnsafe(
+  const rows = (await prisma.$queryRawUnsafe(
     `SELECT identifier FROM neon_auth."verification"
      WHERE identifier LIKE 'reset-password:%' AND value = $1
        AND "expiresAt" > NOW()
      ORDER BY "createdAt" DESC LIMIT 1`,
     params.authUserId
-  );
+  )) as Array<{ identifier: string }>;
   const identifier = rows?.[0]?.identifier
     ? String(rows[0].identifier)
     : null;
@@ -125,10 +175,10 @@ export const dbAuth = {
                   first_name: u.name?.split(" ")[0] || "",
                   last_name: u.name?.split(" ").slice(1).join(" ") || "",
                   full_name: u.name || "",
-                  role: (u as any).role || "CUSTOMER",
+                  role: (u as { role?: string | null }).role || "CUSTOMER",
                 },
                 app_metadata: {
-                  role: (u as any).role || "CUSTOMER",
+                  role: (u as { role?: string | null }).role || "CUSTOMER",
                 },
               },
             },
@@ -143,7 +193,7 @@ export const dbAuth = {
           // getServerSession() already resolved the role through the guarded
           // resolveUserRole (identity-bound / verified-email only). Do not re-query
           // the profile by email here.
-          const resolvedRole = (u as any).role;
+          const resolvedRole = u.role;
           const finalRole = resolvedRole || "CUSTOMER";
           return {
             data: {
@@ -198,7 +248,7 @@ export const dbAuth = {
     } catch {}
     return { error: null };
   },
-  updateUser: async (updates: any) => {
+  updateUser: async (updates: DbAuthUserUpdates) => {
     try {
       if (typeof window === "undefined") {
         const { getServerSession } = await import("@/lib/auth/server");
@@ -212,7 +262,7 @@ export const dbAuth = {
             typeof updates?.password === "string" &&
             updates.password.length > 0
           ) {
-            const email = (user as any)?.email;
+            const email = user?.email;
             if (!email) {
               return {
                 data: null,
@@ -244,7 +294,10 @@ export const dbAuth = {
       return { data: null, error: { message: (e as Error).message } };
     }
   },
-  resetPasswordForEmail: async (email: string, opts?: any) => {
+  resetPasswordForEmail: async (
+    email: string,
+    opts?: { redirectTo?: string }
+  ) => {
     // REG-58: this used to return a fabricated success without contacting
     // the auth service — no reset email was ever sent. It now performs the
     // real request through the auth layer and surfaces failures.
@@ -252,7 +305,15 @@ export const dbAuth = {
       const redirectTo = opts?.redirectTo;
       if (typeof window !== "undefined") {
         const { authClient } = await import("@/lib/auth/client");
-        const client = authClient as any;
+        // The Neon Auth client exposes the reset call under one of two
+        // names depending on version (and `forgetPassword` is a method
+        // namespace in this version, not a bare function) — view just
+        // those two members as unknown and let the typeof guard below
+        // do the narrowing it already does.
+        const client: {
+          requestPasswordReset?: unknown;
+          forgetPassword?: unknown;
+        } = authClient;
         const requestReset =
           client.requestPasswordReset || client.forgetPassword;
         if (typeof requestReset !== "function") {
@@ -387,8 +448,11 @@ export const dbAuth = {
       }
     },
     createUser: async (
-      userData: any
-    ): Promise<{ data: { user: any }; error: { message: string } | null }> => {
+      userData: DbAuthCreateUserInput
+    ): Promise<{
+      data: { user: DbAuthUserHandle | null };
+      error: { message: string } | null;
+    }> => {
       try {
         const email = String(userData.email || "").trim().toLowerCase();
         const fullName =
@@ -457,10 +521,10 @@ export const dbAuth = {
           if (!authUserId) {
             // Resolve the auth user id from the shared Neon database.
             try {
-              const rows: any[] = await prisma.$queryRawUnsafe(
+              const rows = (await prisma.$queryRawUnsafe(
                 `SELECT id FROM neon_auth."user" WHERE lower(email) = lower($1) LIMIT 1`,
                 email
-              );
+              )) as Array<{ id: string }>;
               authUserId = rows?.[0]?.id ? String(rows[0].id) : null;
             } catch {
               // neon_auth schema not readable from this connection — fall through.
@@ -574,8 +638,11 @@ export const dbAuth = {
     },
     updateUserById: async (
       id: string,
-      updates: any
-    ): Promise<{ data: { user: any }; error: { message: string } | null }> => {
+      updates: DbAuthUserUpdates
+    ): Promise<{
+      data: { user: DbAuthUserHandle | null };
+      error: { message: string } | null;
+    }> => {
       try {
         // REG-58: a password in the payload is a CREDENTIAL change, not a
         // profile field. It used to be silently ignored here while success
@@ -594,17 +661,17 @@ export const dbAuth = {
           let email = profile?.email || null;
           let authUserId: string | null = null;
           if (email) {
-            const byEmail: any[] = await prisma.$queryRawUnsafe(
+            const byEmail = (await prisma.$queryRawUnsafe(
               `SELECT id FROM neon_auth."user" WHERE lower(email) = lower($1) LIMIT 1`,
               email
-            );
+            )) as Array<{ id: string }>;
             authUserId = byEmail?.[0]?.id ? String(byEmail[0].id) : null;
           }
           if (!authUserId) {
-            const byId: any[] = await prisma.$queryRawUnsafe(
+            const byId = (await prisma.$queryRawUnsafe(
               `SELECT id, email FROM neon_auth."user" WHERE id = $1::uuid LIMIT 1`,
               id
-            );
+            )) as Array<{ id: string; email: string | null }>;
             if (byId?.[0]?.id) {
               authUserId = String(byId[0].id);
               email = email || byId[0].email || null;

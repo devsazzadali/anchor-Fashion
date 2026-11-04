@@ -51,13 +51,20 @@ export class ReturnRepository {
    */
   async createReturn(
     data: Omit<Partial<ReturnRequest>, "id" | "created_at" | "updated_at">,
-    items: Omit<Partial<ReturnItem>, "id" | "return_id" | "created_at">[]
+    // REG-65 batch 1: return_items has a real variant_id column
+    // (prisma model ReturnItem) that the legacy ReturnItem DTO omits;
+    // callers have always passed it — the parameter type now says so.
+    items: Array<
+      Omit<Partial<ReturnItem>, "id" | "return_id" | "created_at"> & {
+        variant_id?: string | null;
+      }
+    >
   ): Promise<ReturnWithItems> {
     const db = this.getClient();
 
     const { data: ret, error } = await db
       .from("returns")
-      .insert(data as any)
+      .insert(data)
       .select()
       .single();
 
@@ -66,7 +73,7 @@ export class ReturnRepository {
     if (items.length > 0) {
       const { error: itemError } = await db
         .from("return_items")
-        .insert(items.map((item) => ({ ...item, return_id: ret.id })) as any);
+        .insert(items.map((item) => ({ ...item, return_id: ret.id })));
 
       if (itemError) {}
     }
@@ -79,12 +86,12 @@ export class ReturnRepository {
    */
   async updateReturn(
     id: string,
-    data: Partial<ReturnRequest> & { [key: string]: any }
+    data: Partial<ReturnRequest> & { [key: string]: unknown }
   ): Promise<ReturnRequest> {
     const db = this.getClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    let query = db.from("returns").update(data as any);
+    let query = db.from("returns").update(data);
     query = isUuid ? query.eq("id", id) : query.eq("return_number", id);
 
     const { data: updated, error } = await query
@@ -116,7 +123,7 @@ export class ReturnRepository {
       ])
     );
     
-    let query = db.from("returns").update(data as any);
+    let query = db.from("returns").update(data);
     query = isUuid ? query.eq("id", id) : query.eq("return_number", id);
 
     const { data: updated, error } = await query
@@ -185,7 +192,7 @@ export class ReturnRepository {
     if (error)
       throw new Error(`Get return with items failed: ${error.message}`);
     if (!data) return null;
-    return this.attachItemsAndRefundState(data as any);
+    return this.attachItemsAndRefundState(data);
   }
 
   /**
@@ -361,7 +368,7 @@ export class ReturnRepository {
         .select("id")
         .eq("branch_id", filters.branchId);
       if (branchError) throw new Error(`List returns failed: ${branchError.message}`);
-      branchOrderIds = (branchOrders || []).map((o: any) => o.id);
+      branchOrderIds = (branchOrders || []).map((o: { id: string }) => o.id);
     }
 
     let query = db.from("returns").select("*", { count: "exact" });
@@ -459,7 +466,7 @@ export class ReturnRepository {
       return [];
     }
 
-    return ((items ?? []) as any[]).map((it) => ({
+    return ((items ?? []) as ReturnItem[]).map((it) => ({
       ...it,
       return_status: statusByReturnId.get(it.return_id) ?? "",
     }));
@@ -506,14 +513,14 @@ export class ReturnRepository {
     );
 
     const marker = "Refund processing claimed.";
-    const existingNotes = ((current as any).notes as string | null) || "";
+    const existingNotes = current.notes || "";
     const notes = existingNotes.includes(marker)
       ? existingNotes
       : [existingNotes.trim(), marker].filter(Boolean).join("\n");
 
     let query = db
       .from("returns")
-      .update({ notes, updated_at: new Date().toISOString() } as any);
+      .update({ notes, updated_at: new Date().toISOString() });
     query = isUuid ? query.eq("id", id) : query.eq("return_number", id);
 
     const { data: updated, error } = await query
@@ -565,7 +572,7 @@ export class ReturnRepository {
     const db = this.getClient();
     await db
       .from("return_items")
-      .update({ restocked: true } as any)
+      .update({ restocked: true })
       .eq("id", returnItemId);
   }
 }
