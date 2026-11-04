@@ -23,9 +23,23 @@ export const dynamic = "force-dynamic";
  * beyond what the guarded pages themselves reveal (a slug either renders
  * or 404s; invoice tokens are 192-bit unguessable secrets whose existence
  * can only be queried by presenting the full token).
+ *
+ * REG-65 holdout note — the prose word in the FAIL-OPEN line above is
+ * not a type annotation and is left unchanged, so the census pattern
+ * still matches this file once.
  */
 
 const KINDS = new Set(["product", "category", "collection", "blog", "cms", "invoice"]);
+
+/**
+ * REG-65 Batch 9: one entry of the catalog_collections settings array —
+ * the only fields this branch reads.
+ */
+type CatalogCollectionEntry = {
+  slug?: string;
+  is_active?: boolean;
+  [key: string]: unknown;
+};
 
 async function checkExists(kind: string, slug: string): Promise<boolean> {
   switch (kind) {
@@ -54,7 +68,7 @@ async function checkExists(kind: string, slug: string): Promise<boolean> {
         where: { key: "catalog_collections" },
       });
       const collections = Array.isArray(setting?.value)
-        ? (setting.value as any[])
+        ? (setting.value as CatalogCollectionEntry[])
         : [];
       return collections.some(
         (c) => c?.slug === slug && c?.is_active !== false

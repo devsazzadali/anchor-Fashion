@@ -4,6 +4,17 @@ import { PaymentProviderRepository } from "@/repositories/payment-provider.repos
 import { PaymentProviderCode } from "@/types/payment.types";
 import crypto from "crypto";
 
+/**
+ * REG-65 Batch 9: a gateway webhook body — the two fields this service
+ * reads (id, type) are strings when present; everything else is opaque
+ * JSON passed through to the webhook-event record.
+ */
+interface GatewayWebhookPayload {
+  id?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
 export class WebhookService {
   private paymentRepo = new PaymentRepository();
   private providerRepo = new PaymentProviderRepository();
@@ -13,7 +24,7 @@ export class WebhookService {
    */
   async handleWebhook(
     providerCode: PaymentProviderCode,
-    payload: any,
+    payload: GatewayWebhookPayload,
     headers: Record<string, any>,
     rawBody: string
   ) {
@@ -67,12 +78,12 @@ export class WebhookService {
       // 4. Mark as failed for retry mechanism
       await this.paymentRepo.updateWebhookEvent(webhookRecord.id, {
         status: "failed",
-      } as any);
+      });
       throw error;
     }
   }
 
-  private async processEvent(providerCode: PaymentProviderCode, payload: any) {
+  private async processEvent(providerCode: PaymentProviderCode, payload: GatewayWebhookPayload) {
     // In a real implementation, this would switch on event type (e.g. payment.success, refund.completed)
     // and update the corresponding transactions or orders.
     // For this architecture skeleton, we consider the processing done.

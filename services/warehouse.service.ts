@@ -6,6 +6,21 @@ import {
   WarehouseRack,
 } from "@/types/inventory.types";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
+
+/**
+ * REG-65 Batch 9: mirrors the filter shape
+ * repositories/warehouse.repository.ts getWarehouseInventory actually
+ * reads (search/category/status/zone_id/page/limit).
+ */
+type WarehouseInventoryFilters = {
+  search?: string;
+  category?: string;
+  status?: string;
+  zone_id?: string;
+  page?: number;
+  limit?: number;
+};
 
 export class WarehouseService {
   private repository: WarehouseRepository;
@@ -18,8 +33,8 @@ export class WarehouseService {
     tableName: string,
     recordId: string,
     action: "CREATE" | "UPDATE" | "DELETE",
-    oldData?: any,
-    newData?: any,
+    oldData?: unknown,
+    newData?: unknown,
     userId?: string
   ) {
     try {
@@ -33,8 +48,8 @@ export class WarehouseService {
           entity: tableName,
           entityId: recordId,
           action,
-          oldValues: oldData ? (typeof oldData === "object" ? oldData : { value: oldData }) : undefined,
-          newValues: newData ? (typeof newData === "object" ? newData : { value: newData }) : undefined,
+          oldValues: oldData ? (typeof oldData === "object" ? (oldData as Prisma.InputJsonValue) : { value: oldData as Prisma.InputJsonValue }) : undefined,
+          newValues: newData ? (typeof newData === "object" ? (newData as Prisma.InputJsonValue) : { value: newData as Prisma.InputJsonValue }) : undefined,
           userId: isUserUuid ? userId : null,
         },
       });
@@ -186,7 +201,7 @@ export class WarehouseService {
 
   // --- Inventory Lookup ---
 
-  async getWarehouseInventory(warehouseId: string, filters?: any) {
+  async getWarehouseInventory(warehouseId: string, filters?: WarehouseInventoryFilters) {
     return await this.repository.getWarehouseInventory(warehouseId, filters);
   }
 

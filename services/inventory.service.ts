@@ -30,6 +30,22 @@ export interface ReservationItem {
   quantity: number;
 }
 
+/**
+ * REG-65 Batch 9: mirrors repositories/inventory.repository.ts
+ * CreateAuditInput (not exported there), including its open index
+ * signature — the sole action caller passes zone_id alongside the
+ * declared fields.
+ */
+interface InventoryAuditInput {
+  warehouse_id: string;
+  status?: string | null;
+  notes?: string | null;
+  scheduled_date?: string | null;
+  blind_count?: boolean | null;
+  created_by?: string | null;
+  [key: string]: unknown;
+}
+
 export class InventoryService {
   private repository: InventoryRepository;
 
@@ -276,7 +292,7 @@ export class InventoryService {
     }
   }
 
-  async createAudit(auditData: any): Promise<any> {
+  async createAudit(auditData: InventoryAuditInput): Promise<unknown> {
     return await this.repository.createAudit(auditData);
   }
 
@@ -671,7 +687,12 @@ export class InventoryService {
             const sizeLower = (item.size || "").toLowerCase().trim();
 
             const matched = variants.find((v) => {
-              const attr = (v.attributes as any) || {};
+              const attr = (v.attributes as {
+                Color?: string;
+                color?: string;
+                Size?: string;
+                size?: string;
+              }) || {};
               const vColor = (attr.Color || attr.color || "").toLowerCase().trim();
               const vSize = (attr.Size || attr.size || "").toLowerCase().trim();
 

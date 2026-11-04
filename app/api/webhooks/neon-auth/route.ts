@@ -69,7 +69,32 @@ function verifyStandardWebhook(
   });
 }
 
-function pickString(...values: any[]): string | null {
+/**
+ * REG-65 Batch 9: the webhook body shape this receiver tolerates — the
+ * header comment above documents that the exact hosted-Neon shape is
+ * unconfirmed, so every field stays unknown and pickString validates
+ * each value at runtime before use.
+ */
+type NeonAuthWebhookData = {
+  phoneNumber?: unknown;
+  phone_number?: unknown;
+  phone?: unknown;
+  code?: unknown;
+  otp?: unknown;
+  otpCode?: unknown;
+  otp_code?: unknown;
+  token?: unknown;
+  [key: string]: unknown;
+};
+
+type NeonAuthWebhookPayload = NeonAuthWebhookData & {
+  type?: unknown;
+  event?: unknown;
+  name?: unknown;
+  data?: NeonAuthWebhookData;
+};
+
+function pickString(...values: unknown[]): string | null {
   for (const v of values) {
     if (typeof v === "string" && v.trim()) return v.trim();
     if (typeof v === "number") return String(v);
@@ -99,7 +124,7 @@ export async function POST(req: Request) {
     );
   }
 
-  let payload: any;
+  let payload: NeonAuthWebhookPayload;
   try {
     payload = JSON.parse(rawBody);
   } catch {
@@ -107,7 +132,7 @@ export async function POST(req: Request) {
   }
 
   const eventType = pickString(payload?.type, payload?.event, payload?.name);
-  const data = payload?.data ?? payload ?? {};
+  const data: NeonAuthWebhookData = payload?.data ?? payload ?? {};
 
   if (process.env.SMS_TEST_MODE === "true") {
     // Shape-only audit: keys, never values (the payload carries the OTP).

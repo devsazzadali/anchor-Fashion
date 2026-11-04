@@ -166,7 +166,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
     const sessionBound =
       !!paymentSession &&
       paymentSession.order_id === order.id &&
-      (paymentSession.metadata as any)?.tran_id === tranId;
+      (paymentSession.metadata)?.tran_id === tranId;
     let signatureValid = false;
     try {
       if (payload.verify_sign && payload.verify_key) {
@@ -417,7 +417,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         await createOrderNotificationAction({
           orderId: order.id,
           orderNumber: order.order_number,
-          customerName: (order as any).customer_name || "Online Customer",
+          customerName: order.customer_name || "Online Customer",
           amount: order.total_amount ?? order.grand_total,
           paymentMethod: "SSLCOMMERZ (PAID)",
           status: "confirmed",

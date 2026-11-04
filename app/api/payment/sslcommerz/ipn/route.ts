@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
         if (!paymentSession || paymentSession.order_id !== order.id) {
           return false;
         }
-        const sessionTranId = (paymentSession.metadata as any)?.tran_id;
+        const sessionTranId = (paymentSession.metadata)?.tran_id;
         if (!sessionTranId || sessionTranId !== tranId) return false;
         if (!payload.verify_sign || !payload.verify_key) return false;
         const config = await SSLCommerzService.getConfig();
@@ -341,7 +341,7 @@ export async function POST(req: NextRequest) {
       await createOrderNotificationAction({
         orderId: order.id,
         orderNumber: order.order_number,
-        customerName: (order as any).customer_name || "Online Customer",
+        customerName: order.customer_name || "Online Customer",
         amount: order.total_amount ?? order.grand_total,
         paymentMethod: "SSLCOMMERZ (IPN)",
         status: "confirmed",

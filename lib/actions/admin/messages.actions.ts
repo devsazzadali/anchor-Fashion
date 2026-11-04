@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -103,7 +104,7 @@ export async function createMessageAction(payload: {
   direction?: string;
   subject?: string;
   content: string;
-}): Promise<{ success: boolean; data?: any; error?: string }> {
+}): Promise<{ success: boolean; data?: Prisma.CommunicationLogGetPayload<{}>; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
@@ -140,7 +141,7 @@ export async function updateMessageAction(
     direction?: string;
     status?: string;
   }
-): Promise<{ success: boolean; data?: any; error?: string }> {
+): Promise<{ success: boolean; data?: Prisma.CommunicationLogGetPayload<{}>; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {

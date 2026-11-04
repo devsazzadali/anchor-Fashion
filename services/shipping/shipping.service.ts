@@ -351,8 +351,8 @@ export class ShippingService {
         "submission_failed",
         {
           provider: shipment.courier_provider_code,
-          error: (result.error as any)?.message || String(result.error || "Unknown provider error"),
-          code: (result.error as any)?.code || null,
+          error: result.error?.message || String(result.error || "Unknown provider error"),
+          code: result.error?.code || null,
         },
         submittedBy,
         "admin"
@@ -360,7 +360,7 @@ export class ShippingService {
     } catch (eventErr) {
     }
     throw new Error(
-      (result.error as any)?.message ||
+      result.error?.message ||
         "The courier rejected the shipment submission."
     );
   }
