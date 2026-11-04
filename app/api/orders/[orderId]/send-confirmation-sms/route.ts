@@ -62,7 +62,7 @@ export async function POST(
     // made this gate escalate-able, and the old role names
     // ("ops_manager", "warehouse_staff") are not roles-table names.
     const { resolveUserRole } = await import("@/lib/auth/server");
-    const role = (await resolveUserRole(user as any)).toUpperCase();
+    const role = (await resolveUserRole(user)).toUpperCase();
     const isStaffOrAdmin = [
       "SUPERADMIN",
       "SUPER_ADMIN",

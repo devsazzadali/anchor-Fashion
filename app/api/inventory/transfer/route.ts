@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       body.quantity,
       body.reason || "WAREHOUSE_TRANSFER",
       body.notes,
-      (user as any)?.id
+      user?.id
     );
     return NextResponse.json({ success: true, message: "Stock transferred successfully." });
   } catch (error) {

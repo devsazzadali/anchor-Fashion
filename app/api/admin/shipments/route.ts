@@ -167,18 +167,18 @@ export async function POST(req: Request) {
         trackingCode: shipmentResult.trackingCode,
       },
     });
-  } catch (err: any) {
+  } catch (err) {
     // REG-72: auth failures from the manager gate are 401/403, not 500 —
     // the same mapping the sibling tracking route gets from authErrorResponse.
     const authStatus =
-      typeof err?.message === "string" && err.message.startsWith("Unauthorized")
+      typeof (err as Error)?.message === "string" && (err as Error).message.startsWith("Unauthorized")
         ? 401
-        : typeof err?.message === "string" && err.message.includes("Forbidden")
+        : typeof (err as Error)?.message === "string" && (err as Error).message.includes("Forbidden")
           ? 403
           : null;
     if (authStatus) {
       return NextResponse.json(
-        { success: false, error: { code: "FORBIDDEN", message: err.message } },
+        { success: false, error: { code: "FORBIDDEN", message: (err as Error).message } },
         { status: authStatus }
       );
     }
@@ -187,7 +187,7 @@ export async function POST(req: Request) {
         success: false,
         error: {
           code: err instanceof CourierError ? err.name : "SHIPMENT_CREATION_FAILED",
-          message: err.message || "Failed to create shipment",
+          message: (err as Error).message || "Failed to create shipment",
         },
       },
       { status: 500 }

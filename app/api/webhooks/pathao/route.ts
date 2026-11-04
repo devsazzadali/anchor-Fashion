@@ -90,7 +90,7 @@ export async function POST(req: Request) {
       await adminDb.from("courier_webhook_events").insert({
         courier: "pathao",
         event_type: String(parsed.status || "STATUS_UPDATE"),
-        payload: rawPayload as any,
+        payload: rawPayload,
       });
     } catch (e) {
     }

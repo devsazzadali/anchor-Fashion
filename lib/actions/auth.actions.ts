@@ -23,9 +23,21 @@ export async function recordSignInAuditAction(): Promise<void> {
   });
 }
 
+/**
+ * Shape of the client-side user object the login form may pass to
+ * avoid a second session fetch — exactly the members the guarded
+ * role resolver (lib/auth/server::resolveUserRole) reads.
+ */
+interface ClientUserLike {
+  id?: string | null;
+  email?: string | null;
+  role?: string | null;
+  emailVerified?: boolean | null;
+}
+
 export async function getPostLoginRedirectAction(
   nextUrl?: string | null,
-  clientUser?: any
+  clientUser?: ClientUserLike
 ): Promise<{ redirectUrl: string; role: string }> {
   try {
     // Fast path 1: if clientUser already has an elevated role, avoid any DB query!

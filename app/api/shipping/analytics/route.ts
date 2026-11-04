@@ -79,7 +79,7 @@ export async function GET(req: Request) {
     // Delivery rate
     const terminalShipments = deliveryRate.data ?? [];
     const deliveredCount = terminalShipments.filter(
-      (s: any) => s.status === "delivered"
+      (s: { status?: string }) => s.status === "delivered"
     ).length;
     const deliveryRatePercent =
       terminalShipments.length > 0

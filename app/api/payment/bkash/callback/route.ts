@@ -326,7 +326,7 @@ async function handleCallback(req: NextRequest) {
         await createOrderNotificationAction({
           orderId: order.id,
           orderNumber: order.order_number,
-          customerName: (order as any).customer_name || "Online Customer",
+          customerName: order.customer_name || "Online Customer",
           amount: order.total_amount ?? order.grand_total,
           paymentMethod: "BKASH (PAID)",
           status: "confirmed",
