@@ -252,7 +252,7 @@ async function resolveCurrentAdminUserId(): Promise<string> {
   return prof?.id || "83dded7c-78c7-4f3f-8dd9-e82f8da7f0c0";
 }
 
-export async function createCampaign(data: any): Promise<Campaign> {
+export async function createCampaign(data: Record<string, unknown>): Promise<Campaign> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   const payload = { ...data };

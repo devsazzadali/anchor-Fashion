@@ -391,6 +391,11 @@ export async function fetchReturnsAction(
   }
 }
 
+// REG-65 holdout: the return type stays loosely typed — narrowing it
+// to the declared return shape breaks the admin returns page, whose
+// status comparisons narrow against the declared union in one branch.
+// A future functional batch should reconcile the page branch with the
+// declared status union; a type-only edit cannot.
 export async function fetchReturnByIdAction(
   returnId: string
 ): Promise<ActionResponse<any>> {

@@ -37,7 +37,7 @@ export const ObservabilityService = {
     return null;
   },
 
-  async recordAITelemetry(telemetry: any) {
+  async recordAITelemetry(telemetry: unknown) {
   },
 
   async runHealthChecks() {

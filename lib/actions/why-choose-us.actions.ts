@@ -80,7 +80,7 @@ export async function updateWhyChooseUsSettings(
     const { error } = await db.from("settings").upsert(
       {
         key: SETTINGS_KEY,
-        value: cleanSettings as any,
+        value: cleanSettings,
         description: "Homepage Why Choose Us & Brand Ethos section settings",
         updated_at: new Date().toISOString(),
       },

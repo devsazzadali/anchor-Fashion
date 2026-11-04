@@ -79,9 +79,19 @@ export async function recordHealthCheck(
   }
 }
 
+/**
+ * Row shape the AI Insights page reads off system_alerts rows
+ * (severity / title / description only).
+ */
+interface SystemAlertRow {
+  severity?: string;
+  title?: string;
+  description?: string;
+}
+
 export async function getSystemAlerts(
   limit: number = 50
-): Promise<{ data?: any[]; error?: string }> {
+): Promise<{ data?: SystemAlertRow[]; error?: string }> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   const db = await createDbClient();

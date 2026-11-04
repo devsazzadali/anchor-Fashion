@@ -1,6 +1,17 @@
 import { db } from "@/lib/db/client";
 import { RecommendationStrategy } from "./types";
 
+/**
+ * Row shape getActiveStrategies reads off ai_recommendation_models rows.
+ */
+interface AiRecommendationModelRow {
+  id?: string;
+  name: string;
+  strategy: string;
+  weight: number;
+  config: Record<string, unknown>;
+}
+
 export class AIRecommendationEngine {
   /**
    * Fetches active recommendation strategies and their weights.
@@ -16,7 +27,7 @@ export class AIRecommendationEngine {
       return [];
     }
 
-    return data.map((d: any) => ({
+    return data.map((d: AiRecommendationModelRow) => ({
       id: d.id,
       name: d.name,
       strategy: d.strategy,

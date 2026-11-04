@@ -44,7 +44,8 @@ export async function handlePathaoWebhook(
     }
   }
 
-  const consignmentId = data.consignment_id || (data as any).consignmentId;
+  const consignmentId =
+    data.consignment_id || (data.consignmentId as string | undefined);
   const statusRaw = data.order_status || data.order_status_slug || data.event;
 
   if (!consignmentId) {
