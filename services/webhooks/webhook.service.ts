@@ -36,7 +36,7 @@ export class WebhookService {
   static async enqueueIncomingWebhook(
     eventType: string,
     provider: string,
-    payload: any
+    payload: Record<string, unknown>
   ): Promise<boolean> {
     return await QueueService.pushJob({
       eventType: `WEBHOOK_IN_${eventType.toUpperCase()}`,
@@ -52,7 +52,7 @@ export class WebhookService {
   static async triggerOutgoingWebhook(
     webhookId: string,
     eventType: string,
-    payload: any
+    payload: Record<string, unknown>
   ): Promise<boolean> {
     try {
       const db = createAdminDbClient();

@@ -134,9 +134,9 @@ export class StripeProvider implements PaymentProvider {
   }
 
   async processWebhook(
-    payload: any,
+    payload: unknown,
     signature: string
-  ): Promise<IntegrationResponse<any>> {
+  ): Promise<IntegrationResponse<unknown>> {
     // Requires stripe signature verification using the endpoint secret
     return {
       success: true,

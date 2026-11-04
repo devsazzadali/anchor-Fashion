@@ -99,26 +99,26 @@ export class CustomerService {
     // table is `orders`, not the phantom customer_orders — this guard
     // never fired before, so accounts with order history could be
     // hard-deleted.)
-    const { data: anyOrders } = await db
+    const { data: orders } = await db
       .from("orders")
       .select("id")
       .eq("user_id", userId)
       .limit(1);
 
-    if (anyOrders && anyOrders.length > 0) {
+    if (orders && orders.length > 0) {
       throw new Error(
         "Account cannot be permanently deleted because historical orders exist for this account. Tax and compliance laws require retaining sales invoices. You may deactivate your account instead."
       );
     }
 
     // 2. Check for any wallet transactions
-    const { data: anyWallet } = await db
+    const { data: wallet } = await db
       .from("customer_wallets")
       .select("id, balance")
       .eq("customer_id", userId)
       .maybeSingle();
 
-    if (anyWallet && Number(anyWallet.balance) > 0) {
+    if (wallet && Number(wallet.balance) > 0) {
       throw new Error(
         "Account cannot be deleted while a positive wallet balance remains. Please withdraw or spend your remaining balance first."
       );

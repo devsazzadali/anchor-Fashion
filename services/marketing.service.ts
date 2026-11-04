@@ -11,6 +11,18 @@ import { recordAudit, AUDIT_ACTIONS } from "@/lib/security/audit";
 
 const marketingRepository = new MarketingRepository();
 
+type MarketingProfileRow = {
+  id: string;
+  email: string;
+  first_name?: string | null;
+  last_name?: string | null;
+};
+
+type MarketingSubscriberRow = {
+  id: string;
+  email: string;
+};
+
 export class MarketingService {
   private getAdminClient() {
     return createAdminDbClient();
@@ -286,7 +298,7 @@ export class MarketingService {
         .not("email", "is", null)
         .limit(200);
 
-      (customers || []).forEach((c: any) => {
+      (customers || []).forEach((c: MarketingProfileRow) => {
         if (c.email && c.email.includes("@")) {
           recipientsMap.set(c.email.toLowerCase().trim(), {
             id: c.id,
@@ -303,7 +315,7 @@ export class MarketingService {
         .eq("is_active", true)
         .limit(200);
 
-      (subscribers || []).forEach((s: any) => {
+      (subscribers || []).forEach((s: MarketingSubscriberRow) => {
         if (s.email && s.email.includes("@")) {
           const emailKey = s.email.toLowerCase().trim();
           if (!recipientsMap.has(emailKey)) {

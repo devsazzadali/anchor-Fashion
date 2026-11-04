@@ -50,7 +50,7 @@ export class QueueService {
       return [];
     }
 
-    const jobIds = jobs.map((j: any) => j.id);
+    const jobIds = jobs.map((j: { id: string }) => j.id);
 
     // Claim jobs
     const { error: updateError } = await db

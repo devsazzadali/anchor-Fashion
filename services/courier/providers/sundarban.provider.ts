@@ -14,6 +14,13 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
+type SundarbanTrackingEvent = {
+  status: string;
+  description?: string;
+  location?: string;
+  created_at: string;
+};
+
 export class SundarbanProvider implements ICourierProvider {
   readonly id = "sundarban" as const;
   readonly name = "Sundarban Courier";
@@ -114,7 +121,7 @@ export class SundarbanProvider implements ICourierProvider {
 
       if (data.success && data.data) {
         const updates: TrackingUpdate[] = (data.data.events || []).map(
-          (e: any) => ({
+          (e: SundarbanTrackingEvent) => ({
             status: e.status,
             statusDescription: e.description || e.status,
             location: e.location || "",
@@ -194,7 +201,7 @@ export class SundarbanProvider implements ICourierProvider {
     return map[raw.toLowerCase()] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

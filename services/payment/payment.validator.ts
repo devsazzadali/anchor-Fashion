@@ -5,7 +5,7 @@ export class PaymentValidator {
   /**
    * Generates an idempotency key from a payload
    */
-  static generateIdempotencyKey(payload: any): string {
+  static generateIdempotencyKey(payload: unknown): string {
     const stringified =
       typeof payload === "string" ? payload : JSON.stringify(payload);
     return crypto.createHash("sha256").update(stringified).digest("hex");

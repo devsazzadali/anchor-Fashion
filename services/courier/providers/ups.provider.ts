@@ -19,6 +19,13 @@ interface UPSToken {
   expiresAt: number;
 }
 
+type UpsActivityEvent = {
+  status?: { type?: string; description?: string };
+  location?: { address?: { city?: string; country?: string } };
+  date?: string;
+  time?: string;
+};
+
 export class UPSProvider implements ICourierProvider {
   readonly id = "ups" as const;
   readonly name = "UPS";
@@ -192,7 +199,7 @@ export class UPSProvider implements ICourierProvider {
 
       if (shipment) {
         const updates: TrackingUpdate[] = (shipment.activity || []).map(
-          (a: any) => ({
+          (a: UpsActivityEvent) => ({
             status: a.status?.type || "",
             statusDescription: a.status?.description || "",
             location:
@@ -276,7 +283,7 @@ export class UPSProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse(code: string, message: string): ProviderResponse<any> {
+  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
     return {
       success: false,
       providerId: this.id,

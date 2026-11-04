@@ -14,6 +14,13 @@ function tierForTotalEarned(totalEarned: number): string {
   return tierForLifetimePoints(totalEarned);
 }
 
+export interface LoyaltySettings {
+  points_per_currency: number;
+  currency_amount: number;
+  min_order_amount: number;
+  signup_bonus: number;
+}
+
 export interface RewardCatalogItem {
   id: string;
   title: string;
@@ -86,7 +93,7 @@ export class LoyaltyService {
     return data;
   }
 
-  static async getSettings(): Promise<any> {
+  static async getSettings(): Promise<LoyaltySettings> {
     const db = await this.getClient();
     const { data, error } = await db
       .from("settings")
