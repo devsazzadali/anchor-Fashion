@@ -1,3 +1,34 @@
+/**
+ * Item shape the order templates render (the fields the item rows
+ * below actually read).
+ */
+interface EmailOrderItem {
+  product_name?: string | null;
+  variant_sku?: string | null;
+  sku?: string | null;
+  quantity: number;
+  unit_price: number;
+}
+
+/**
+ * The delivered-invoice order shape, as built by toTemplateOrder in
+ * lib/notifications/order-notifications.ts (the template's only caller).
+ */
+interface DeliveredInvoiceOrder {
+  id?: string | null;
+  invoice_token?: string | null;
+  order_number?: string | null;
+  customer_name?: string | null;
+  payment_method?: string | null;
+  payment_status?: string | null;
+  subtotal: number;
+  discount_amount?: number | null;
+  shipping_cost: number;
+  vat_amount?: number | null;
+  total_amount: number;
+  order_items?: EmailOrderItem[];
+}
+
 export const EmailTemplates = {
   welcomeAdmin: (name: string, role: string, loginUrl: string, password?: string) => `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 10px; background-color: #ffffff;">
@@ -29,6 +60,14 @@ export const EmailTemplates = {
     </div>
   `,
 
+  // REG-65 holdout: this parameter stays `any`. The only caller passes
+  // the OMS detail shape (types/oms Order + items), which declares
+  // subtotal / tax_total but NOT the total_amount / shipping_fee /
+  // vat_amount / discount_amount fields this template passes straight
+  // to formatPrice(number) — an honest interface either fails the
+  // caller's assignability or the template's own arithmetic.
+  // Reconciling types/oms Order with the repository-mapped shape is
+  // out of scope for a type-only batch.
   orderConfirmed: (order: any, storeUrl: string) => {
     const formatPrice = (amount: number) =>
       new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount).replace('BDT', '৳');
@@ -43,7 +82,7 @@ export const EmailTemplates = {
     const shippingFee = Number(order.shipping_fee ?? order.shipping_cost ?? 0);
     const vatAmount = Number(order.vat_amount ?? order.tax_total ?? 0);
 
-    const itemsHtml = items.map((item: any) => `
+    const itemsHtml = items.map((item: EmailOrderItem) => `
       <tr>
         <td style="padding: 15px 0; border-bottom: 1px solid #eaeaea;">
           <p style="margin: 0; font-weight: bold; color: #1a1a1a;">${item.product_name}</p>
@@ -54,8 +93,8 @@ export const EmailTemplates = {
       </tr>
     `).join("");
 
-    const invoiceUrl = (order as any).invoice_token
-      ? `${storeUrl}/invoice/${(order as any).invoice_token}`
+    const invoiceUrl = order.invoice_token
+      ? `${storeUrl}/invoice/${order.invoice_token}`
       : `${storeUrl}/account/orders/${order.id || order.order_id}/invoice`;
 
     return `
@@ -138,7 +177,7 @@ export const EmailTemplates = {
     </div>
   `,
 
-  orderDeliveredInvoice: (order: any, storeUrl: string, company?: {
+  orderDeliveredInvoice: (order: DeliveredInvoiceOrder, storeUrl: string, company?: {
     company_name?: string;
     central_bin?: string;
     central_address?: string;
@@ -148,7 +187,7 @@ export const EmailTemplates = {
     const formatPrice = (amount: number) =>
       new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount || 0).replace('BDT', '৳');
 
-    const itemsHtml = (order.order_items || []).map((item: any) => `
+    const itemsHtml = (order.order_items || []).map((item) => `
       <tr>
         <td style="padding: 12px 0; border-bottom: 1px solid #eaeaea;">
           <p style="margin: 0; font-weight: bold; color: #1a1a1a;">${item.product_name}</p>
@@ -159,8 +198,8 @@ export const EmailTemplates = {
       </tr>
     `).join("");
 
-    const invoiceUrl = (order as any).invoice_token
-      ? `${storeUrl}/invoice/${(order as any).invoice_token}`
+    const invoiceUrl = order.invoice_token
+      ? `${storeUrl}/invoice/${order.invoice_token}`
       : `${storeUrl}/account/orders/${order.id}/invoice`;
     const isCod = String(order.payment_method || "COD").toUpperCase() === "COD";
     const alreadyPaid = String(order.payment_status || "").toUpperCase() === "PAID";

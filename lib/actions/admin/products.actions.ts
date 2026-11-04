@@ -82,15 +82,20 @@ export const createAdminProductAction = createAdminAction(
         displayOrder: m.displayOrder || 0,
       })),
     };
+    // REG-65 holdout: payload keeps its cast — the safe-action input
+    // type carries the schema's z.preprocess money fields (basePrice /
+    // costPrice / salePrice / vatPercent) as unknown, so the payload is
+    // not assignable to CreateProductInput (number) without reconciling
+    // the action input/output type universes.
     const newProduct = await ProductRepository.createProduct(payload as any);
     // REG-27: audit the creation (actor = the acting user).
     await recordAuditForSessionUser({
       action: AUDIT_ACTIONS.PRODUCT_CREATED,
       entity: "product",
-      entityId: (newProduct as any)?.id ?? null,
+      entityId: newProduct?.id ?? null,
       newValues: {
-        name: (newProduct as any)?.name ?? payload.name ?? null,
-        status: (newProduct as any)?.status ?? payload.status ?? null,
+        name: newProduct?.name ?? payload.name ?? null,
+        status: newProduct?.status ?? payload.status ?? null,
       },
     });
     revalidatePath("/admin/products");
@@ -112,6 +117,8 @@ export const updateAdminProductAction = createAdminAction(
         displayOrder: m.displayOrder || 0,
       })),
     };
+    // REG-65 holdout: same z.preprocess unknown-field conflict as
+    // createAdminProductAction above.
     const updatedProduct = await ProductRepository.updateProduct(
       id,
       payload as any
@@ -124,7 +131,7 @@ export const updateAdminProductAction = createAdminAction(
       entity: "product",
       entityId: id,
       newValues: {
-        name: (updatedProduct as any)?.name ?? null,
+        name: updatedProduct?.name ?? null,
         changed_fields: Object.keys(data || {}),
       },
     });
@@ -171,6 +178,11 @@ export const duplicateAdminProductAction = createAdminAction(
       // ... we could copy SEO and Media too, but keeping it simple for now
     };
 
+    // REG-65 holdout: copyData keeps its cast — it omits fields the
+    // CreateProductInput (zod output) type requires because they carry
+    // schema defaults (stockQuantity / soldCount / totalSold /
+    // alertQuantity), so the literal is not assignable; widening the
+    // repository's input type is out of scope for a type-only batch.
     const newProduct = await ProductRepository.createProduct(copyData as any);
     revalidatePath("/admin/products");
     invalidateProductCache(newProduct?.slug);

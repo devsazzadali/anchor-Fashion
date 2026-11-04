@@ -1,6 +1,95 @@
 import { prisma } from "@/lib/prisma";
 import { CustomerProfile, CustomerAddress, CustomerNotification } from "@/types/customer.types";
 
+interface ProfileFieldUpdates {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  avatarUrl?: string;
+}
+
+interface CustomerFieldUpdates {
+  name?: string;
+  phone?: string;
+  email?: string;
+}
+
+/**
+ * Address write payloads — the snake_case fields the account UI sends,
+ * plus the camelCase fallbacks the methods below also read.
+ */
+interface CreateAddressInput {
+  customer_id?: string;
+  customerId?: string;
+  profileId?: string;
+  title?: string | null;
+  first_name?: string;
+  last_name?: string;
+  name?: string;
+  phone?: string;
+  address_line_1?: string;
+  address_line_2?: string | null;
+  addressLine?: string;
+  city?: string;
+  state?: string | null;
+  zip?: string;
+  postalCode?: string | null;
+  country?: string;
+  is_default_shipping?: boolean;
+  is_default_billing?: boolean;
+  isDefault?: boolean;
+}
+
+interface UpdateAddressInput {
+  first_name?: string;
+  last_name?: string;
+  name?: string;
+  phone?: string;
+  address_line_1?: string;
+  address_line_2?: string | null;
+  addressLine?: string;
+  city?: string;
+  state?: string | null;
+  zip?: string;
+  postalCode?: string | null;
+  country?: string;
+  is_default_shipping?: boolean;
+  is_default_billing?: boolean;
+  isDefault?: boolean;
+}
+
+interface CustomerAddressUpdateData {
+  name?: string;
+  phone?: string;
+  addressLine?: string;
+  city?: string;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string;
+  isDefault?: boolean;
+}
+
+interface CreateTicketInput {
+  subject: string;
+  description: string;
+  status?: string;
+  priority?: string;
+  user_id?: string | null;
+  customer_id?: string | null;
+}
+
+interface AddMessageInput {
+  ticket_id: string;
+  sender_id: string;
+  id?: string;
+  // Required, matching Prisma's TicketMessage create contract.
+  body: string;
+  senderType?: string;
+  sender_type?: string;
+  isInternal?: boolean;
+  is_internal?: boolean;
+}
+
 export class CustomerRepository {
   async getProfile(userId: string): Promise<CustomerProfile | null> {
     try {
@@ -47,8 +136,8 @@ export class CustomerRepository {
 
   async updateProfile(userId: string, updates: Partial<CustomerProfile>): Promise<CustomerProfile> {
     try {
-      const profileUpdates: any = {};
-      const customerUpdates: any = {};
+      const profileUpdates: ProfileFieldUpdates = {};
+      const customerUpdates: CustomerFieldUpdates = {};
       
       if (updates.first_name) {
         profileUpdates.firstName = updates.first_name;
@@ -144,7 +233,7 @@ export class CustomerRepository {
     });
   }
 
-  async createAddress(address: any): Promise<CustomerAddress> {
+  async createAddress(address: CreateAddressInput): Promise<CustomerAddress> {
     const rawUserId = address.customer_id || address.customerId || address.profileId;
     let customerId: string | null = null;
     let profileId: string | null = null;
@@ -217,8 +306,8 @@ export class CustomerRepository {
     } as CustomerAddress;
   }
 
-  async updateAddress(id: string, userId: string, updates: any): Promise<CustomerAddress> {
-    const data: any = {};
+  async updateAddress(id: string, userId: string, updates: UpdateAddressInput): Promise<CustomerAddress> {
+    const data: CustomerAddressUpdateData = {};
     if (updates.first_name !== undefined || updates.last_name !== undefined) {
       data.name = `${updates.first_name || ""} ${updates.last_name || ""}`.trim();
     }
@@ -337,7 +426,7 @@ export class CustomerRepository {
     }));
   }
 
-  async createTicket(ticket: any) {
+  async createTicket(ticket: CreateTicketInput) {
     // Map the service payload explicitly: spreading it verbatim leaks the
     // internal `user_id` key into the Prisma create, which Prisma rejects
     // ("Unknown argument") — ticket creation from the portal always failed.
@@ -359,7 +448,7 @@ export class CustomerRepository {
     });
   }
 
-  async addMessage(message: any) {
+  async addMessage(message: AddMessageInput) {
     return await prisma.ticketMessage.create({
       data: {
         ...message,

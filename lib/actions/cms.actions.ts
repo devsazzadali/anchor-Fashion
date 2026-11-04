@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { cmsService } from "@/services/cms.service";
 import { CMSPage, CMSSection, CMSNavigation, CMSPageBlock, CMSMediaItem } from "@/types/cms.types";
 import { revalidatePath } from "next/cache";
@@ -72,7 +73,7 @@ export async function updatePage(id: string, data: unknown): Promise<CMSPage> {
   const page = await cmsService.updatePage(id, data);
   try {
     revalidatePath("/admin/cms");
-    if ((page as any).slug) revalidatePath(`/${(page as any).slug}`);
+    if (page.slug) revalidatePath(`/${page.slug}`);
   } catch {}
   return page;
 }
@@ -151,7 +152,7 @@ export async function getAllNavigations(): Promise<CMSNavigation[]> {
 export async function saveNavigation(
   location: string,
   name: string,
-  items: any[]
+  items: Array<{ label: string; url: string; target?: string; sort_order?: number }>
 ): Promise<CMSNavigation> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
@@ -245,8 +246,8 @@ export async function uploadMedia(formData: FormData) {
       if (!uploadError && uploadData) {
         // Blob mode: upload returns the absolute public URL as data.path —
         // that URL is what the DB stores (Workstream G).
-        if ((uploadData as any).path?.startsWith("http")) {
-          fileUrl = (uploadData as any).path;
+        if (uploadData.path?.startsWith("http")) {
+          fileUrl = uploadData.path;
         } else {
           const { data: publicUrlData } = adminDb.storage.from("media").getPublicUrl(fileName);
           if (publicUrlData?.publicUrl && !publicUrlData.publicUrl.startsWith("data:")) {
@@ -412,7 +413,11 @@ export type PromoBanner = {
 // removed — hero slides and the featured promo come ONLY from CMS banner
 // rows in the database; when none exist the sections render nothing.
 
-function isBannerActive(b: any, now: Date): boolean {
+// The banner row shape CMSRepository.getBanners returns (BannerView in
+// lib/repositories/cms.repository — not exported, so it is derived here).
+type BannerRow = Awaited<ReturnType<CMSRepository["getBanners"]>>[number];
+
+function isBannerActive(b: BannerRow, now: Date): boolean {
   if (b.is_active === false) return false;
   if (b.start_date && b.end_date) {
     const s = new Date(b.start_date).getTime();
@@ -433,7 +438,7 @@ function isBannerActive(b: any, now: Date): boolean {
   return true;
 }
 
-async function prismaRowToHeroSlide(b: any): Promise<HeroSlide> {
+async function prismaRowToHeroSlide(b: BannerRow): Promise<HeroSlide> {
   const cleanImage = (await persistDataUrlImage(b.image_url, String(b.id))) || b.image_url || "/images/home/hero-banner.png";
   const cleanMedia = b.media_url ? ((await persistDataUrlImage(b.media_url, `media-${b.id}`)) || b.media_url) : cleanImage;
 
@@ -745,13 +750,13 @@ export async function getSeoSettings() {
     const setting = await prisma.setting.findUnique({
       where: { key: "seo_settings" },
     });
-    return (setting?.value as any) || {};
+    return setting?.value || {};
   } catch {
     return {};
   }
 }
 
-export async function updateSeoSettings(data: any) {
+export async function updateSeoSettings(data: Prisma.InputJsonValue) {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {

@@ -2,6 +2,26 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { prisma } from "@/lib/prisma";
 import { BlogPost, BlogCategory, BlogTag } from "@/types/blog.types";
 
+/**
+ * Row shape of blog_posts as the fluent builder returns it (select "*"),
+ * plus the relation fields attachBlogRelations / populateMediaUrls
+ * attach and mutate. Derived from the reads in this file.
+ */
+interface BlogPostDbRow {
+  id: string;
+  category_id?: string | null;
+  featured_image?: string | null;
+  blog_categories?: BlogCategory | null;
+  blog_post_tags?: BlogPostTagJoinRow[];
+  blog_tags?: BlogTag[];
+}
+
+interface BlogPostTagJoinRow {
+  post_id: string;
+  tag_id: string;
+  blog_tags: BlogTag | null;
+}
+
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -56,7 +76,7 @@ async function resolveFeaturedImageForWrite(
   return trimmed;
 }
 
-async function populateMediaUrls(posts: any[]): Promise<void> {
+async function populateMediaUrls(posts: BlogPostDbRow[]): Promise<void> {
   if (!posts || posts.length === 0) return;
 
   const uuidMap = new Map<string, string>();
@@ -87,7 +107,7 @@ async function populateMediaUrls(posts: any[]): Promise<void> {
 
     for (const p of posts) {
       if (p.featured_image && uuidMap.has(p.featured_image)) {
-        p.featured_image = uuidMap.get(p.featured_image);
+        p.featured_image = uuidMap.get(p.featured_image)!;
       }
     }
   }
@@ -105,7 +125,7 @@ async function populateMediaUrls(posts: any[]): Promise<void> {
  * (single category object), `blog_post_tags` (join rows with the tag
  * nested) and `blog_tags` (flat tag list, the declared BlogPost type).
  */
-async function attachBlogRelations(posts: any[], withTags: boolean): Promise<void> {
+async function attachBlogRelations(posts: BlogPostDbRow[], withTags: boolean): Promise<void> {
   if (!posts || posts.length === 0) return;
 
   const categoryIds = [...new Set(posts.map((p) => p.category_id).filter(Boolean))];
@@ -135,14 +155,14 @@ async function attachBlogRelations(posts: any[], withTags: boolean): Promise<voi
 
   const postIds = posts.map((p) => p.id).filter(Boolean);
   const joins = postIds.length
-    ? await (prisma as any).blog_post_tags.findMany({
+    ? await prisma.blog_post_tags.findMany({
         where: { post_id: { in: postIds } },
       })
     : [];
-  const tagIds = [...new Set(joins.map((j: any) => j.tag_id).filter(Boolean))];
+  const tagIds = [...new Set(joins.map((j) => j.tag_id).filter(Boolean))];
   const tagById = new Map<string, BlogTag>();
   if (tagIds.length > 0) {
-    const tags = await (prisma as any).blog_tags.findMany({
+    const tags = await prisma.blog_tags.findMany({
       where: { id: { in: tagIds } },
     });
     for (const t of tags) {
@@ -154,7 +174,7 @@ async function attachBlogRelations(posts: any[], withTags: boolean): Promise<voi
       } as BlogTag);
     }
   }
-  const joinsByPost = new Map<string, any[]>();
+  const joinsByPost = new Map<string, BlogPostTagJoinRow[]>();
   for (const j of joins) {
     if (!joinsByPost.has(j.post_id)) joinsByPost.set(j.post_id, []);
     joinsByPost.get(j.post_id)!.push({
@@ -167,8 +187,8 @@ async function attachBlogRelations(posts: any[], withTags: boolean): Promise<voi
     const postJoins = joinsByPost.get(post.id) || [];
     post.blog_post_tags = postJoins;
     post.blog_tags = postJoins
-      .map((j: any) => j.blog_tags)
-      .filter((t: any): t is BlogTag => !!t);
+      .map((j) => j.blog_tags)
+      .filter((t): t is BlogTag => !!t);
   }
 }
 
@@ -236,7 +256,7 @@ export class BlogRepository {
   async createPost(post: Partial<BlogPost>): Promise<BlogPost> {
     const admin = createAdminDbClient();
 
-    const cleanedPost: any = { ...post };
+    const cleanedPost: Partial<BlogPost> = { ...post };
     if (cleanedPost.category_id !== undefined) {
       if (!cleanedPost.category_id || !UUID_REGEX.test(cleanedPost.category_id)) {
         cleanedPost.category_id = null;
@@ -269,7 +289,7 @@ export class BlogRepository {
   async updatePost(id: string, updates: Partial<BlogPost>): Promise<BlogPost> {
     const admin = createAdminDbClient();
 
-    const cleanedUpdates: any = { ...updates };
+    const cleanedUpdates: Partial<BlogPost> = { ...updates };
     if (cleanedUpdates.category_id !== undefined) {
       if (!cleanedUpdates.category_id || !UUID_REGEX.test(cleanedUpdates.category_id)) {
         cleanedUpdates.category_id = null;

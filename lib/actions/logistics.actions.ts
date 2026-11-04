@@ -5,7 +5,7 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { CourierProviderRecord } from "@/types/shipping.types";
 import { CourierRegistry } from "@/services/courier/courier-registry";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
-import { HealthCheckResult } from "@/lib/couriers/types";
+import { CourierCode, HealthCheckResult } from "@/lib/couriers/types";
 import {
   encrypt,
   decrypt,
@@ -28,6 +28,26 @@ export interface CourierMetrics {
 }
 
 /**
+ * courier_providers row as the fluent builder returns it (select "*") —
+ * the real columns named in the Phase 9 comment below; `config` carries
+ * the credentials/settings/is_sandbox bags the registry merges.
+ */
+interface CourierProviderDbRow {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean | null;
+  api_key: string | null;
+  api_secret: string | null;
+  config: {
+    credentials?: Record<string, any>;
+    settings?: Record<string, any>;
+    is_sandbox?: boolean | string;
+  } | null;
+  created_at: string;
+}
+
+/**
  * Fetch all courier providers with credentials securely masked
  */
 /**
@@ -40,7 +60,7 @@ export interface CourierMetrics {
  * the raw api_key/api_secret values to the browser. This version returns
  * only masked credentials and derives display fields from real columns.
  */
-function effectiveCredentials(row: any): Record<string, any> {
+function effectiveCredentials(row: CourierProviderDbRow): Record<string, any> {
   const config = (row.config ?? {}) as Record<string, any>;
   const creds: Record<string, any> = {
     ...decryptCredentialsObject((config.credentials ?? {}) as Record<string, any>),
@@ -54,7 +74,7 @@ function effectiveCredentials(row: any): Record<string, any> {
   return creds;
 }
 
-function sanitizeProvider(row: any): CourierProviderRecord {
+function sanitizeProvider(row: CourierProviderDbRow): CourierProviderRecord {
   const config = (row.config ?? {}) as Record<string, any>;
   return {
     id: row.id,
@@ -228,11 +248,11 @@ export async function updateCourierProviderAction(
     if (typeof updates.is_active === "boolean") {
       dbPayload.is_active = updates.is_active;
     }
-    if (typeof (updates as any).is_sandbox === "boolean") {
-      nextConfig.is_sandbox = (updates as any).is_sandbox;
+    if (typeof updates.is_sandbox === "boolean") {
+      nextConfig.is_sandbox = updates.is_sandbox;
     }
 
-    const credentials = (updates as any).credentials;
+    const credentials = updates.credentials;
     if (credentials !== undefined && typeof credentials === "object") {
       const credEntries = Object.entries(credentials);
       const isExplicitEmpty = credEntries.length === 0;
@@ -315,7 +335,7 @@ export async function testCourierConnectionAction(
 
       if (isExplicitEmpty || allValuesEmpty) {
         provider = CourierFactory.getProvider(
-          record.code as any,
+          record.code as CourierCode,
           {},
           {
             environment:
@@ -353,7 +373,7 @@ export async function testCourierConnectionAction(
         }
 
         provider = CourierFactory.getProvider(
-          record.code as any,
+          record.code as CourierCode,
           merged,
           {
             environment:
@@ -457,13 +477,24 @@ export async function getCourierMetricsAction(): Promise<
   }
 }
 
+/** courier_api_logs row as the fluent builder returns it (select "*"). */
+interface CourierApiLogRow {
+  id: string;
+  courier: string | null;
+  endpoint: string | null;
+  request: unknown;
+  response: unknown;
+  status_code: number | null;
+  created_at: string | null;
+}
+
 /**
  * Fetches recent API logs for a given courier code
  */
 export async function getCourierLogsAction(
   courierCode?: string,
   limit = 50
-): Promise<ActionResponse<any[]>> {
+): Promise<ActionResponse<CourierApiLogRow[]>> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyManager();
   try {

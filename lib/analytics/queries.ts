@@ -1,5 +1,38 @@
 import { createDbClient } from "@/lib/db/client";
 
+/**
+ * Row shapes for the fluent-builder reads below, derived from each
+ * query's own select list (the builder serializes values: Decimals
+ * become numbers, ids stay strings).
+ */
+interface AnalyticsProductCostRow {
+  id: string | number;
+  cost_price: number | string | null;
+}
+
+interface AnalyticsOrderItemRow {
+  order_id: string;
+  product_id: string | null;
+  quantity: number | string | null;
+  unit_price: number | string | null;
+  total_price?: number | string | null;
+}
+
+interface AnalyticsOrderStatusRow {
+  id: string;
+  status: string | null;
+}
+
+interface AnalyticsProductCategoryRow {
+  id: string | number;
+  category_id: string | number | null;
+}
+
+interface AnalyticsCategoryRow {
+  id: string | number;
+  name: string | null;
+}
+
 export async function getExecutiveKpis() {
   const db = await createDbClient();
 
@@ -24,10 +57,10 @@ export async function getExecutiveKpis() {
     .from("products")
     .select("id, cost_price");
   const costByProduct = new Map<string, number>(
-    (products || []).map((p: any) => [String(p.id), Number(p.cost_price) || 0] as [string, number])
+    (products || []).map((p: AnalyticsProductCostRow) => [String(p.id), Number(p.cost_price) || 0] as [string, number])
   );
   const profitByOrder = new Map<string, number>();
-  for (const it of (items || []) as any[]) {
+  for (const it of (items || []) as AnalyticsOrderItemRow[]) {
     if (!it.product_id) continue;
     const margin =
       (Number(it.unit_price) || 0) - (costByProduct.get(it.product_id) || 0);
@@ -90,10 +123,10 @@ export async function getSalesTrends() {
     .from("products")
     .select("id, cost_price");
   const costByProduct = new Map<string, number>(
-    (products || []).map((p: any) => [String(p.id), Number(p.cost_price) || 0] as [string, number])
+    (products || []).map((p: AnalyticsProductCostRow) => [String(p.id), Number(p.cost_price) || 0] as [string, number])
   );
   const profitByOrder = new Map<string, number>();
-  for (const it of (items || []) as any[]) {
+  for (const it of (items || []) as AnalyticsOrderItemRow[]) {
     if (!it.product_id) continue;
     const margin =
       (Number(it.unit_price) || 0) - (costByProduct.get(it.product_id) || 0);
@@ -137,11 +170,11 @@ export async function getTopCategories() {
     .select("id, status");
   const liveOrderIds = new Set(
     (orders || [])
-      .filter((o: any) => {
+      .filter((o: AnalyticsOrderStatusRow) => {
         const s = (o.status || "").toLowerCase();
         return s !== "cancelled" && s !== "returned" && s !== "failed" && s !== "refunded";
       })
-      .map((o: any) => o.id)
+      .map((o: AnalyticsOrderStatusRow) => o.id)
   );
 
   const { data: items } = await db
@@ -154,14 +187,14 @@ export async function getTopCategories() {
     .from("categories")
     .select("id, name");
   const categoryByProduct = new Map<string, string>(
-    (products || []).map((p: any) => [String(p.id), String(p.category_id)] as [string, string])
+    (products || []).map((p: AnalyticsProductCategoryRow) => [String(p.id), String(p.category_id)] as [string, string])
   );
   const nameByCategory = new Map<string, string>(
-    (categories || []).map((c: any) => [String(c.id), String(c.name)] as [string, string])
+    (categories || []).map((c: AnalyticsCategoryRow) => [String(c.id), String(c.name)] as [string, string])
   );
 
   const totals = new Map<string, number>();
-  for (const it of (items || []) as any[]) {
+  for (const it of (items || []) as AnalyticsOrderItemRow[]) {
     if (!liveOrderIds.has(it.order_id) || !it.product_id) continue;
     const name =
       nameByCategory.get(categoryByProduct.get(String(it.product_id)) || "") || "Uncategorized";

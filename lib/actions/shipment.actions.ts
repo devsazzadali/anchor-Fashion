@@ -17,6 +17,11 @@ import {
   CancelShipmentData,
 } from "@/schemas/shipping.schema";
 import { verifyStaff } from "@/lib/security/roles";
+import {
+  PaginatedResult,
+  Shipment,
+  TrackingTimeline,
+} from "@/types/shipping.types";
 
 // ---------------------------------------------------------------------------
 // Shared response type
@@ -57,7 +62,7 @@ export async function createShipmentAction(
   try {
     const userId = await getCurrentUserId();
     const service = new ShippingService();
-    const shipment = await service.createShipment(parse.data as any, userId);
+    const shipment = await service.createShipment(parse.data, userId);
 
     revalidatePath("/admin/shipping");
     revalidatePath(`/admin/orders/${parse.data.orderId}`);
@@ -93,7 +98,7 @@ export async function updateShipmentAction(
     const service = new ShippingService();
     const updated = await service.updateShipment(
       shipmentId,
-      parse.data as any,
+      parse.data,
       userId
     );
 
@@ -287,7 +292,7 @@ export async function syncTrackingAction(
 
 export async function fetchShipmentsAction(
   rawFilters: Record<string, any> = {}
-): Promise<ActionResponse<any>> {
+): Promise<ActionResponse<PaginatedResult<Shipment>>> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   const parse = shipmentFiltersSchema.safeParse(rawFilters);
@@ -297,13 +302,18 @@ export async function fetchShipmentsAction(
 
   try {
     const service = new ShippingService();
-    const result = await service.listShipments(parse.data as any);
+    const result = await service.listShipments(parse.data);
     return { success: true, data: result };
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }
 }
 
+// REG-65 holdout: this action's return stays untyped — the admin
+// shipping detail page reads courier_name / estimated_delivery off the
+// result, fields ShipmentWithDetails does not declare (the type carries
+// estimated_delivery_date); reconciling that page with the declared
+// shipment type universe is out of scope for a type-only batch.
 export async function fetchShipmentByIdAction(
   shipmentId: string
 ): Promise<ActionResponse<any>> {
@@ -322,7 +332,7 @@ export async function fetchShipmentByIdAction(
 
 export async function getTrackingTimelineAction(
   trackingNumber: string
-): Promise<ActionResponse<any>> {
+): Promise<ActionResponse<TrackingTimeline>> {
   const parse = trackingQuerySchema.safeParse({ trackingNumber });
   if (!parse.success) {
     return {
@@ -348,7 +358,7 @@ export async function getTrackingTimelineAction(
 
 export async function refreshTrackingAction(
   shipmentId: string
-): Promise<ActionResponse<any>> {
+): Promise<ActionResponse<TrackingTimeline | null>> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
   try {
