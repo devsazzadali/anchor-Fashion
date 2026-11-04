@@ -394,7 +394,7 @@ export class SSLCommerzService {
   /**
    * Authoritative Transaction Query by Merchant Transaction ID
    */
-  static async queryTransaction(tranId: string): Promise<any> {
+  static async queryTransaction(tranId: string): Promise<unknown> {
     const config = await this.getConfig();
 
     const queryParams = new URLSearchParams({

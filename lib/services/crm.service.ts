@@ -3,7 +3,12 @@ import {
   CRMCustomer,
   CRMLead,
   CRMNote,
+  CommunicationLog,
 } from "@/types/crm.types";
+
+type TimelineEntry =
+  | { type: "note"; date: string; data: CRMNote }
+  | { type: "comm"; date: string; data: CommunicationLog };
 
 export class CRMService {
   private repository: CRMRepository;
@@ -43,14 +48,18 @@ export class CRMService {
     });
   }
 
-  async getTimeline(profileId: string): Promise<any[]> {
+  async getTimeline(profileId: string): Promise<TimelineEntry[]> {
     // In a real implementation, you would aggregate notes, orders, and comm logs.
     const notes = await this.getNotes(profileId);
     const comms = await this.repository.getCommunicationLogs(profileId);
 
-    const timeline = [
-      ...notes.map((n) => ({ type: "note", date: n.created_at, data: n })),
-      ...comms.map((c) => ({ type: "comm", date: c.created_at, data: c })),
+    const timeline: TimelineEntry[] = [
+      ...notes.map(
+        (n): TimelineEntry => ({ type: "note", date: n.created_at, data: n })
+      ),
+      ...comms.map(
+        (c): TimelineEntry => ({ type: "comm", date: c.created_at, data: c })
+      ),
     ];
 
     return timeline.sort(

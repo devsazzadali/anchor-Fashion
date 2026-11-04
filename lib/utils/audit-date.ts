@@ -85,7 +85,10 @@ export function formatAuditDate(audit: {
   }
   const created = audit?.created_at;
   if (created) {
-    const dt = created instanceof Date ? created : new Date(created as any);
+    const dt =
+      created instanceof Date
+        ? created
+        : new Date(created as string | number | Date);
     if (!isNaN(dt.getTime())) {
       const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: "Asia/Dhaka",

@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
-import { getServerSession, resolveUserRole } from "@/lib/auth/server";
+import {
+  getServerSession,
+  resolveUserRole,
+  type NeonAuthSessionUser,
+} from "@/lib/auth/server";
 import { MANAGER_ROLES, MARKETING_ROLES } from "@/lib/constants/auth";
 
 /**
@@ -25,7 +29,7 @@ export const MANAGER_OR_MARKETING_ROLES: readonly string[] = Array.from(
 export async function requireManagerSection(
   allowedRoles: readonly string[],
   nextPath: string
-): Promise<{ user: any; role: string }> {
+): Promise<{ user: NeonAuthSessionUser; role: string }> {
   const { user } = await getServerSession();
 
   if (!user) {

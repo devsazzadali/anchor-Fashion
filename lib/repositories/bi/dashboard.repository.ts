@@ -1,5 +1,15 @@
 import { prisma } from "@/lib/prisma";
 
+interface RecentCustomerRow {
+  user_id: string;
+  full_name: string;
+  email: string | null;
+  avatar_url: string | null;
+  latest_order_id: string;
+  latest_order_status: string;
+  last_order_date: string;
+}
+
 export class DashboardRepository {
   async getDailyRevenue(days = 7) {
     const dateLimit = new Date();
@@ -486,7 +496,7 @@ export class DashboardRepository {
     });
 
     const seen = new Set<string>();
-    const rows: any[] = [];
+    const rows: RecentCustomerRow[] = [];
     for (const ord of latestOrders) {
       const key = ord.profileId || ord.id;
       if (seen.has(key)) continue;

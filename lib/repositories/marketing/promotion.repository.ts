@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export interface PromotionRecord {
   id: string;
@@ -28,7 +29,7 @@ export interface CreatePromotionInput {
   description?: string;
 }
 
-function mapPromotion(row: any): PromotionRecord {
+function mapPromotion(row: Prisma.promotionsGetPayload<{}>): PromotionRecord {
   return {
     id: row.id,
     name: row.title ?? "",

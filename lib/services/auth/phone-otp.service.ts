@@ -57,7 +57,7 @@ export class PhoneOtpService {
     const db = createAdminDbClient();
     await db
       .from("cod_verifications")
-      .upsert(row as any, { onConflict: "session_id" });
+      .upsert(row, { onConflict: "session_id" });
   }
 
   /**

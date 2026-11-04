@@ -10,7 +10,13 @@ function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
   try {
     if (!sharedAudioCtx) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (
+          window as typeof window & {
+            webkitAudioContext?: typeof AudioContext;
+          }
+        ).webkitAudioContext;
       if (AudioCtx) {
         sharedAudioCtx = new AudioCtx();
       }
