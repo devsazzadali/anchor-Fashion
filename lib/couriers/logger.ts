@@ -61,10 +61,10 @@ export async function logCourierApiCall(entry: CourierApiLogEntry): Promise<void
         request_id: entry.requestId || null,
         response_time_ms: entry.responseTimeMs,
         success: entry.success,
-        payload: sanitizedPayload as any,
+        payload: sanitizedPayload,
       },
       response: {
-        data: sanitizedResponse as any,
+        data: sanitizedResponse,
         error_message: entry.errorMessage || null,
       },
     });

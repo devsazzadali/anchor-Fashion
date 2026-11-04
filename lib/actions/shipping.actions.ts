@@ -129,11 +129,11 @@ export async function createZoneAction(
 
     revalidateZoneConsumers();
     return { success: true, data: { id: zone.id } };
-  } catch (err: any) {
-    if (String(err?.code) === "P2002") {
+  } catch (err) {
+    if (String((err as { code?: unknown })?.code) === "P2002") {
       return { success: false, error: "A zone with this code already exists." };
     }
-    return { success: false, error: err.message || "Failed to create zone" };
+    return { success: false, error: (err as Error).message || "Failed to create zone" };
   }
 }
 
@@ -170,11 +170,11 @@ export async function updateZoneAction(
 
     revalidateZoneConsumers();
     return { success: true };
-  } catch (err: any) {
-    if (String(err?.code) === "P2002") {
+  } catch (err) {
+    if (String((err as { code?: unknown })?.code) === "P2002") {
       return { success: false, error: "A zone with this code already exists." };
     }
-    return { success: false, error: err.message || "Failed to update zone" };
+    return { success: false, error: (err as Error).message || "Failed to update zone" };
   }
 }
 

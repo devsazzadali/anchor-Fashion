@@ -75,7 +75,7 @@ export class SteadfastClient {
         clearTimeout(timeoutId);
         const durationMs = Date.now() - startTime;
 
-        let responseData: any;
+        let responseData: unknown;
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
           responseData = await response.json();
@@ -120,18 +120,19 @@ export class SteadfastClient {
         }
 
         // Validation / client error
+        const responseBody = responseData as { message?: string; errors?: unknown };
         const msg =
-          responseData?.message ||
-          (responseData?.errors ? JSON.stringify(responseData.errors) : `HTTP ${response.status}`);
+          responseBody?.message ||
+          (responseBody?.errors ? JSON.stringify(responseBody.errors) : `HTTP ${response.status}`);
         throw new CourierValidationError("steadfast", msg);
-      } catch (err: any) {
+      } catch (err) {
         clearTimeout(timeoutId);
         const durationMs = Date.now() - startTime;
 
-        if (err.name === "AbortError") {
+        if ((err as Error).name === "AbortError") {
           lastError = new CourierNetworkError("steadfast", `Request timed out after ${this.timeoutMs}ms`);
         } else {
-          lastError = err;
+          lastError = err as Error;
         }
 
         await logCourierApiCall({

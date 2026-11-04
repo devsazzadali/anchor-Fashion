@@ -58,7 +58,7 @@ export async function uploadImageAction(formData: FormData): Promise<{
     const bucket = (formData.get("bucket") as string) || "products";
     const folder = sanitizeFolder((formData.get("folder") as string) || "uploads");
 
-    if (!ALLOWED_BUCKETS.includes(bucket as any)) {
+    if (!(ALLOWED_BUCKETS as readonly string[]).includes(bucket)) {
       return { success: false, error: `Invalid bucket: ${bucket}` };
     }
 
@@ -140,7 +140,7 @@ export async function deleteImageAction(
   try {
     await verifyStaff();
 
-    if (!ALLOWED_BUCKETS.includes(bucket as any)) {
+    if (!(ALLOWED_BUCKETS as readonly string[]).includes(bucket)) {
       return { success: false, error: `Invalid bucket: ${bucket}` };
     }
     // Reject traversal / odd characters in the storage path.

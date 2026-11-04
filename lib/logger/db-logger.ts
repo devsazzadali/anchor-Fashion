@@ -24,9 +24,9 @@ export class DbLogger {
     }
   }
 
-  static info(message: string, meta?: any) {
+  static info(message: string, meta?: unknown) {
   }
 
-  static error(message: string, error?: any) {
+  static error(message: string, error?: unknown) {
   }
 }

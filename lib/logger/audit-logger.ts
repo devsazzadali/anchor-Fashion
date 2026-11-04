@@ -8,8 +8,8 @@ export interface AuditLogPayload {
   action: AuditEvent;
   entity_type: string;
   entity_id: string;
-  old_data?: any;
-  new_data?: any;
+  old_data?: unknown;
+  new_data?: unknown;
   ip_address?: string;
   user_agent?: string;
 }

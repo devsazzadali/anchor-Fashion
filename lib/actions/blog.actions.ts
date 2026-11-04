@@ -44,7 +44,7 @@ export async function getPostById(id: string): Promise<BlogPost | null> {
 export async function createPost(data: unknown): Promise<BlogPost> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  let authorId = (data as any)?.author_id;
+  let authorId = (data as Record<string, unknown> | null | undefined)?.author_id;
 
   try {
     const db = await createDbClient();
@@ -74,7 +74,7 @@ export async function createPost(data: unknown): Promise<BlogPost> {
   }
 
   const postData = {
-    ...(data as any),
+    ...(data as Record<string, unknown>),
     ...(authorId ? { author_id: authorId } : {}),
   };
 

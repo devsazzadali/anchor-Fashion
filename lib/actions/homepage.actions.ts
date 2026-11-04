@@ -40,7 +40,7 @@ async function readSetting<T>(key: string, fallback: T): Promise<T> {
     const db = createDbClient();
     const { data } = await db.from("settings").select("value").eq("key", key).single();
     if (data?.value && typeof data.value === "object") {
-      return { ...fallback, ...(data.value as any) };
+      return { ...fallback, ...data.value };
     }
     return fallback;
   } catch {
@@ -48,7 +48,7 @@ async function readSetting<T>(key: string, fallback: T): Promise<T> {
   }
 }
 
-async function writeSetting(key: string, value: any, description: string) {
+async function writeSetting(key: string, value: unknown, description: string) {
   const db = createAdminDbClient();
   const { error } = await db
     .from("settings")

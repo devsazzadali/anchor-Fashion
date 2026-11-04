@@ -30,13 +30,13 @@ export async function subscribeNewsletterAction(email: string): Promise<{
       .maybeSingle();
 
     if (existing) {
-      if ((existing as any).is_active) {
+      if (existing.is_active) {
         return { success: true, alreadySubscribed: true };
       }
       const { error } = await db
         .from("newsletter_subscribers")
         .update({ is_active: true })
-        .eq("id", (existing as any).id);
+        .eq("id", existing.id);
       if (error) throw error;
       return { success: true };
     }
