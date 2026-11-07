@@ -13,17 +13,6 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
-// REG-65: boundary contract for a Steadfast activity log off the untyped
-// API payload. Fields read without a fallback are asserted as strings; the
-// `type` alias (not an interface) keeps `raw: log` assignable to
-// `Record<string, any>` on TrackingUpdate.
-type SteadfastActivityLog = {
-  status: string;
-  status_message?: string;
-  location?: string;
-  created_at?: string;
-};
-
 export class SteadfastProvider implements ICourierProvider {
   readonly id = "steadfast" as const;
   readonly name = "Steadfast Courier";
@@ -99,8 +88,8 @@ export class SteadfastProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to create consignment"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -129,8 +118,8 @@ export class SteadfastProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to cancel consignment"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -150,7 +139,7 @@ export class SteadfastProvider implements ICourierProvider {
 
       if (data.status === 200) {
         const updates: TrackingUpdate[] = (data.activity_log || []).map(
-          (log: SteadfastActivityLog) => ({
+          (log: any) => ({
             status: log.status,
             statusDescription: log.status_message || log.status,
             location: log.location || "",
@@ -176,8 +165,8 @@ export class SteadfastProvider implements ICourierProvider {
         "API_ERROR",
         "Failed to retrieve tracking info"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -219,8 +208,8 @@ export class SteadfastProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -239,7 +228,7 @@ export class SteadfastProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

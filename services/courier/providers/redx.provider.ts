@@ -14,17 +14,6 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
-// REG-65: boundary contract for a RedX tracking event off the untyped API
-// payload. Fields read without a fallback are asserted as strings; the
-// `type` alias (not an interface) keeps `raw: event` assignable to
-// `Record<string, any>` on TrackingUpdate.
-type RedxTrackingEvent = {
-  type: string;
-  message: string;
-  hub?: string;
-  created_at: string;
-};
-
 export class RedXProvider implements ICourierProvider {
   readonly id = "redx" as const;
   readonly name = "RedX Courier";
@@ -89,8 +78,8 @@ export class RedXProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to create RedX parcel"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -120,8 +109,8 @@ export class RedXProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to cancel RedX parcel"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -141,7 +130,7 @@ export class RedXProvider implements ICourierProvider {
 
       if (data.tracking_events) {
         const updates: TrackingUpdate[] = data.tracking_events.map(
-          (event: RedxTrackingEvent) => ({
+          (event: any) => ({
             status: event.type,
             statusDescription: event.message,
             location: event.hub || "",
@@ -164,8 +153,8 @@ export class RedXProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Tracking data not found");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -201,8 +190,8 @@ export class RedXProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -222,7 +211,7 @@ export class RedXProvider implements ICourierProvider {
     return map[raw.toUpperCase()] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

@@ -42,14 +42,14 @@ export class EmailGatewayService {
     try {
       const provider = await this.getProvider(providerCode);
       return await provider.sendEmail(request);
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         providerId: providerCode,
         timestamp: new Date().toISOString(),
         error: {
           code: "GATEWAY_ERROR",
-          message: (error as Error).message,
+          message: error.message,
         },
       };
     }

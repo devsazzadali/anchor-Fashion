@@ -27,9 +27,7 @@ const SENSITIVE_KEYS = [
 /**
  * Recursively redacts sensitive keys from objects before logging
  */
-export function sanitizeLogData(data: Record<string, unknown>): Record<string, unknown>;
-export function sanitizeLogData(data: unknown): unknown;
-export function sanitizeLogData(data: unknown): unknown {
+export function sanitizeLogData(data: any): any {
   if (data === null || data === undefined) return data;
   if (typeof data !== "object") return data;
 
@@ -142,7 +140,7 @@ export function logServerError(
   } else if (typeof error === "string") {
     message = error;
   } else if (error && typeof error === "object") {
-    message = (error as Error).message || JSON.stringify(error);
+    message = (error as any).message || JSON.stringify(error);
   }
 
   // Redact secrets from stack and message if any were captured
@@ -165,6 +163,7 @@ export function logServerError(
   };
 
   // 1. Output structured JSON to console for Docker/Vercel/CloudWatch
+  console.error(`[ERROR] [${context}]`, JSON.stringify(logPayload));
 
   // 2. Forward to Central Observability Service
   try {

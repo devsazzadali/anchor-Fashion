@@ -91,10 +91,6 @@ export class CouponService {
       }
 
       // 5. Validate Per-User Limit
-      // A3-A8: callers pass the phone-bound auto-profile id for guests
-      // (OrderService.resolveCouponCustomerId), so this check now binds
-      // guests by their verified checkout phone — previously guests
-      // arrived with no id and the check was skipped entirely.
       const perUserLimit = couponData.per_user_limit || 1;
       if (customerId && perUserLimit) {
         const { count, error: usageError } = await db
@@ -104,6 +100,7 @@ export class CouponService {
           .eq("customer_id", customerId);
 
         if (usageError) {
+          console.error("Error checking customer usage:", usageError);
         } else if (count !== null && count >= perUserLimit) {
           return { isValid: false, discount: 0, error: "You have already used this coupon" };
         }
@@ -153,6 +150,7 @@ export class CouponService {
       };
 
     } catch (err) {
+      console.error("Error validating coupon:", err);
       return { isValid: false, discount: 0, error: "Internal error validating coupon" };
     }
   }
@@ -177,12 +175,14 @@ export class CouponService {
       });
 
       if (error) {
+        console.error("Error consuming coupon atomically:", error);
         throw new Error(error.message || "Failed to consume coupon");
       }
 
       return true;
-    } catch (err) {
-      throw new Error((err as Error).message || "Failed to consume coupon");
+    } catch (err: any) {
+      console.error("Failed to consume coupon:", err);
+      throw new Error(err.message || "Failed to consume coupon");
     }
   }
 
@@ -198,10 +198,12 @@ export class CouponService {
       });
 
       if (error) {
+        console.warn("Failed to release coupon atomically:", error);
       }
 
       return true;
-    } catch (err) {
+    } catch (err: any) {
+      console.error("Failed to release coupon:", err);
       return false; // don't throw, since this is used in cleanup
     }
   }
@@ -212,7 +214,7 @@ export class CouponService {
   static async validatePromoRule(
     code: string,
     subtotal: number,
-    cartItems: unknown[]
+    cartItems: any[]
   ) {
     const db = this.getAdminClient();
     const { data: promo, error } = await db

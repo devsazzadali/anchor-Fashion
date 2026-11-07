@@ -14,17 +14,6 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
-// REG-65: boundary contract for a DHL tracking event off the untyped API
-// payload. Fields read without a fallback are asserted as strings; the
-// `type` alias (not an interface) keeps `raw: e` assignable to
-// `Record<string, any>` on TrackingUpdate.
-type DhlTrackingEvent = {
-  typeCode: string;
-  description: string;
-  serviceArea?: { description?: string }[];
-  timestamp: string;
-};
-
 export class DHLProvider implements ICourierProvider {
   readonly id = "dhl" as const;
   readonly name = "DHL Express";
@@ -32,15 +21,11 @@ export class DHLProvider implements ICourierProvider {
 
   private readonly apiKey: string;
   private readonly accountNumber: string;
-  private readonly shipperPhone: string;
   private readonly baseUrl: string;
 
   constructor(config: Record<string, any>, isSandbox: boolean) {
     this.apiKey = config.apiKey ?? "";
     this.accountNumber = config.accountNumber ?? "";
-    // REG-87: the shipper contact phone comes from the provider config
-    // (Admin → Shipping → Couriers) — never an invented constant.
-    this.shipperPhone = config.shipperPhone ?? "";
     this.isSandbox = isSandbox;
     this.baseUrl = isSandbox
       ? "https://express.api.dhl.com/mydhlapi/test"
@@ -58,12 +43,6 @@ export class DHLProvider implements ICourierProvider {
     request: ConsignmentRequest
   ): Promise<ProviderResponse<ConsignmentResponse>> {
     try {
-      if (!this.shipperPhone) {
-        return this.errorResponse(
-          "CONFIGURATION",
-          "DHL shipper phone is not configured — set shipperPhone in the courier provider settings (Admin → Shipping → Couriers)."
-        );
-      }
       const shipDate = new Date();
       shipDate.setDate(shipDate.getDate() + 1);
 
@@ -84,7 +63,7 @@ export class DHLProvider implements ICourierProvider {
             },
             contactInformation: {
               fullName: "Anchor Fashion",
-              phone: this.shipperPhone,
+              phone: "+8801700000000",
               email: "logistics@anchorfashion.com",
             },
           },
@@ -139,8 +118,8 @@ export class DHLProvider implements ICourierProvider {
         "API_ERROR",
         data.title || "Failed to create DHL shipment"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -165,8 +144,8 @@ export class DHLProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "DHL cancellation failed");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -184,7 +163,7 @@ export class DHLProvider implements ICourierProvider {
 
       if (shipment) {
         const updates: TrackingUpdate[] = (shipment.events || []).map(
-          (e: DhlTrackingEvent) => ({
+          (e: any) => ({
             status: e.typeCode,
             statusDescription: e.description,
             location: e.serviceArea?.[0]?.description || "",
@@ -207,8 +186,8 @@ export class DHLProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Shipment not found");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -246,8 +225,8 @@ export class DHLProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -265,7 +244,7 @@ export class DHLProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

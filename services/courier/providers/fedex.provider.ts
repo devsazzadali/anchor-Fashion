@@ -19,17 +19,6 @@ interface FedExToken {
   expiresAt: number;
 }
 
-// REG-65: boundary contract for a FedEx scan event off the untyped API
-// payload. Fields read without a fallback are asserted as strings; the
-// `type` alias (not an interface) keeps `raw: e` assignable to
-// `Record<string, any>` on TrackingUpdate.
-type FedexScanEvent = {
-  eventType: string;
-  eventDescription: string;
-  scanLocation?: { city?: string };
-  date: string;
-};
-
 export class FedExProvider implements ICourierProvider {
   readonly id = "fedex" as const;
   readonly name = "FedEx";
@@ -38,7 +27,6 @@ export class FedExProvider implements ICourierProvider {
   private readonly clientId: string;
   private readonly clientSecret: string;
   private readonly accountNumber: string;
-  private readonly shipperPhone: string;
   private readonly baseUrl: string;
   private tokenCache: FedExToken | null = null;
 
@@ -46,9 +34,6 @@ export class FedExProvider implements ICourierProvider {
     this.clientId = config.clientId ?? "";
     this.clientSecret = config.clientSecret ?? "";
     this.accountNumber = config.accountNumber ?? "";
-    // REG-87 (sibling of the DHL fix): shipper phone from provider
-    // config, never an invented constant.
-    this.shipperPhone = config.shipperPhone ?? "";
     this.isSandbox = isSandbox;
     this.baseUrl = isSandbox
       ? "https://apis-sandbox.fedex.com"
@@ -94,12 +79,6 @@ export class FedExProvider implements ICourierProvider {
     request: ConsignmentRequest
   ): Promise<ProviderResponse<ConsignmentResponse>> {
     try {
-      if (!this.shipperPhone) {
-        return this.errorResponse(
-          "CONFIGURATION",
-          "FedEx shipper phone is not configured — set shipperPhone in the courier provider settings (Admin → Shipping → Couriers)."
-        );
-      }
       const headers = await this.authHeaders();
 
       const payload = {
@@ -108,7 +87,7 @@ export class FedExProvider implements ICourierProvider {
           shipper: {
             contact: {
               companyName: "Anchor Fashion",
-              phoneNumber: this.shipperPhone,
+              phoneNumber: "+8801700000000",
             },
             address: {
               streetLines: ["House 12, Dhanmondi"],
@@ -169,8 +148,8 @@ export class FedExProvider implements ICourierProvider {
         "API_ERROR",
         data.errors?.[0]?.message || "FedEx shipment creation failed"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -202,8 +181,8 @@ export class FedExProvider implements ICourierProvider {
         "API_ERROR",
         data.errors?.[0]?.message || "Cancel failed"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -229,7 +208,7 @@ export class FedExProvider implements ICourierProvider {
 
       if (track) {
         const updates: TrackingUpdate[] = (track.scanEvents || []).map(
-          (e: FedexScanEvent) => ({
+          (e: any) => ({
             status: e.eventType,
             statusDescription: e.eventDescription,
             location: e.scanLocation?.city || "",
@@ -253,8 +232,8 @@ export class FedExProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "FedEx tracking not found");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -293,8 +272,8 @@ export class FedExProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -312,7 +291,7 @@ export class FedExProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

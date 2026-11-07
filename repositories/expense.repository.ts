@@ -2,30 +2,6 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { Expense, ExpenseFilters, ExpenseSummary } from "@/types/finance.types";
 import { ExpenseFormValues } from "@/schemas/finance.schema";
 
-// REG-65: boundary contract for the untyped builder rows mapped to Expense.
-// Fields passed straight through are asserted at their target types; fields
-// read behind `||` fallbacks are asserted at the fallback's type. The mapper
-// body itself is byte-identical.
-type ExpenseRow = {
-  id: string;
-  date: string;
-  category: string;
-  description: string;
-  amount: unknown;
-  status: unknown;
-  vendor: string;
-  branch_id: string | null;
-  branch?: { name?: string | null } | null;
-  warehouse_id: string | null;
-  warehouse?: { name?: string | null } | null;
-  payment_method: string;
-  notes: string | null;
-  receipt_url: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
 export class ExpenseRepository {
   private getAdminClient() {
     return createAdminDbClient();
@@ -95,6 +71,9 @@ export class ExpenseRepository {
       if (error) {
         // If table doesn't exist yet in schema cache, log guidance and return empty array
         if (error.code === "PGRST205" || error.message.includes("Could not find the table")) {
+          console.warn(
+            "[ExpenseRepository] Table 'public.expenses' not found in database. Please run the migration: db/migrations/20260910100000_enterprise_finance_expenses.sql"
+          );
           return [];
         }
         throw new Error(`Failed to fetch expenses: ${error.message}`);
@@ -102,7 +81,7 @@ export class ExpenseRepository {
 
       if (!data) return [];
 
-      let list = (data as ExpenseRow[]).map(this.mapRowToExpense);
+      let list = (data as any[]).map(this.mapRowToExpense);
 
       if (filters?.search && filters.search.trim() !== "") {
         const term = filters.search.toLowerCase().trim();
@@ -117,7 +96,8 @@ export class ExpenseRepository {
       }
 
       return list;
-    } catch (err) {
+    } catch (err: any) {
+      console.error("[ExpenseRepository.getExpenses] Error:", err);
       throw err;
     }
   }
@@ -289,21 +269,14 @@ export class ExpenseRepository {
     };
   }
 
-  private mapRowToExpense(row: ExpenseRow): Expense {
+  private mapRowToExpense(row: any): Expense {
     return {
       id: row.id,
       date: row.date,
       category: row.category,
       description: row.description,
       amount: Number(row.amount),
-      // REG-25: stored statuses are not case-consistent (legacy rows
-      // carry "PAID" while the schema/UI vocabulary is lowercase
-      // "paid" | "pending" | "scheduled" | "cancelled"). Every consumer
-      // — getExpenseSummary() and the Expenses UI KPI — compares
-      // lowercase, so the one PAID row was invisible and "Settled /
-      // Paid" showed ৳0. Normalize ONCE here, the single choke point
-      // every read passes through.
-      status: String(row.status || "pending").toLowerCase() as Expense["status"],
+      status: row.status,
       vendor: row.vendor || "",
       branchId: row.branch_id || null,
       branchName: row.branch?.name || null,

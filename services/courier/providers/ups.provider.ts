@@ -19,13 +19,6 @@ interface UPSToken {
   expiresAt: number;
 }
 
-type UpsActivityEvent = {
-  status?: { type?: string; description?: string };
-  location?: { address?: { city?: string; country?: string } };
-  date?: string;
-  time?: string;
-};
-
 export class UPSProvider implements ICourierProvider {
   readonly id = "ups" as const;
   readonly name = "UPS";
@@ -150,8 +143,8 @@ export class UPSProvider implements ICourierProvider {
         "API_ERROR",
         data.response?.errors?.[0]?.message || "UPS creation failed"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -178,8 +171,8 @@ export class UPSProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "UPS void failed");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -199,7 +192,7 @@ export class UPSProvider implements ICourierProvider {
 
       if (shipment) {
         const updates: TrackingUpdate[] = (shipment.activity || []).map(
-          (a: UpsActivityEvent) => ({
+          (a: any) => ({
             status: a.status?.type || "",
             statusDescription: a.status?.description || "",
             location:
@@ -225,8 +218,8 @@ export class UPSProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "UPS tracking not found");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -264,8 +257,8 @@ export class UPSProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -283,7 +276,7 @@ export class UPSProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

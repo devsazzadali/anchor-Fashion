@@ -38,5 +38,6 @@ export async function deleteFromBlob(urlOrPathname: string): Promise<void> {
     const { del } = await import("@vercel/blob");
     await del(urlOrPathname, { token: process.env.BLOB_READ_WRITE_TOKEN });
   } catch (err) {
+    console.warn("[storage] Blob delete failed (non-fatal):", err);
   }
 }

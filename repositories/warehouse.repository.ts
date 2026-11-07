@@ -1,105 +1,10 @@
 import { createAdminDbClient } from "@/lib/db/client";
-import { prisma } from "@/lib/prisma";
 import {
   Warehouse,
   WarehouseZone,
   WarehouseBin,
   WarehouseRack,
 } from "@/types/inventory.types";
-
-/**
- * REG-65 batch 1: row / payload shapes this repository actually
- * consumes. WarehouseDbRow is the raw `warehouses` table row (the
- * address column carries the serialized metadata JSON or a plain
- * string); WarehouseAddressMeta is that metadata object's shape.
- */
-interface WarehouseDbRow {
-  id?: string;
-  warehouse_code?: string | null;
-  code?: string | null;
-  type?: string | null;
-  address?: string | WarehouseAddressMeta | null;
-  [key: string]: unknown;
-}
-
-interface WarehouseAddressMeta {
-  raw_address?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  postal_code?: string;
-  latitude?: number | string | null;
-  longitude?: number | string | null;
-  manager_name?: string;
-  contact_person?: string;
-  phone?: string;
-  email?: string;
-  operational_type?: string;
-  is_default?: boolean;
-  allow_negative_stock?: boolean;
-  enable_stock_tracking?: boolean;
-  enable_batch_tracking?: boolean;
-  enable_serial_tracking?: boolean;
-  notes?: string;
-  description?: string;
-}
-
-/** Raw `warehouse_bins` row fields read by the rack/bin views. */
-interface WarehouseBinRow {
-  id: string;
-  code: string;
-  capacity_volume?: number | null;
-  status?: string | null;
-}
-
-/** Raw `inventory_levels` row (with the builder's variant/bin joins)
- * read by getWarehouseInventory, and the item shape it maps to. */
-interface WarehouseInventoryLevelRow {
-  id: string;
-  // inventory_levels.variant_id is NOT NULL (prisma model
-  // InventoryLevel.variantId) — the mapped item type relies on it.
-  variant_id: string;
-  bin_id?: string | null;
-  quantity_available?: number | null;
-  quantity_reserved?: number | null;
-  quantity_damaged?: number | null;
-  reorder_point?: number | null;
-  variant?: {
-    sku?: string | null;
-    product?: {
-      name?: string | null;
-      cost_price?: number | null;
-      base_price?: number | null;
-      category?: { name?: string | null } | null;
-    } | null;
-  } | null;
-  bin?: {
-    code?: string | null;
-    zone?: { name?: string | null } | null;
-  } | null;
-}
-
-interface WarehouseInventoryItem {
-  id: string;
-  variant_id: string;
-  sku: string;
-  product_name: string;
-  category_name: string;
-  zone_name: string;
-  rack_code: string;
-  shelf_code: string;
-  bin_code: string;
-  bin_id: string | null | undefined;
-  quantity_available: number;
-  quantity_reserved: number;
-  quantity_damaged: number;
-  total_quantity: number;
-  unit_cost: number;
-  stock_value: number;
-  stock_status: string;
-  reorder_point: number;
-}
 
 function normalizeWarehouseType(type?: string): "WAREHOUSE" | "RETAIL_STORE" {
   if (!type) return "WAREHOUSE";
@@ -116,8 +21,8 @@ function normalizeWarehouseType(type?: string): "WAREHOUSE" | "RETAIL_STORE" {
   return "WAREHOUSE";
 }
 
-function parseWarehouseMetadata(raw: WarehouseDbRow): Partial<Warehouse> {
-  let meta: WarehouseAddressMeta = {};
+function parseWarehouseMetadata(raw: any): Partial<Warehouse> {
+  let meta: any = {};
   if (raw.address) {
     try {
       if (typeof raw.address === "object") {
@@ -128,10 +33,7 @@ function parseWarehouseMetadata(raw: WarehouseDbRow): Partial<Warehouse> {
         meta = { address: raw.address };
       }
     } catch {
-      // Only the JSON.parse path throws, where address is a string;
-      // the typeof check keeps that exact behaviour for every
-      // reachable state.
-      meta = { address: typeof raw.address === "string" ? raw.address : "" };
+      meta = { address: raw.address };
     }
   }
 
@@ -256,7 +158,7 @@ export class WarehouseRepository {
     const { data: rawData, count, error } = await query;
     if (error) throw new Error(`Failed to get warehouses: ${error.message}`);
 
-    const warehousesList = ((rawData || []) as WarehouseDbRow[]).map((w) => {
+    const warehousesList = (rawData || []).map((w: any) => {
       const meta = parseWarehouseMetadata(w);
       return {
         ...w,
@@ -268,7 +170,7 @@ export class WarehouseRepository {
 
     // Enrich with live aggregated inventory stats in parallel
     const enriched = await Promise.all(
-      warehousesList.map(async (wh) => {
+      warehousesList.map(async (wh: any) => {
         try {
           const stats = await this.getWarehouseStats(wh.id);
           return {
@@ -328,8 +230,8 @@ export class WarehouseRepository {
       ...data,
       ...meta,
       ...stats,
-      code: data.warehouse_code || data.code || "",
-      warehouse_code: data.warehouse_code || data.code || "",
+      code: (data as any).warehouse_code || (data as any).code || "",
+      warehouse_code: (data as any).warehouse_code || (data as any).code || "",
     } as Warehouse;
   }
 
@@ -363,7 +265,7 @@ export class WarehouseRepository {
     const serializedAddress = serializeWarehouseAddress(warehouseData);
 
     const isActive = warehouseData.is_active !== undefined ? warehouseData.is_active : true;
-    const payload: Record<string, unknown> = {
+    const payload: any = {
       warehouse_code: code,
       name: warehouseData.name?.trim(),
       type: normalizeWarehouseType(warehouseData.type || warehouseData.operational_type),
@@ -397,7 +299,7 @@ export class WarehouseRepository {
     warehouseData: Partial<Warehouse> & { code?: string; warehouse_code?: string }
   ): Promise<Warehouse> {
     const db = this.getAdminClient();
-    const payload: Record<string, unknown> = {};
+    const payload: any = {};
 
     if (warehouseData.name !== undefined) {
       payload.name = warehouseData.name.trim();
@@ -471,7 +373,7 @@ export class WarehouseRepository {
       .eq("warehouse_id", id);
 
     const totalStock = (stockLevels || []).reduce(
-      (sum: number, row: { quantity_available?: number | null; quantity_reserved?: number | null; quantity_damaged?: number | null }) => sum + (row.quantity_available || 0) + (row.quantity_reserved || 0) + (row.quantity_damaged || 0),
+      (sum: number, row: any) => sum + (row.quantity_available || 0) + (row.quantity_reserved || 0) + (row.quantity_damaged || 0),
       0
     );
 
@@ -520,24 +422,11 @@ export class WarehouseRepository {
   }> {
     const db = this.getAdminClient();
 
-    // Fetch inventory levels with product cost via Prisma. The fluent
-    // builder's PostgREST-style embedded select
-    // (`variant:variants(product:products(...))`) is never resolved for
-    // inventory_levels, so every row's cost used to read as 0 and the
-    // valuation came out ৳0. Cost basis matches the Inventory Overview
-    // financial report exactly: available × product cost_price.
-    const levels = await prisma.inventoryLevel.findMany({
-      where: { warehouseId },
-      select: {
-        variantId: true,
-        quantityAvailable: true,
-        quantityReserved: true,
-        reorderPoint: true,
-        variant: {
-          select: { product: { select: { costPrice: true } } },
-        },
-      },
-    });
+    // Fetch inventory levels with product cost
+    const { data: levels } = await db
+      .from("inventory_levels")
+      .select("variant_id, quantity_available, quantity_reserved, quantity_damaged, reorder_point, safety_stock, variant:variants(product:products(base_price, cost_price))")
+      .eq("warehouse_id", warehouseId);
 
     const distinctVariants = new Set<string>();
     let totalStock = 0;
@@ -548,13 +437,13 @@ export class WarehouseRepository {
     let outOfStockCount = 0;
     let totalStockValue = 0;
 
-    levels.forEach((row) => {
-      distinctVariants.add(row.variantId);
-      const avail = row.quantityAvailable || 0;
-      const res = row.quantityReserved || 0;
-      const dam = 0; // inventory_levels has no damaged column
+    (levels || []).forEach((row: any) => {
+      distinctVariants.add(row.variant_id);
+      const avail = row.quantity_available || 0;
+      const res = row.quantity_reserved || 0;
+      const dam = row.quantity_damaged || 0;
       const totalItemStock = avail + res + dam;
-      const cost = Number(row.variant?.product?.costPrice || 0);
+      const cost = Number(row.variant?.product?.cost_price || row.variant?.product?.base_price || 0);
 
       totalStock += totalItemStock;
       availableStock += avail;
@@ -562,7 +451,7 @@ export class WarehouseRepository {
       damagedStock += dam;
       totalStockValue += avail * cost;
 
-      const threshold = Number(row.reorderPoint) || 5;
+      const threshold = Number(row.reorder_point) || Number(row.safety_stock) || 5;
       if (avail <= 0) {
         outOfStockCount++;
       } else if (avail <= threshold) {
@@ -584,7 +473,7 @@ export class WarehouseRepository {
 
     let binsCount = 0;
     if (zones && zones.length > 0) {
-      const zoneIds = zones.map((z: { id: string }) => z.id);
+      const zoneIds = zones.map((z: any) => z.id);
       const { count: bCount } = await db
         .from("warehouse_bins")
         .select("id", { count: "exact", head: true })
@@ -621,40 +510,25 @@ export class WarehouseRepository {
 
     const { data: whList } = await db.from("warehouses").select("id, is_active");
     const totalWarehouses = (whList || []).length;
-    const activeWarehouses = (whList || []).filter((w: { is_active?: boolean | null }) => w.is_active).length;
+    const activeWarehouses = (whList || []).filter((w: any) => w.is_active).length;
 
-    // Prisma for the level aggregates: the fluent builder never resolves
-    // the embedded variant→product join for inventory_levels, which made
-    // every cost 0 (total valuation ৳0). Cost basis matches the Inventory
-    // Overview financial report exactly: available × product cost_price.
-    const levels = await prisma.inventoryLevel.findMany({
-      select: {
-        variantId: true,
-        quantityAvailable: true,
-        quantityReserved: true,
-        reorderPoint: true,
-        variant: {
-          select: { product: { select: { costPrice: true } } },
-        },
-      },
-    });
+    const { data: levels } = await db
+      .from("inventory_levels")
+      .select("variant_id, quantity_available, quantity_reserved, quantity_damaged, reorder_point, variant:variants(product:products(base_price, cost_price))");
 
     const variantSet = new Set<string>();
     let totalStock = 0;
     let totalValuation = 0;
     let lowStockAlerts = 0;
 
-    levels.forEach((row) => {
-      variantSet.add(row.variantId);
-      const avail = row.quantityAvailable || 0;
-      totalStock += avail + (row.quantityReserved || 0);
-      const cost = Number(row.variant?.product?.costPrice || 0);
+    (levels || []).forEach((row: any) => {
+      variantSet.add(row.variant_id);
+      const avail = row.quantity_available || 0;
+      totalStock += avail + (row.quantity_reserved || 0) + (row.quantity_damaged || 0);
+      const cost = Number(row.variant?.product?.cost_price || row.variant?.product?.base_price || 0);
       totalValuation += avail * cost;
-      const reorder = Number(row.reorderPoint) || 5;
-      // Canonical low-stock definition (same as the Stock Control page):
-      // 0 < available ≤ reorder point. Out-of-stock rows are counted
-      // separately, not as low-stock alerts.
-      if (avail > 0 && avail <= reorder) {
+      const reorder = Number(row.reorder_point) || 5;
+      if (avail <= reorder) {
         lowStockAlerts++;
       }
     });
@@ -685,7 +559,7 @@ export class WarehouseRepository {
     const zones = data || [];
     // Enrich with bins and racks count
     const enrichedZones = await Promise.all(
-      zones.map(async (z: WarehouseZone) => {
+      zones.map(async (z: any) => {
         const { data: bins } = await db
           .from("warehouse_bins")
           .select("id, code")
@@ -694,7 +568,7 @@ export class WarehouseRepository {
         const binsList = bins || [];
         // Calculate distinct racks from bin codes (e.g., RACK-A01-S01 -> RACK-A01)
         const rackCodes = new Set<string>();
-        binsList.forEach((b: { code: string }) => {
+        binsList.forEach((b: any) => {
           const parts = b.code.split("-");
           if (parts.length >= 2) {
             rackCodes.add(`${parts[0]}-${parts[1]}`);
@@ -745,7 +619,7 @@ export class WarehouseRepository {
       dbType = "QUARANTINE";
     }
 
-    const payload: Record<string, unknown> = {
+    const payload: any = {
       warehouse_id: zoneData.warehouse_id,
       name: zoneData.name?.trim(),
       type: dbType,
@@ -765,7 +639,7 @@ export class WarehouseRepository {
 
   async updateZone(id: string, zoneData: Partial<WarehouseZone>): Promise<WarehouseZone> {
     const db = this.getAdminClient();
-    const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const payload: any = { updated_at: new Date().toISOString() };
 
     if (zoneData.name !== undefined) payload.name = zoneData.name.trim();
     if (zoneData.description !== undefined) payload.description = zoneData.description;
@@ -814,8 +688,8 @@ export class WarehouseRepository {
       .order("code");
 
     // Group bins by rack prefix (e.g. "RACK-A01-S01" -> "RACK-A01")
-    const rackMap = new Map<string, { bins: WarehouseBinRow[]; totalCapacity: number }>();
-    (bins || []).forEach((b: WarehouseBinRow) => {
+    const rackMap = new Map<string, { bins: any[]; totalCapacity: number }>();
+    (bins || []).forEach((b: any) => {
       const parts = b.code.split("-");
       const rackCode = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : parts[0];
       if (!rackMap.has(rackCode)) {
@@ -894,13 +768,13 @@ export class WarehouseRepository {
       .ilike("code", `${rackCode}%`);
 
     if (bins && bins.length > 0) {
-      const binIds = bins.map((b: { id: string }) => b.id);
+      const binIds = bins.map((b: any) => b.id);
       const { data: stock } = await db
         .from("inventory_levels")
         .select("id, quantity_available")
         .in("bin_id", binIds);
 
-      const hasStock = (stock || []).some((s: { quantity_available?: number | null }) => (s.quantity_available || 0) > 0);
+      const hasStock = (stock || []).some((s: any) => s.quantity_available > 0);
       if (hasStock) {
         throw new Error("Cannot delete rack: products are currently stored in these shelves.");
       }
@@ -941,7 +815,7 @@ export class WarehouseRepository {
       throw new Error(`A shelf/bin with code "${code}" already exists in this zone.`);
     }
 
-    const payload: Record<string, unknown> = {
+    const payload: any = {
       zone_id: binData.zone_id,
       code,
       barcode: binData.barcode || code,
@@ -961,7 +835,7 @@ export class WarehouseRepository {
 
   async updateBin(id: string, binData: Partial<WarehouseBin>): Promise<WarehouseBin> {
     const db = this.getAdminClient();
-    const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const payload: any = { updated_at: new Date().toISOString() };
 
     if (binData.code !== undefined) payload.code = binData.code.trim().toUpperCase();
     if (binData.barcode !== undefined) payload.barcode = binData.barcode;
@@ -983,23 +857,14 @@ export class WarehouseRepository {
 
   async deleteBin(id: string): Promise<void> {
     const db = this.getAdminClient();
-    // S4-10: inventory_levels has NO bin_id column — stock is tracked per
-    // variant + warehouse, never per bin. The old guard queried
-    // inventory_levels by bin_id; the DB layer silently drops that
-    // filter, so the query returned an arbitrary stock row from ANY bin
-    // and the guard fired on every bin ("stock is currently assigned")
-    // whenever any stock existed anywhere. The bin's own recorded load
-    // (warehouse_bins.current_quantity) is the only per-bin stock figure
-    // in the schema — guard on that instead.
-    const { data: bin, error: binError } = await db
-      .from("warehouse_bins")
-      .select("id, current_quantity")
-      .eq("id", id)
-      .maybeSingle();
+    // Check if stock exists in bin
+    const { data: stock } = await db
+      .from("inventory_levels")
+      .select("quantity_available")
+      .eq("bin_id", id)
+      .limit(1);
 
-    if (binError) throw new Error(`Failed to load bin: ${binError.message}`);
-    if (!bin) throw new Error("Bin not found.");
-    if ((bin.current_quantity || 0) > 0) {
+    if (stock && stock.length > 0 && (stock[0].quantity_available || 0) > 0) {
       throw new Error("Cannot delete bin: stock is currently assigned to this bin.");
     }
 
@@ -1015,7 +880,7 @@ export class WarehouseRepository {
     warehouseId: string,
     filters?: { search?: string; category?: string; status?: string; zone_id?: string; page?: number; limit?: number }
   ): Promise<{
-    data: WarehouseInventoryItem[];
+    data: any[];
     total: number;
     page: number;
     totalPages: number;
@@ -1060,7 +925,7 @@ export class WarehouseRepository {
     const { data, count, error } = await query;
     if (error) throw new Error(`Failed to get warehouse inventory: ${error.message}`);
 
-    const items = ((data || []) as WarehouseInventoryLevelRow[]).map((row) => {
+    const items = (data || []).map((row: any) => {
       const avail = row.quantity_available || 0;
       const res = row.quantity_reserved || 0;
       const dam = row.quantity_damaged || 0;
@@ -1109,7 +974,7 @@ export class WarehouseRepository {
     if (filters?.search?.trim()) {
       const s = filters.search.toLowerCase();
       filteredItems = filteredItems.filter(
-        (i) =>
+        (i: any) =>
           i.sku.toLowerCase().includes(s) ||
           i.product_name.toLowerCase().includes(s) ||
           i.bin_code.toLowerCase().includes(s)
@@ -1117,7 +982,7 @@ export class WarehouseRepository {
     }
 
     if (filters?.status && filters.status !== "all") {
-      filteredItems = filteredItems.filter((i) => i.stock_status.toLowerCase() === filters.status?.toLowerCase());
+      filteredItems = filteredItems.filter((i: any) => i.stock_status.toLowerCase() === filters.status?.toLowerCase());
     }
 
     const total = count || filteredItems.length;
@@ -1146,7 +1011,7 @@ export class WarehouseRepository {
     return {
       ...data,
       ...meta,
-      code: data.warehouse_code || data.code || "",
+      code: (data as any).warehouse_code || (data as any).code || "",
     } as Warehouse;
   }
 }

@@ -3,44 +3,11 @@ import { prisma } from "@/lib/prisma";
 import {
   CustomReportConfig,
   ReportQueryResult,
-  ReportDimension,
-  ReportMetric,
 } from "@/types/report.types";
 import {
   CustomReportConfigInput,
   ReportQueryRequestInput,
 } from "@/schemas/report.schema";
-
-/** One aggregated analytics row built from real order lines (step 2). */
-export interface ReportAnalyticsRow {
-  date: string;
-  category: string;
-  brand: string;
-  region: string;
-  device: string;
-  sales: number;
-  orders: number;
-  units: number;
-  refunds: number;
-  profit: number;
-  [key: string]: string | number;
-}
-
-/** A custom_reports_config row as stored (untyped builder read). */
-export interface CustomReportConfigRow {
-  id: string;
-  owner_id: string;
-  report_name: string;
-  description: string | null;
-  dimensions: ReportDimension[];
-  metrics: ReportMetric[];
-  filters: CustomReportConfig["filters"];
-  chart_type: string;
-  is_public: boolean;
-  schedule_cron: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 export class ReportRepository {
   private getAdminClient() {
@@ -66,11 +33,13 @@ export class ReportRepository {
       const { data, error } = await query;
 
       if (error) {
+        console.error("[ReportRepository.getSavedReports] Query error:", error);
         return [];
       }
 
       return (data || []).map(this.mapRowToConfig);
-    } catch (err) {
+    } catch (err: any) {
+      console.error("[ReportRepository.getSavedReports] Exception:", err);
       return [];
     }
   }
@@ -210,7 +179,7 @@ export class ReportRepository {
     // orders in range the report is honestly empty - this method previously
     // generated pseudo-random "realistic" sales rows and a flat 35% margin;
     // both fabrications were removed in Phase 6.
-    let rawData: ReportAnalyticsRow[] = [];
+    let rawData: any[] = [];
     try {
       const realOrders = await prisma.order.findMany({
         where: {
@@ -239,7 +208,7 @@ export class ReportRepository {
       const NON_REVENUE = ["CANCELLED", "FAILED", "REFUNDED", "RETURNED"];
       for (const o of realOrders) {
         const date = o.createdAt.toISOString().split("T")[0];
-        const region = (o.shippingAddress as { city?: string } | null)?.city || "-";
+        const region = (o.shippingAddress as any)?.city || "-";
         const orderTotal = Number(o.totalAmount || 0);
         const status = String(o.status || "").toUpperCase();
 
@@ -278,7 +247,7 @@ export class ReportRepository {
           continue;
         }
 
-        items.forEach((it, idx: number) => {
+        items.forEach((it: any, idx: number) => {
           const qty = it.quantity || 1;
           const unitPrice = Number(it.unitPrice || 0);
           const cost = Number(it.product?.costPrice || 0);
@@ -299,6 +268,7 @@ export class ReportRepository {
         });
       }
     } catch (orderErr) {
+      console.warn("[ReportRepository] Error querying real orders:", orderErr);
     }
 
     // 3. Dynamic Aggregation by selected Dimensions
@@ -341,7 +311,7 @@ export class ReportRepository {
     };
   }
 
-  private mapRowToConfig(row: CustomReportConfigRow): CustomReportConfig {
+  private mapRowToConfig(row: any): CustomReportConfig {
     return {
       id: row.id,
       owner_id: row.owner_id,

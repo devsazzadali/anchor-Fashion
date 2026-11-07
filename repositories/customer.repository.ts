@@ -1,5 +1,4 @@
 import prisma from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import {
   CustomerProfile,
   CustomerAddress,
@@ -27,6 +26,7 @@ export class CustomerRepository {
         updated_at: profile.updatedAt.toISOString(),
       } as CustomerProfile;
     } catch (e) {
+      console.error("Error fetching profile:", e);
       return null;
     }
   }
@@ -36,12 +36,7 @@ export class CustomerRepository {
     updates: Partial<CustomerProfile>
   ): Promise<CustomerProfile | null> {
     try {
-      const updateData: {
-        firstName?: string | null;
-        lastName?: string | null;
-        phone?: string | null;
-        avatarUrl?: string | null;
-      } = {};
+      const updateData: any = {};
       if (updates.first_name !== undefined) updateData.firstName = updates.first_name;
       if (updates.last_name !== undefined) updateData.lastName = updates.last_name;
       if (updates.phone !== undefined) updateData.phone = updates.phone;
@@ -101,6 +96,7 @@ export class CustomerRepository {
         updated_at: profile.updatedAt.toISOString(),
       } as CustomerProfile;
     } catch (e) {
+      console.error("Error in updateProfile:", e);
       throw e;
     }
   }
@@ -131,6 +127,7 @@ export class CustomerRepository {
         updated_at: addr.updatedAt.toISOString(),
       })) as CustomerAddress[];
     } catch (error) {
+      console.error("Error fetching addresses:", error);
       return [];
     }
   }
@@ -182,7 +179,7 @@ export class CustomerRepository {
         orderBy: { createdAt: "desc" },
       });
 
-      return reviews.map((r) => ({
+      return reviews.map((r: any) => ({
         id: r.id,
         customer_id: r.userId || "",
         product_id: r.productId || "",
@@ -199,8 +196,9 @@ export class CustomerRepository {
           name: r.product?.name || "",
           product_media: [],
         },
-      })) as CustomerReview[];
+      })) as any[];
     } catch (error) {
+      console.error("Error fetching reviews:", error);
       return [];
     }
   }
@@ -212,8 +210,9 @@ export class CustomerRepository {
         data: { isActive: false },
       });
       return true;
-    } catch (error) {
-      throw new Error((error as Error).message);
+    } catch (error: any) {
+      console.error("Error deactivating customer profile:", error);
+      throw new Error(error.message);
     }
   }
 
@@ -228,14 +227,15 @@ export class CustomerRepository {
         where: { id: userId },
       });
       return true;
-    } catch (error) {
-      throw new Error((error as Error).message);
+    } catch (error: any) {
+      console.error("Error deleting customer profile:", error);
+      throw new Error(error.message);
     }
   }
 
   // --- CRM Additions ---
 
-  static async logActivity(userId: string, activityType: string, metadata: Prisma.InputJsonValue = {}) {
+  static async logActivity(userId: string, activityType: string, metadata: any = {}) {
     try {
       const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
       await prisma.auditLog.create({
@@ -248,6 +248,7 @@ export class CustomerRepository {
         },
       });
     } catch (error) {
+      console.error("Failed to log customer activity:", error);
     }
   }
 
@@ -282,6 +283,7 @@ export class CustomerRepository {
         segments: customer?.group ? [customer.group] : [],
       };
     } catch (e) {
+      console.error("Failed to get CRM stats:", e);
       return {
         lifetimeValue: 0,
         orderCount: 0,

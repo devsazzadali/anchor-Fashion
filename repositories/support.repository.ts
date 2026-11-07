@@ -1,115 +1,5 @@
 import { createDbClient } from "@/lib/db/client";
 import { createAdminDbClient } from "@/lib/db/client";
-import { KnowledgeBaseArticle } from "@/types/support.types";
-
-// REG-65 batch 2: row/input shapes for the untyped db shim, derived from
-// this file's own select lists and reads.
-interface TicketMessageDbRow {
-  id: string;
-  ticket_id: string;
-  sender_id: string | null;
-  sender_type: "CUSTOMER" | "AGENT" | "SYSTEM" | "AI";
-  body?: string | null;
-  is_internal?: boolean | null;
-  created_at: string;
-  // Legacy aliases the normalizer still accepts defensively.
-  message?: string | null;
-  is_internal_note?: boolean | null;
-  read_at?: string | null;
-}
-
-interface SupportTicketDbRow {
-  id: string;
-  ticket_number: number;
-  profile_id: string | null;
-  subject: string;
-  description: string | null;
-  category: string;
-  priority: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface SupportTicketDetailRecord extends SupportTicketRecord {
-  ticket_messages?: TicketMessageRecord[];
-  customer?: {
-    id: string;
-    first_name: string | null;
-    last_name: string | null;
-    full_name: string;
-    email: string | null;
-    phone: string | null;
-  } | null;
-}
-
-interface ProfileContactRow {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  phone: string | null;
-}
-
-interface SupportAgentDbRow {
-  id: string;
-  user_id: string;
-  is_online: boolean | null;
-  active_tickets_count: number | null;
-}
-
-
-
-interface CreateTicketInput {
-  profile_id?: string | null;
-  customer_id?: string | null;
-  subject?: string;
-  description?: string | null;
-  category?: string;
-  priority?: string;
-  status?: string;
-  department_id?: string | null;
-  assigned_agent_id?: string | null;
-  order_id?: string | null;
-  sla_breach_at?: string | null;
-  first_response_at?: string | null;
-  resolved_at?: string | null;
-  closed_at?: string | null;
-  [key: string]: string | null | undefined;
-}
-
-interface UpdateTicketInput {
-  customer_id?: string | null;
-  profile_id?: string | null;
-  subject?: string;
-  description?: string | null;
-  category?: string;
-  priority?: string;
-  status?: string;
-  assigned_agent_id?: string | null;
-  [key: string]: string | null | undefined;
-}
-
-interface CreateTicketMessageInput {
-  ticket_id: string;
-  sender_id?: string | null;
-  sender_type?: string;
-  message?: string | null;
-  body?: string | null;
-  is_internal_note?: boolean | null;
-  is_internal?: boolean | null;
-}
-
-interface CreateTicketAttachmentInput {
-  ticket_id: string;
-  file_url: string;
-  file_type: string;
-  file_name: string;
-}
-
-interface TicketAttachmentRecord extends CreateTicketAttachmentInput {
-  id: string;
-  created_at: string;
-}
 
 export interface SupportTicketRecord {
   id: string;
@@ -142,22 +32,6 @@ export interface TicketMessageRecord {
   created_at: string;
 }
 
-/**
- * S3-2: ticket_messages' real columns are `body` and `is_internal` — there
- * is no `message`, `is_internal_note` or `read_at` column. Rows read through
- * the DB layer come back keyed by the real columns, so normalize them into
- * the record shape the consoles render.
- */
-function normalizeTicketMessage(row: TicketMessageDbRow): TicketMessageRecord {
-  if (!row) return row;
-  return {
-    ...row,
-    message: row.message ?? row.body ?? "",
-    is_internal_note: row.is_internal_note ?? !!row.is_internal,
-    read_at: row.read_at ?? null,
-  };
-}
-
 export class SupportRepository {
   private static async getClient() {
     try {
@@ -175,12 +49,13 @@ export class SupportRepository {
       .order("updated_at", { ascending: false });
 
     if (error || !tickets) {
+      console.error("Error fetching support tickets:", error);
       return [];
     }
 
     // Collect profile IDs
     const profileIds = Array.from(
-      new Set(tickets.map((t: SupportTicketDbRow) => t.profile_id).filter(Boolean))
+      new Set(tickets.map((t: any) => t.profile_id).filter(Boolean))
     ) as string[];
 
     let profilesMap: Record<string, { full_name: string; phone?: string | null }> = {};
@@ -191,7 +66,7 @@ export class SupportRepository {
         .in("id", profileIds);
 
       if (profiles) {
-        profilesMap = profiles.reduce((acc: Record<string, { full_name: string; phone?: string | null }>, p: ProfileContactRow) => {
+        profilesMap = profiles.reduce((acc: any, p: any) => {
           const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Customer";
           acc[p.id] = { full_name: name, phone: p.phone };
           return acc;
@@ -201,26 +76,23 @@ export class SupportRepository {
 
     // Attach customer and message stats
     const enriched: SupportTicketRecord[] = await Promise.all(
-      tickets.map(async (t: SupportTicketDbRow) => {
-        // Fetch recent messages (real column is `body`; there is no
-        // `message` / `read_at` column on ticket_messages). The unread
-        // count is derived from the same rows: customer messages sent
-        // after the latest staff/system message are unread. (The old
-        // count query filtered on the phantom `read_at` column, which
-        // poisoned it into always returning nothing.)
-        const { data: recentMsgs } = await db
+      tickets.map(async (t: any) => {
+        // Fetch last message
+        const { data: lastMsg } = await db
           .from("ticket_messages")
-          .select("body, created_at, sender_type")
+          .select("message, created_at, sender_type, read_at")
           .eq("ticket_id", t.id)
           .order("created_at", { ascending: false })
-          .limit(100);
-        const msgs = recentMsgs || [];
-        const lastMsg = msgs[0];
-        let unreadCount = 0;
-        for (const m of msgs) {
-          if (m.sender_type === "CUSTOMER") unreadCount += 1;
-          else break;
-        }
+          .limit(1)
+          .maybeSingle();
+
+        // Fetch unread count from customer
+        const { count: unreadCount } = await db
+          .from("ticket_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("ticket_id", t.id)
+          .eq("sender_type", "CUSTOMER")
+          .is("read_at", null);
 
         const cust = t.profile_id && profilesMap[t.profile_id]
           ? { id: t.profile_id, ...profilesMap[t.profile_id] }
@@ -229,7 +101,7 @@ export class SupportRepository {
         return {
           ...t,
           customer: cust,
-          last_message: lastMsg?.body || t.description || "Ticket opened",
+          last_message: lastMsg?.message || t.description || "Ticket opened",
           unread_count: unreadCount || 0,
         };
       })
@@ -247,9 +119,10 @@ export class SupportRepository {
       .order("created_at", { ascending: true });
 
     if (error) {
+      console.error("Error fetching ticket messages:", error);
       return [];
     }
-    return (data || []).map(normalizeTicketMessage);
+    return data || [];
   }
 
   static async sendMessage(params: {
@@ -259,19 +132,14 @@ export class SupportRepository {
     isInternalNote?: boolean;
   }): Promise<TicketMessageRecord> {
     const db = await this.getClient();
-    // S3-2: the payload previously sent `message` and `is_internal_note`,
-    // which are NOT columns of ticket_messages (real columns: `body`,
-    // `is_internal`). The DB layer silently discards any write containing
-    // an unknown column, so every staff reply vanished while the UI
-    // reported success. Only real columns may be sent.
     const { data, error } = await db
       .from("ticket_messages")
       .insert({
         ticket_id: params.ticketId,
         sender_id: params.senderId || null,
         sender_type: "AGENT",
-        body: params.message.trim(),
-        is_internal: !!params.isInternalNote,
+        message: params.message.trim(),
+        is_internal_note: !!params.isInternalNote,
       })
       .select()
       .single();
@@ -286,20 +154,18 @@ export class SupportRepository {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", params.ticketId);
 
-    return normalizeTicketMessage(data);
+    return data;
   }
 
   static async updateTicketStatus(ticketId: string, status: string): Promise<void> {
     const db = await this.getClient();
-    // NOTE: support_tickets has no resolved_at / closed_at columns. Sending
-    // them made the DB layer silently discard the ENTIRE update (its
-    // unknown-column guard returns an empty success), so status changes
-    // never persisted. Only real columns may be sent — see updateTicket.
     const { error } = await db
       .from("support_tickets")
       .update({
         status,
         updated_at: new Date().toISOString(),
+        ...(status === "resolved" ? { resolved_at: new Date().toISOString() } : {}),
+        ...(status === "closed" ? { closed_at: new Date().toISOString() } : {}),
       })
       .eq("id", ticketId);
 
@@ -309,33 +175,25 @@ export class SupportRepository {
   }
 
   static async markMessagesRead(ticketId: string): Promise<void> {
-    // ticket_messages has no `read_at` column (real columns: id,
-    // ticket_id, sender_id, sender_type, body, is_internal, created_at),
-    // so there is nothing to stamp — the previous update payload named
-    // the phantom column and the DB layer silently discarded it (and its
-    // `.is("read_at", null)` filter poisoned the query regardless).
-    // Read state is therefore DERIVED at read time instead: getTickets
-    // counts customer messages sent after the latest staff reply as
-    // unread. This method is kept as an explicit no-op so existing
-    // callers (ticket-open actions) keep working without pretending a
-    // write happened.
-    void ticketId;
+    const db = await this.getClient();
+    await db
+      .from("ticket_messages")
+      .update({ read_at: new Date().toISOString() })
+      .eq("ticket_id", ticketId)
+      .eq("sender_type", "CUSTOMER")
+      .is("read_at", null);
   }
 
   // --- Instance methods for SupportService compatibility ---
-  async getTickets(): Promise<SupportTicketRecord[]> {
+  async getTickets(): Promise<any[]> {
     return SupportRepository.getTickets();
   }
 
-  async getTicketById(id: string): Promise<SupportTicketDetailRecord | null> {
+  async getTicketById(id: string): Promise<any> {
     const db = await SupportRepository.getClient();
-    // REG-83 cleanup: the embedded `ticket_messages(*)` select was never
-    // attached by the DB layer (and now fails loudly in dev) — the plain
-    // select plus the explicit message attach below (S3-2) is the real
-    // read path.
     const { data: ticket, error } = await db
       .from("support_tickets")
-      .select("*")
+      .select("*, ticket_messages(*)")
       .eq("id", id)
       .maybeSingle();
 
@@ -349,15 +207,6 @@ export class SupportRepository {
 
       if (!simpleTicket) return null;
 
-      finalTicket = simpleTicket;
-    }
-
-    // S3-2 (read side): the DB layer does not attach the embedded
-    // `ticket_messages(*)` relation, so a successful ticket fetch arrives
-    // with no messages at all and the admin detail renders an empty
-    // thread. Always attach the messages explicitly when the embed did
-    // not provide them.
-    if (finalTicket && !Array.isArray(finalTicket.ticket_messages)) {
       const { data: messages } = await db
         .from("ticket_messages")
         .select("*")
@@ -365,8 +214,8 @@ export class SupportRepository {
         .order("created_at", { ascending: true });
 
       finalTicket = {
-        ...finalTicket,
-        ticket_messages: (messages || []).map(normalizeTicketMessage),
+        ...simpleTicket,
+        ticket_messages: messages || [],
       };
     }
 
@@ -442,14 +291,7 @@ export class SupportRepository {
     return null;
   }
 
-  // REG-65 holdout: this return stays `any`. The honest record type
-  // (SupportTicketRecord) is not assignable to the types/support.types
-  // SupportTicket the service layer promises (string vs TicketPriority /
-  // TicketStatus unions, and profile_id: string | null vs optional
-  // string), so typing it errors in services/support.service.ts — the
-  // same type-universe conflict as the Batch-2 lib/repositories mapper
-  // holdouts. Reconciling the two type universes is out of scope.
-  async createTicket(data: CreateTicketInput): Promise<any> {
+  async createTicket(data: any): Promise<any> {
     const db = await SupportRepository.getClient();
     const allowed = [
       "profile_id",
@@ -492,27 +334,22 @@ export class SupportRepository {
     return ticket;
   }
 
-  // REG-65 holdout: same type-universe conflict as createTicket above —
-  // SupportTicketRecord is not assignable to types/support.types
-  // SupportTicket, so this return stays `any`.
-  async updateTicket(id: string, data: UpdateTicketInput): Promise<any> {
+  async updateTicket(id: string, data: any): Promise<any> {
     const db = await SupportRepository.getClient();
-    // Only columns that actually exist on support_tickets may be sent. The
-    // DB layer silently discards the WHOLE update when the payload contains
-    // an unknown column (returning an empty success), which is why status
-    // changes — above all "resolved", which used to drag in a resolved_at
-    // key — never persisted while the UI reported success. The table has no
-    // profile_id / department_id / order_id / sla_breach_at /
-    // first_response_at / resolved_at / closed_at columns; the customer
-    // column is customer_id.
     const allowed = [
-      "customer_id",
+      "profile_id",
       "subject",
       "description",
       "category",
       "priority",
       "status",
+      "department_id",
       "assigned_agent_id",
+      "order_id",
+      "sla_breach_at",
+      "first_response_at",
+      "resolved_at",
+      "closed_at",
     ];
     const payload: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -522,14 +359,21 @@ export class SupportRepository {
         payload[key] = data[key];
       }
     }
-    if (payload.customer_id === undefined && (data.profile_id || data.customer_id)) {
-      payload.customer_id = data.profile_id || data.customer_id;
+    if (data.customer_id && !payload.profile_id) {
+      payload.profile_id = data.customer_id;
     }
 
     if (payload.assigned_agent_id !== undefined) {
       payload.assigned_agent_id = await SupportRepository.resolveSupportAgentId(
         payload.assigned_agent_id
       );
+    }
+
+    if (payload.status === "resolved" && !payload.resolved_at) {
+      payload.resolved_at = new Date().toISOString();
+    }
+    if (payload.status === "closed" && !payload.closed_at) {
+      payload.closed_at = new Date().toISOString();
     }
 
     const { data: ticket, error } = await db
@@ -559,24 +403,16 @@ export class SupportRepository {
     return true;
   }
 
-  // REG-65 holdout: this return stays `any`. normalizeTicketMessage
-  // produces a TicketMessageRecord, but types/support.types TicketMessage
-  // requires updated_at, which the record never carries — typing it
-  // errors in services/support.service.ts. Same out-of-scope
-  // reconciliation as the ticket holdouts above.
-  async createTicketMessage(data: CreateTicketMessageInput): Promise<any> {
+  async createTicketMessage(data: any): Promise<any> {
     const db = await SupportRepository.getClient();
     const messageText = (data.message || data.body || "").trim();
     const isInternal = !!(data.is_internal_note ?? data.is_internal);
 
-    // S3-2: write the REAL columns (`body`, `is_internal`) — sending the
-    // legacy `message` / `is_internal_note` keys made the DB layer discard
-    // the insert silently (see sendMessage above).
     const payload: Record<string, any> = {
       ticket_id: data.ticket_id,
       sender_type: data.sender_type || "AGENT",
-      body: messageText,
-      is_internal: isInternal,
+      message: messageText,
+      is_internal_note: isInternal,
     };
     if (data.sender_id) {
       payload.sender_id = data.sender_id;
@@ -596,10 +432,10 @@ export class SupportRepository {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", data.ticket_id);
 
-    return normalizeTicketMessage(msg);
+    return msg;
   }
 
-  async getKnowledgeBaseArticles(): Promise<KnowledgeBaseArticle[]> {
+  async getKnowledgeBaseArticles(): Promise<any[]> {
     const db = await SupportRepository.getClient();
     const { data } = await db
       .from("knowledge_base_articles")
@@ -609,13 +445,6 @@ export class SupportRepository {
     return data || [];
   }
 
-  // REG-65 holdout: this return stays untyped. The admin support page
-  // reads current_status / auth_users off the agents, fields getAgents
-  // never produces (it maps rows into id / user_id / first_name /
-  // last_name / full_name / status) — typing the return errors in
-  // app/(admin)/admin/support/page.tsx. Those page reads are dead reads
-  // (they always resolve undefined today); reconciling producer and
-  // consumer is a functional fix, out of scope for a type-only batch.
   async getAgents(): Promise<any[]> {
     const db = await SupportRepository.getClient();
     let { data: agents } = await db
@@ -628,7 +457,7 @@ export class SupportRepository {
       .eq("is_active", true)
       .limit(30);
 
-    const existingUserIds = new Set((agents || []).map((a: SupportAgentDbRow) => a.user_id));
+    const existingUserIds = new Set((agents || []).map((a: any) => a.user_id));
 
     if (profiles && profiles.length > 0) {
       for (const p of profiles) {
@@ -651,12 +480,12 @@ export class SupportRepository {
       }
     }
 
-    const profileMap = (profiles || []).reduce((acc: Record<string, ProfileContactRow>, p: ProfileContactRow) => {
+    const profileMap = (profiles || []).reduce((acc: any, p: any) => {
       acc[p.id] = p;
       return acc;
     }, {});
 
-    return (agents || []).map((a: SupportAgentDbRow) => {
+    return (agents || []).map((a: any) => {
       const p = profileMap[a.user_id];
       const name = p
         ? [p.first_name, p.last_name].filter(Boolean).join(" ")
@@ -672,7 +501,7 @@ export class SupportRepository {
     });
   }
 
-  async createTicketAttachment(data: CreateTicketAttachmentInput): Promise<TicketAttachmentRecord> {
+  async createTicketAttachment(data: any): Promise<any> {
     const db = await SupportRepository.getClient();
     const { data: att, error } = await db
       .from("ticket_attachments")

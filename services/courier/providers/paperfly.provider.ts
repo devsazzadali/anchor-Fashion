@@ -14,17 +14,6 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
-// REG-65: boundary contract for a Paperfly tracking log off the untyped
-// API payload. Fields read without a fallback are asserted as strings; the
-// `type` alias (not an interface) keeps `raw: log` assignable to
-// `Record<string, any>` on TrackingUpdate.
-type PaperflyTrackingLog = {
-  status: string;
-  comment?: string;
-  location?: string;
-  time: string;
-};
-
 export class PaperflyProvider implements ICourierProvider {
   readonly id = "paperfly" as const;
   readonly name = "Paperfly Courier";
@@ -89,8 +78,8 @@ export class PaperflyProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to create Paperfly order"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -115,8 +104,8 @@ export class PaperflyProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", data.message || "Cancel failed");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -136,7 +125,7 @@ export class PaperflyProvider implements ICourierProvider {
 
       if (data.success && data.tracking_info) {
         const updates: TrackingUpdate[] = (data.tracking_info.logs || []).map(
-          (log: PaperflyTrackingLog) => ({
+          (log: any) => ({
             status: log.status,
             statusDescription: log.comment || log.status,
             location: log.location || "",
@@ -161,8 +150,8 @@ export class PaperflyProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Tracking not found");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -198,8 +187,8 @@ export class PaperflyProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -219,7 +208,7 @@ export class PaperflyProvider implements ICourierProvider {
     return map[raw.toLowerCase()] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

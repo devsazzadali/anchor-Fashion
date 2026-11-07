@@ -11,6 +11,7 @@ if (publicVapidKey && privateVapidKey) {
     privateVapidKey
   );
 } else {
+  console.warn("VAPID keys not configured, push notifications disabled.");
 }
 
 export interface PushNotificationPayload {
@@ -21,30 +22,11 @@ export interface PushNotificationPayload {
   url?: string;
 }
 
-/** A subscription object as the frontend hands it to the save endpoint. */
-export interface PushSubscriptionInput {
-  endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
-}
-
-/** A push_subscriptions row as stored (keys live in the `keys` JSON column). */
-export interface StoredPushSubscriptionRow {
-  id: string;
-  endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
-}
-
 export class PushService {
   /**
    * Save a push subscription to the database.
    */
-  static async saveSubscription(userId: string, subscription: PushSubscriptionInput) {
+  static async saveSubscription(userId: string, subscription: any) {
     const db = createAdminDbClient();
     const { keys, endpoint } = subscription;
     
@@ -52,19 +34,18 @@ export class PushService {
       throw new Error("Invalid subscription object");
     }
 
-    // FIX ROUND 28 (sweep, M-4 class): push_subscriptions stores the
-    // keys in ONE `keys` JSON column — top-level p256dh/auth columns
-    // do not exist, so this upsert saved a keyless row (or nothing).
-    const { data: saved, error } = await db.from("push_subscriptions").upsert(
+    const { error } = await db.from("push_subscriptions").upsert(
       {
         user_id: userId,
         endpoint: endpoint,
-        keys: { p256dh: keys.p256dh, auth: keys.auth },
+        p256dh: keys.p256dh,
+        auth: keys.auth,
       },
       { onConflict: "endpoint" }
     );
 
-    if (error || !saved || (Array.isArray(saved) && saved.length === 0)) {
+    if (error) {
+      console.error("Failed to save push subscription:", error);
       throw new Error("Failed to save push subscription");
     }
   }
@@ -74,6 +55,7 @@ export class PushService {
    */
   static async sendToUser(userId: string, payload: PushNotificationPayload) {
     if (!publicVapidKey || !privateVapidKey) {
+      console.warn("Push notifications are disabled.");
       return;
     }
 
@@ -95,26 +77,26 @@ export class PushService {
       data: { url: payload.url || "/" }
     });
 
-    const sendPromises = subscriptions.map(async (sub: StoredPushSubscriptionRow) => {
+    const sendPromises = subscriptions.map(async (sub: any) => {
       const pushSubscription = {
         endpoint: sub.endpoint,
         keys: {
-          // Round 28: keys live in the `keys` JSON column.
-          p256dh: sub.keys?.p256dh,
-          auth: sub.keys?.auth,
+          p256dh: sub.p256dh,
+          auth: sub.auth,
         },
       };
 
       try {
         await webpush.sendNotification(pushSubscription, stringPayload);
-      } catch (err) {
-        if ((err as Error & { statusCode?: number }).statusCode === 410 || (err as Error & { statusCode?: number }).statusCode === 404) {
+      } catch (err: any) {
+        if (err.statusCode === 410 || err.statusCode === 404) {
           // Subscription expired or unsubscribed, delete it from DB
           await db
             .from("push_subscriptions")
             .delete()
             .eq("id", sub.id);
         } else {
+          console.error("Error sending push notification:", err);
         }
       }
     });

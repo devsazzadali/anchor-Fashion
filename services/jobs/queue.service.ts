@@ -22,11 +22,13 @@ export class QueueService {
       });
 
       if (error) {
+        console.error("[QueueService] Failed to push job:", error);
         return false;
       }
 
       return true;
     } catch (error) {
+      console.error("[QueueService] Exception pushing job:", error);
       return false;
     }
   }
@@ -50,7 +52,7 @@ export class QueueService {
       return [];
     }
 
-    const jobIds = jobs.map((j: { id: string }) => j.id);
+    const jobIds = jobs.map((j: any) => j.id);
 
     // Claim jobs
     const { error: updateError } = await db
@@ -59,6 +61,7 @@ export class QueueService {
       .in("id", jobIds);
 
     if (updateError) {
+      console.error("[QueueService] Failed to claim jobs:", updateError);
       return [];
     }
 

@@ -31,6 +31,9 @@ export class ConfigService {
       .single();
 
     if (error || !data) {
+      console.warn(
+        `[ConfigService] Provider config not found or inactive for ${providerType}:${providerCode}`
+      );
       return null;
     }
 
@@ -62,7 +65,7 @@ export class ConfigService {
       return [];
     }
 
-    return data.map((provider: ProviderConfig) => ({
+    return data.map((provider: any) => ({
       ...provider,
       config: this.decryptConfigObject(provider.config || {}),
     })) as ProviderConfig[];

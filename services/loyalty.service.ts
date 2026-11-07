@@ -2,23 +2,13 @@ import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { LoyaltyRepository } from "@/repositories/loyalty.repository";
 import { LoyaltyAccount, LoyaltyTransaction } from "@/types/customer.types";
 import { WalletService } from "@/services/wallet.service";
-import { tierForLifetimePoints } from "@/lib/loyalty/tiers";
 
-/**
- * Tier ladder, driven by lifetime earned points (shared by earn/reverse).
- * S6-2: delegates to the canonical ladder in lib/loyalty/tiers — this
- * service previously ran its own thresholds (GOLD at 2,000, VIP at
- * 10,000) that disagreed with the admin tiers tab (1,000 / 20,000).
- */
+/** Tier ladder, driven by lifetime earned points (shared by earn/reverse). */
 function tierForTotalEarned(totalEarned: number): string {
-  return tierForLifetimePoints(totalEarned);
-}
-
-export interface LoyaltySettings {
-  points_per_currency: number;
-  currency_amount: number;
-  min_order_amount: number;
-  signup_bonus: number;
+  if (totalEarned >= 10000) return "VIP";
+  if (totalEarned >= 5000) return "PLATINUM";
+  if (totalEarned >= 2000) return "GOLD";
+  return "SILVER";
 }
 
 export interface RewardCatalogItem {
@@ -59,6 +49,7 @@ export class LoyaltyService {
       .single();
 
     if (error) {
+      console.error("Failed to auto-create loyalty account:", error);
       return {
         id: "",
         customer_id: userId,
@@ -88,12 +79,13 @@ export class LoyaltyService {
       .order("points_cost", { ascending: true });
     
     if (error) {
+      console.error("Failed to fetch reward catalog:", error);
       return [];
     }
     return data;
   }
 
-  static async getSettings(): Promise<LoyaltySettings> {
+  static async getSettings(): Promise<any> {
     const db = await this.getClient();
     const { data, error } = await db
       .from("settings")
@@ -147,6 +139,7 @@ export class LoyaltyService {
         .eq("type", "EARN")
         .maybeSingle();
       if (existingEarn) {
+        console.warn(`Idempotency check: Points already earned for ${params.referenceType} ${refId}`);
         return { account, pointsEarned: 0 };
       }
     }
@@ -163,6 +156,7 @@ export class LoyaltyService {
 
     if (insertError) {
       if (insertError.code === "23505") { // unique_violation
+        console.warn(`Idempotency check: Points already earned for ${params.referenceType} ${refId}`);
         return { account, pointsEarned: 0 };
       }
       throw new Error(`Failed to insert loyalty transaction: ${insertError.message}`);
@@ -400,7 +394,7 @@ export class LoyaltyService {
         pointsDeducted: cost,
         newBalance,
       };
-    } catch (deliveryError) {
+    } catch (deliveryError: any) {
       // Compensate: give the points back and mark the redemption reversed.
       await db.from("loyalty_transactions").insert({
         loyalty_account_id: account.id,
@@ -419,7 +413,7 @@ export class LoyaltyService {
         })
         .eq("id", account.id);
       throw new Error(
-        `Redemption failed: ${(deliveryError as Error).message || "delivery error"}`
+        `Redemption failed: ${deliveryError.message || "delivery error"}`
       );
     }
   }

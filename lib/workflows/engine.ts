@@ -1,13 +1,9 @@
 import { db } from "@/lib/db/client";
-import {
-  automationRules,
-  WorkflowActionPayload,
-  WorkflowTrigger,
-} from "./rules";
+import { automationRules, WorkflowTrigger } from "./rules";
 
 export interface WorkflowEvent {
   triggerEvent: WorkflowTrigger;
-  payload: WorkflowActionPayload;
+  payload: any;
 }
 
 export interface WorkflowExecutionLog {
@@ -15,7 +11,7 @@ export interface WorkflowExecutionLog {
   trigger_event: string;
   status: "PENDING" | "SUCCESS" | "FAILED";
   error_message?: string;
-  execution_details?: unknown;
+  execution_details?: any;
 }
 
 /**
@@ -34,10 +30,14 @@ export async function executeWorkflows(event: WorkflowEvent) {
       .eq("is_active", true);
 
     if (error) {
+      console.error("Error fetching workflows:", error);
       throw error;
     }
 
     if (!workflows || workflows.length === 0) {
+      console.warn(
+        `No active workflows found for trigger: ${event.triggerEvent}`
+      );
       return;
     }
 
@@ -56,17 +56,19 @@ export async function executeWorkflows(event: WorkflowEvent) {
             status: "SUCCESS",
             execution_details: actionResult,
           });
-        } catch (actionError) {
+        } catch (actionError: any) {
+          console.error(`Workflow ${workflow.id} failed:`, actionError);
           logs.push({
             workflow_id: workflow.id,
             trigger_event: event.triggerEvent,
             status: "FAILED",
-            error_message: (actionError as Error).message,
+            error_message: actionError.message,
           });
         }
       }
     }
   } catch (err) {
+    console.error("Workflow Engine Error:", err);
     throw err;
   }
 }

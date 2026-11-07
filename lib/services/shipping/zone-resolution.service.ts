@@ -74,6 +74,7 @@ export async function resolveZoneForAddress(input: {
       };
     }
   } catch (err) {
+    console.error("[zone-resolution] lookup failed, using legacy rates", err);
   }
   // No zones configured — preserve the historical flat schedule.
   const isDhaka =
@@ -94,37 +95,4 @@ export async function resolveShippingCharge(input: {
 }): Promise<{ zone: ResolvedZone; charge: number }> {
   const zone = await resolveZoneForAddress(input);
   return { zone, charge: zone.rate };
-}
-
-/**
- * FIX ROUND 28 (M-7): the free-shipping threshold (Settings → Store
- * Info `free_shipping_threshold`, default ৳999, advertised in the
- * announcement bar / cart progress meter) is the SINGLE source of
- * truth for all three order-math paths — cart summary
- * (OrderService.calculateSummary, which the session placeOrder path
- * also uses) and the guest /api/store/orders path. Before this round
- * only the cart path consulted it; a ≥threshold guest order was
- * charged shipping the store had promised free. The threshold rule
- * itself stays single-sourced in getFreeShippingThreshold()
- * (lib/actions/settings.actions, REG-81); this helper is the one
- * application point every path shares. Settings unreadable → the
- * zone charge stands (never blocks checkout).
- */
-export async function applyFreeShippingThreshold(
-  subtotal: number,
-  charge: number
-): Promise<number> {
-  if (charge <= 0 || subtotal <= 0) return charge;
-  try {
-    const { getFreeShippingThreshold } = await import(
-      "@/lib/actions/settings.actions"
-    );
-    const threshold = await getFreeShippingThreshold();
-    if (threshold > 0 && subtotal >= threshold) {
-      return 0;
-    }
-  } catch {
-    // Settings unreadable — fall through with the zone charge.
-  }
-  return charge;
 }

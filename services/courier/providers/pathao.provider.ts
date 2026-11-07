@@ -20,16 +20,6 @@ interface PathaoTokenCache {
   expiresAt: number;
 }
 
-// REG-65: boundary contract for a Pathao order log off the untyped API
-// payload. Fields read without a fallback are asserted as strings; the
-// `type` alias (not an interface) keeps `raw: log` assignable to
-// `Record<string, any>` on TrackingUpdate.
-type PathaoOrderLog = {
-  status: string;
-  comment?: string;
-  created_at: string;
-};
-
 export class PathaoProvider implements ICourierProvider {
   readonly id = "pathao" as const;
   readonly name = "Pathao Courier";
@@ -186,8 +176,8 @@ export class PathaoProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to create Pathao consignment"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -225,7 +215,7 @@ export class PathaoProvider implements ICourierProvider {
 
       if (data.type === "success" && data.data) {
         const order = data.data;
-        const updates: TrackingUpdate[] = (order.log || []).map((log: PathaoOrderLog) => ({
+        const updates: TrackingUpdate[] = (order.log || []).map((log: any) => ({
           status: log.status,
           statusDescription: log.comment || log.status,
           location: "",
@@ -247,8 +237,8 @@ export class PathaoProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Tracking info not found");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -276,8 +266,8 @@ export class PathaoProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Failed to generate Pathao label");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -303,8 +293,8 @@ export class PathaoProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -324,7 +314,7 @@ export class PathaoProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

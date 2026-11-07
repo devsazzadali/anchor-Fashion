@@ -4,17 +4,6 @@ import {
   IntegrationResponse,
 } from "@/types/integration.types";
 
-interface ResendEmailPayload {
-  from: string;
-  to: string[];
-  subject: string;
-  html?: string;
-  text?: string;
-  cc?: string[];
-  bcc?: string[];
-  reply_to?: string;
-}
-
 export class ResendProvider implements EmailProvider {
   id = "resend";
   name = "Resend";
@@ -34,7 +23,7 @@ export class ResendProvider implements EmailProvider {
     request: EmailSendRequest
   ): Promise<IntegrationResponse<{ messageId: string }>> {
     try {
-      const payload: ResendEmailPayload = {
+      const payload: any = {
         from: request.from || this.defaultFrom,
         to: Array.isArray(request.to) ? request.to : [request.to],
         subject: request.subject,
@@ -79,14 +68,14 @@ export class ResendProvider implements EmailProvider {
           message: data.error?.message || "Failed to send email via Resend",
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         providerId: this.id,
         timestamp: new Date().toISOString(),
         error: {
           code: "EXCEPTION",
-          message: (error as Error).message,
+          message: error.message,
         },
       };
     }

@@ -215,6 +215,7 @@ export class BKashService {
         };
       }
     } catch (dbErr) {
+      console.error("[bKash Service] Database config lookup failed:", dbErr);
     }
 
     // Fallback to placeholder/sandbox config if not configured
@@ -294,15 +295,18 @@ export class BKashService {
 
     if (!res.ok) {
       const errText = await res.text();
+      console.error("[bKash Create Payment] HTTP Error:", res.status, errText);
       throw new Error(`bKash payment initiation failed (${res.status}): ${errText}`);
     }
 
     const data: BKashCreatePaymentResponse = await res.json();
     if (data.statusCode && data.statusCode !== "0000") {
+      console.error("[bKash Create Payment] Provider Rejected:", data.statusCode, data.statusMessage);
       throw new Error(`bKash rejected payment: [${data.statusCode}] ${data.statusMessage}`);
     }
 
     if (!data.paymentID || !data.bkashURL) {
+      console.error("[bKash Create Payment] Missing paymentID or bkashURL in response:", data);
       throw new Error("bKash response missing paymentID or gateway checkout URL");
     }
 
@@ -331,6 +335,7 @@ export class BKashService {
 
     // Handle 401 unauthorized (token expired between create and execute)
     if (res.status === 401) {
+      console.warn("[bKash Execute Payment] Token expired, refreshing token and retrying execute...");
       BKashTokenManager.clearCache();
       token = await BKashTokenManager.getToken(config);
       res = await fetch(url, {
@@ -346,6 +351,7 @@ export class BKashService {
 
     if (!res.ok) {
       const errText = await res.text();
+      console.error("[bKash Execute Payment] HTTP Error:", res.status, errText);
       throw new Error(`bKash execution failed (${res.status}): ${errText}`);
     }
 

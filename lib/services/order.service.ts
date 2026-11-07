@@ -2,14 +2,12 @@ import { OrderRepository } from "../repositories/order.repository";
 import { CheckoutRepository } from "../repositories/checkout.repository";
 import { CartService } from "./cart.service";
 import { CheckoutFormValues } from "@/schemas/checkout.schema";
-import { Order, OrderItem, PaymentPayload, OrderStatus, RiskLevel, CartItem } from "@/types/checkout.types";
+import { Order, OrderItem, PaymentPayload, OrderStatus, RiskLevel } from "@/types/checkout.types";
 import { InventoryService, ReservationItem } from "@/services/inventory.service";
 import { WarehouseService } from "@/services/warehouse.service";
 import { CouponService } from "@/services/coupon.service";
 import { prisma } from "@/lib/prisma";
 import { totalVatAmount } from "@/lib/utils/vat";
-import { FALLBACK_DELIVERY_FEES } from "@/lib/constants/shipping";
-import { applyFreeShippingThreshold } from "@/lib/services/shipping/zone-resolution.service";
 
 export class OrderService {
   /**
@@ -18,12 +16,11 @@ export class OrderService {
   /**
    * Fallback shipping fees by method slug — used ONLY when the
    * admin-configured delivery zones cannot be loaded. Keys must match
-   * the RadioGroup values in checkout-form.tsx. REG-63: values come
-   * from the ONE canonical fallback pair (lib/constants/shipping).
+   * the RadioGroup values in checkout-form.tsx.
    */
   private static readonly SHIPPING_FEES: Record<string, number> = {
-    home_delivery: FALLBACK_DELIVERY_FEES.insideDhaka,
-    home_delivery_outside: FALLBACK_DELIVERY_FEES.outsideDhaka,
+    home_delivery: 100,          // Inside Dhaka
+    home_delivery_outside: 150,  // Outside Dhaka
   };
 
   /**
@@ -87,39 +84,11 @@ export class OrderService {
    * order was charged in full. Soft variant returns null on any problem
    * (used for display summaries); placeOrder re-validates strictly.
    */
-  /**
-   * A3-A8: the coupon identity for a checkout. Signed-in customers use
-   * their user id; GUESTS are bound by their verified checkout phone —
-   * the same identity key the auto-profile system uses (normalized
-   * phone → profile). Without this, guests had no id at all, the
-   * per-user limit check was skipped, and "1 per customer" coupons
-   * were reusable without limit through guest checkout.
-   */
-  private static async resolveCouponCustomerId(
-    userId: string | null | undefined,
-    phone?: string | null
-  ): Promise<string | undefined> {
-    if (userId) return userId;
-    if (!phone) return undefined;
-    try {
-      const { normalizePhone, findProfileByNormalizedPhone } = await import(
-        "@/lib/services/customer/guest-profile.service"
-      );
-      const normalized = normalizePhone(phone);
-      if (!normalized) return undefined;
-      const profile = await findProfileByNormalizedPhone(normalized);
-      return profile?.id || undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
   private static async resolveSessionCoupon(
     cartId: string,
     userId: string | null | undefined,
     subtotal: number,
-    sessionId?: string | null,
-    guestPhone?: string | null
+    sessionId?: string | null
   ): Promise<{ code: string; discount: number } | null> {
     try {
       const session = sessionId
@@ -138,7 +107,7 @@ export class OrderService {
       const validation = await CouponService.validateAndCalculateDiscount(
         code,
         subtotal,
-        await this.resolveCouponCustomerId(userId, guestPhone)
+        userId || undefined
       );
       if (!validation.isValid) return null;
       return { code: validation.coupon?.code || code, discount: validation.discount };
@@ -152,7 +121,7 @@ export class OrderService {
     userId?: string | null,
     shippingMethod?: string,
     sessionId?: string | null,
-    shippingAddress?: { city?: string | null; state?: string | null; district?: string | null; phone?: string | null } | null
+    shippingAddress?: { city?: string | null; state?: string | null; district?: string | null } | null
   ): Promise<{
     subtotal: number;
     shipping_fee: number;
@@ -172,7 +141,7 @@ export class OrderService {
       };
     }
 
-    const resolvePrice = (item: CartItem) =>
+    const resolvePrice = (item: any) =>
       item.variant?.sale_price ||
       item.variant?.price ||
       item.product?.sale_price ||
@@ -188,7 +157,7 @@ export class OrderService {
     // checkout UI displayed a hardcoded 15% "estimated tax" the server never
     // actually charged.
     const vat_amount = totalVatAmount(
-      cart.items.map((item) => ({
+      (cart.items as any[]).map((item) => ({
         unitPrice: resolvePrice(item),
         quantity: item.quantity,
         vatPercent: item.product?.vat_percent ?? 0,
@@ -209,34 +178,34 @@ export class OrderService {
       subtotal > 0
         ? addressZone?.rate ??
           zoneFee ??
-          (this.SHIPPING_FEES[shippingMethod ?? "home_delivery"] ?? FALLBACK_DELIVERY_FEES.insideDhaka)
+          (this.SHIPPING_FEES[shippingMethod ?? "home_delivery"] ?? 100)
         : 0;
 
     // Free-shipping threshold (Settings → Store Info, advertised in the
     // announcement bar and the cart's progress meter): when the merchandise
     // subtotal reaches the configured threshold, delivery is free. The
     // delivery zone is still resolved and recorded on the order by
-    // placeOrder — only the fee is waived.
-    // FIX ROUND 28 (M-7): the application now goes through the ONE
-    // shared helper (applyFreeShippingThreshold in
-    // lib/services/shipping/zone-resolution.service) that the guest
-    // /api/store/orders path also uses, so all three order-math paths
-    // (cart summary, session placeOrder via this summary, guest) apply
-    // the identical rule. The threshold value itself remains
-    // single-sourced in getFreeShippingThreshold (REG-81).
-    const shipping_fee = await applyFreeShippingThreshold(
-      subtotal,
-      zone_shipping_fee
-    );
+    // placeOrder — only the fee is waived. BUG FIX: this threshold was
+    // previously never consulted here, so qualifying orders were charged
+    // the full zone fee at checkout.
+    let shipping_fee = zone_shipping_fee;
+    if (zone_shipping_fee > 0) {
+      try {
+        const { getStoreInfo } = await import(
+          "@/lib/actions/settings.actions"
+        );
+        const info = await getStoreInfo();
+        const threshold = parseFloat(info?.free_shipping_threshold ?? "") || 0;
+        if (threshold > 0 && subtotal >= threshold) {
+          shipping_fee = 0;
+        }
+      } catch {
+        // Settings unreadable — fall through with the zone fee.
+      }
+    }
 
     // Coupon applied to the checkout session (see resolveSessionCoupon).
-    const coupon = await this.resolveSessionCoupon(
-      cartId,
-      userId,
-      subtotal,
-      sessionId,
-      shippingAddress?.phone || null
-    );
+    const coupon = await this.resolveSessionCoupon(cartId, userId, subtotal, sessionId);
     const discount_amount = coupon?.discount ?? 0;
 
     const total_amount = Math.max(
@@ -280,42 +249,34 @@ export class OrderService {
     // Strict coupon validation before anything is persisted: a coupon the
     // customer applied that has since expired / hit its limit must fail the
     // order with the coupon error, not silently change the charged total.
-    // A3-A8: the previous catch re-threw only errors whose message matched
-    // a regex — every other validation failure (e.g. "not active yet") was
-    // swallowed into appliedCoupon = null while summary.discount_amount
-    // (which HAD resolved the coupon) was still charged: discount granted,
-    // consumeCoupon never called, used_count never incremented. Now ANY
-    // invalid session coupon fails the order; only a session-lookup
-    // problem (no code readable) leaves the order coupon-free.
-    // A3-A8: guests validate against their phone-bound auto-profile id.
-    const couponCustomerId = await this.resolveCouponCustomerId(
-      userId,
-      checkoutData.information.shipping_address.phone
-    );
     let appliedCoupon: { code: string; discount: number } | null = null;
-    let sessionCouponCode: string | null = null;
     try {
       const sessionRow = await prisma.checkoutSession.findUnique({
         where: { id: sessionId },
         select: { couponCode: true },
       });
-      sessionCouponCode = sessionRow?.couponCode?.trim() || null;
-    } catch {
-      sessionCouponCode = null;
-    }
-    if (sessionCouponCode) {
-      const validation = await CouponService.validateAndCalculateDiscount(
-        sessionCouponCode,
-        summary.subtotal,
-        couponCustomerId
-      );
-      if (!validation.isValid) {
-        throw new Error(validation.error || "Invalid coupon");
+      const code = sessionRow?.couponCode?.trim();
+      if (code) {
+        const validation = await CouponService.validateAndCalculateDiscount(
+          code,
+          summary.subtotal,
+          userId || undefined
+        );
+        if (!validation.isValid) {
+          throw new Error(validation.error || "Invalid coupon");
+        }
+        appliedCoupon = {
+          code: validation.coupon?.code || code,
+          discount: validation.discount,
+        };
       }
-      appliedCoupon = {
-        code: validation.coupon?.code || sessionCouponCode,
-        discount: validation.discount,
-      };
+    } catch (err) {
+      if (err instanceof Error && /coupon|Minimum order|expired|usage limit|already used/i.test(err.message)) {
+        throw err;
+      }
+      // Session lookup problems must not block a coupon-free checkout; the
+      // soft summary above already resolved any discount consistently.
+      appliedCoupon = null;
     }
 
     // Generate Order Number
@@ -348,7 +309,7 @@ export class OrderService {
       payment_method: checkoutData.payment.payment_method,
       reservation_expires_at: reservationExpiresAt,
       notes: checkoutData.notes,
-      risk_level: riskMetadata?.risk_level || "LOW",
+      risk_level: (riskMetadata?.risk_level || "LOW") as any,
       risk_score: riskMetadata?.risk_score ?? 0,
       risk_reasons: riskMetadata?.risk_reasons || [],
       verification_status:
@@ -357,7 +318,7 @@ export class OrderService {
       verification_verified_at: riskMetadata?.verification_verified_at || null,
     };
 
-    const orderItems: Partial<OrderItem>[] = cart.items.map((item) => {
+    const orderItems: Partial<OrderItem>[] = (cart.items as any[]).map((item: any) => {
       const price =
         item.variant?.sale_price ||
         item.variant?.price ||
@@ -373,7 +334,7 @@ export class OrderService {
         product_name: item.product?.title || "Unknown Product",
         variant_name: item.variant?.sku ? `SKU: ${item.variant.sku}` : null,
         sku: item.variant?.sku || "N/A",
-      };
+      } as any;
     });
 
     // Phase 8: persist the checkout email onto the order's shipping
@@ -384,17 +345,17 @@ export class OrderService {
     const rawShippingAddress = checkoutData.information.shipping_address;
     // Stamp the resolved delivery zone onto the persisted address so the
     // order record (and invoice) shows which zone set the charge.
-    const resolvedZone = await this.zoneForAddress(rawShippingAddress);
+    const resolvedZone = await this.zoneForAddress(rawShippingAddress as any);
     const withZone = resolvedZone
       ? {
-          ...rawShippingAddress,
+          ...(rawShippingAddress as any),
           delivery_zone: resolvedZone.name,
           delivery_zone_id: resolvedZone.id,
         }
       : rawShippingAddress;
     const shippingAddress =
-      guestEmail && !withZone?.email
-        ? { ...withZone, email: guestEmail }
+      guestEmail && !(withZone as any)?.email
+        ? { ...(withZone as any), email: guestEmail }
         : withZone;
     const billingAddress = checkoutData.payment.billing_address_same_as_shipping
       ? shippingAddress
@@ -418,7 +379,7 @@ export class OrderService {
         defaultWarehouse?.id || "85bf6ad1-be55-47b2-ab31-07b05c43bcfc";
 
       const reservationItems: ReservationItem[] = [];
-      for (const item of cart.items) {
+      for (const item of (cart.items as any[])) {
         const variantId = (item.variant_id || item.product_id) as string;
         if (!variantId) continue;
 
@@ -457,7 +418,7 @@ export class OrderService {
         const inventoryService = new InventoryService();
         await inventoryService.reserveOrderInventory(order.id, reservationItems);
       }
-    } catch (reserveErr) {
+    } catch (reserveErr: any) {
       // If reservation failed (e.g. out of stock), cancel order immediately to keep DB consistent
       try {
         await OrderRepository.updateOrderStatus(
@@ -474,16 +435,9 @@ export class OrderService {
     // (idempotent) and cancel, mirroring the reservation-failure path.
     if (appliedCoupon) {
       try {
-        // A3-A8/B3: record the redemption against the SAME identity the
-        // per-user limit was validated with — for guests that is the
-        // phone-bound auto-profile (createOrder has just linked the
-        // order to it, so order.user_id carries it), never null. The
-        // consume writes the coupon_usages row + used_count increment
-        // as one operation; a recording failure cancels the order
-        // (below), so a granted discount can no longer go unrecorded.
         await CouponService.consumeCoupon(
           appliedCoupon.code,
-          userId || order.user_id || couponCustomerId,
+          userId || undefined,
           order.id,
           appliedCoupon.discount
         );

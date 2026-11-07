@@ -124,6 +124,7 @@ export class CourierRegistry {
       this.fallbackCode = null;
       this.lastLoadedAt = now;
     } catch (err) {
+      console.error("[CourierRegistry] Failed to load providers from DB:", err);
     }
   }
 

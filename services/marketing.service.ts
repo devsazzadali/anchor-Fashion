@@ -2,26 +2,13 @@ import { MarketingRepository } from "@/repositories/marketing.repository";
 import {
   campaignSchema,
   campaignAudienceSchema,
-} from "@/schemas/marketing.schema";
+} from "@/validators/marketing.schema";
 import { Campaign, CampaignAudience } from "@/types/marketing.types";
 import { createAdminDbClient } from "@/lib/db/client";
 import { EmailProvider } from "@/lib/notifications/EmailProvider";
 import { QueueService } from "@/services/jobs/queue.service";
-import { recordAudit, AUDIT_ACTIONS } from "@/lib/security/audit";
 
 const marketingRepository = new MarketingRepository();
-
-type MarketingProfileRow = {
-  id: string;
-  email: string;
-  first_name?: string | null;
-  last_name?: string | null;
-};
-
-type MarketingSubscriberRow = {
-  id: string;
-  email: string;
-};
 
 export class MarketingService {
   private getAdminClient() {
@@ -152,8 +139,8 @@ export class MarketingService {
             status: res.error ? "failed" : "sent",
             error_message: res.error ? JSON.stringify(res.error) : null,
           });
-        } catch (dispatchErr) {
-          sendErrors.push(`${recipient.email}: ${(dispatchErr as Error).message}`);
+        } catch (dispatchErr: any) {
+          sendErrors.push(`${recipient.email}: ${dispatchErr.message}`);
         }
       }
 
@@ -165,22 +152,6 @@ export class MarketingService {
         errors: sendErrors.slice(0, 5),
       });
 
-      // REG-27: audit the send. This one hook covers both human sends
-      // (createAndSendCampaignAction) and cron-dispatched scheduled
-      // sends (processScheduledCampaigns); the actor is the campaign's
-      // creator — the human who created/scheduled it — never "System".
-      await recordAudit({
-        userId: campaign.created_by || null,
-        action: AUDIT_ACTIONS.CAMPAIGN_SENT,
-        entity: "campaign",
-        entityId: campaignId,
-        newValues: {
-          name: campaign.name,
-          sent_count: sentCount,
-          recipient_count: recipients.length,
-        },
-      });
-
       return {
         success: true,
         sentCount,
@@ -189,10 +160,10 @@ export class MarketingService {
             ? `Sent with ${sendErrors.length} partial errors: ${sendErrors[0]}`
             : undefined,
       };
-    } catch (sendErr) {
+    } catch (sendErr: any) {
       // 7. Mark failed on error
       await this.setCampaignStatusSafely(campaignId, "failed", "paused", {
-        error: (sendErr as Error).message,
+        error: sendErr.message,
         failedAt: new Date().toISOString(),
       });
       throw sendErr;
@@ -270,6 +241,7 @@ export class MarketingService {
         if (result.success) succeeded++;
         else failed++;
       } catch (err) {
+        console.error(`[processScheduledCampaigns] Campaign ${c.id} failed:`, err);
         failed++;
       }
     }
@@ -293,12 +265,12 @@ export class MarketingService {
     try {
       // 1. Fetch from customer_profiles
       const { data: customers } = await db
-        .from("profiles")
+        .from("customer_profiles")
         .select("id, email, first_name, last_name")
         .not("email", "is", null)
         .limit(200);
 
-      (customers || []).forEach((c: MarketingProfileRow) => {
+      (customers || []).forEach((c: any) => {
         if (c.email && c.email.includes("@")) {
           recipientsMap.set(c.email.toLowerCase().trim(), {
             id: c.id,
@@ -315,7 +287,7 @@ export class MarketingService {
         .eq("is_active", true)
         .limit(200);
 
-      (subscribers || []).forEach((s: MarketingSubscriberRow) => {
+      (subscribers || []).forEach((s: any) => {
         if (s.email && s.email.includes("@")) {
           const emailKey = s.email.toLowerCase().trim();
           if (!recipientsMap.has(emailKey)) {
@@ -327,6 +299,7 @@ export class MarketingService {
         }
       });
     } catch (err) {
+      console.warn("[MarketingService.resolveRecipients] Non-fatal lookup error:", err);
     }
 
     return Array.from(recipientsMap.values());

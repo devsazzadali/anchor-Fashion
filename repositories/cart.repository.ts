@@ -1,5 +1,5 @@
 import { CartRepository as LibCartRepository } from "@/lib/repositories/cart.repository";
-import { Cart, CartItem } from "@/types/checkout.types";
+import { Cart } from "@/types/checkout.types";
 
 export class CartRepository {
   async getCartById(cartId: string): Promise<Cart | null> {
@@ -23,13 +23,13 @@ export class CartRepository {
     productId: string,
     quantity: number,
     variantId?: string
-  ): Promise<CartItem | undefined> {
+  ): Promise<any> {
     await LibCartRepository.addItem(cartId, productId, variantId || null, quantity);
     const cart = await LibCartRepository.getCartById(cartId);
     return cart?.items?.[cart.items.length - 1];
   }
 
-  async updateItemQuantity(itemId: string, quantity: number): Promise<void> {
+  async updateItemQuantity(itemId: string, quantity: number): Promise<any> {
     await LibCartRepository.updateItemQuantity(itemId, quantity);
   }
 

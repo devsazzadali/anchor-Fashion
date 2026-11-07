@@ -6,15 +6,6 @@ import {
   CommunicationLog,
 } from "@/types/crm.types";
 
-// Row shape this file actually reads from the profiles builder select.
-interface ProfileDbRow {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  phone: string | null;
-}
-
 export class CRMRepository {
   private getAdminClient() {
     return createAdminDbClient();
@@ -24,40 +15,42 @@ export class CRMRepository {
     const db = this.getAdminClient();
     try {
       const { data: customerProfiles } = await db
-        .from("profiles")
+        .from("customer_profiles")
         .select("*")
         .order("created_at", { ascending: false });
 
       if (customerProfiles && customerProfiles.length > 0) {
-        return customerProfiles.map((cp: ProfileDbRow) => ({
+        return customerProfiles.map((cp: any) => ({
           ...cp,
           profile_id: cp.id,
           first_name: cp.first_name,
           last_name: cp.last_name,
           email: cp.email,
           phone: cp.phone,
-        })) as CRMCustomer[];
+        })) as any;
       }
     } catch {}
 
-    // FIX ROUND 28 (M-2, PROPOSAL): the crm_customers fallback that
-    // stood here reads a table that does NOT exist in this schema
-    // (Round-28 DDL proposal) and could only ever resolve empty.
-    // Profiles is the real customer source (above); when it is empty
-    // there are honestly no customers to list.
-    return [];
+    const { data, error } = await db
+      .from("crm_customers")
+      .select("*, customer_profiles(*)")
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return (data || []).map((c: any) => ({
+      ...c,
+      first_name: c.customer_profiles?.first_name || c.first_name,
+      last_name: c.customer_profiles?.last_name || c.last_name,
+      email: c.customer_profiles?.email || c.email,
+      phone: c.customer_profiles?.phone || c.phone,
+    })) as any;
   }
 
   async getCustomerById(id: string): Promise<CRMCustomer | null> {
     const db = this.getAdminClient();
-    // FIX ROUND 28 (M-2, PROPOSAL): was a crm_customers read (phantom
-    // table — always null, so CRM detail showed "not found" for real
-    // customers). Read the real profiles row and shape it like
-    // getCustomers() does; CRM metadata fields stay absent until the
-    // crm_customers DDL lands.
     const { data, error } = await db
-      .from("profiles")
-      .select("*")
+      .from("crm_customers")
+      .select("*, customer_profiles(*)")
       .eq("id", id)
       .single();
 
@@ -65,43 +58,7 @@ export class CRMRepository {
       if (error.code === "PGRST116") return null; // not found
       throw new Error(error.message);
     }
-    if (!data) return null;
-    const [withProfile] = await this.attachCustomerProfiles(db, [
-      { ...data, profile_id: data.id },
-    ]);
-    return withProfile as CRMCustomer;
-  }
-
-  /**
-   * REG-83: the customer_profiles(*) embed on crm_customers never
-   * attaches (unsupported pair), so the linked profile's name/email/phone
-   * were always missing. Fetch profiles explicitly by the profile_id
-   * link column and attach under the same key.
-   */
-  private async attachCustomerProfiles(
-    db: ReturnType<typeof createAdminDbClient>,
-    rows: Record<string, any>[]
-  ): Promise<Record<string, any>[]> {
-    if (rows.length === 0) return rows;
-    const profileIds = [
-      ...new Set(rows.map((r) => r.profile_id).filter(Boolean)),
-    ];
-    const profileById = new Map<string, any>();
-    if (profileIds.length > 0) {
-      const { data: profiles } = await db
-        .from("profiles")
-        .select("*")
-        .in("id", profileIds);
-      for (const p of profiles || []) {
-        if (p?.id) profileById.set(p.id, p);
-      }
-    }
-    return rows.map((r) => ({
-      ...r,
-      customer_profiles: r.profile_id
-        ? profileById.get(r.profile_id) || null
-        : null,
-    }));
+    return data;
   }
 
   async getLeads(): Promise<CRMLead[]> {

@@ -1,17 +1,10 @@
 import prisma from "@/lib/prisma";
 import {
-  CourierProviderCode,
   CourierProviderRecord,
   DeliveryZone,
   Shipment,
   ShipmentStatus,
 } from "@/types/shipping.types";
-
-/** courier_providers.config JSON — the two bags getCouriers reads. */
-interface CourierConfigJson {
-  credentials?: Record<string, any>;
-  settings?: Record<string, any>;
-}
 
 export class ShippingRepository {
 
@@ -22,9 +15,9 @@ export class ShippingRepository {
       const data = await prisma.courier_providers.findMany({
         orderBy: { name: "asc" },
       });
-      return data.map((r) => ({
+      return data.map((r: any) => ({
         id: String(r.id),
-        code: r.code as CourierProviderCode,
+        code: r.code as any,
         name: r.name,
         display_name: r.name,
         logo_url: null,
@@ -33,14 +26,15 @@ export class ShippingRepository {
         is_sandbox: true,
         priority: 1,
         max_weight_kg: 10,
-        credentials: (r.config as CourierConfigJson | null)?.credentials ?? {},
-        settings: (r.config as CourierConfigJson | null)?.settings ?? {},
+        credentials: (r.config as any)?.credentials ?? {},
+        settings: (r.config as any)?.settings ?? {},
         webhook_secret: null,
         supported_zones: null,
         created_at: r.created_at?.toISOString() ?? new Date().toISOString(),
         updated_at: r.created_at?.toISOString() ?? new Date().toISOString(),
       })) as CourierProviderRecord[];
-    } catch (error) {
+    } catch (error: any) {
+      console.warn("getCouriers error, using mock data:", error.message);
       return [
         {
           id: "1",
@@ -88,8 +82,9 @@ export class ShippingRepository {
         where: { id },
         data: { is_active },
       });
-    } catch (error) {
-      throw new Error(`Failed to update courier: ${(error as Error).message}`);
+    } catch (error: any) {
+      console.error("updateCourierStatus error:", error.message);
+      throw new Error(`Failed to update courier: ${error.message}`);
     }
   }
 
@@ -100,7 +95,7 @@ export class ShippingRepository {
       const data = await prisma.delivery_zones.findMany({
         orderBy: { name: "asc" },
       });
-      return data.map((z) => ({
+      return data.map((z: any) => ({
         id: String(z.id),
         name: z.name,
         code: z.code ?? "IND",
@@ -114,7 +109,8 @@ export class ShippingRepository {
         created_at: z.created_at?.toISOString() ?? new Date().toISOString(),
         updated_at: z.created_at?.toISOString() ?? new Date().toISOString(),
       })) as unknown as DeliveryZone[];
-    } catch (error) {
+    } catch (error: any) {
+      console.warn("getZones error, using mock data:", error.message);
       return [
         {
           id: "1",
@@ -152,15 +148,15 @@ export class ShippingRepository {
     try {
       const data = await prisma.shipment.create({
         data: {
-          shipmentNumber: shipmentData.shipment_number ?? `SHP-${Date.now()}`,
-          orderId: shipmentData.order_id ?? null,
+          shipmentNumber: (shipmentData as any).shipment_number ?? `SHP-${Date.now()}`,
+          orderId: (shipmentData as any).order_id ?? null,
           status: shipmentData.status ?? "created",
-          recipientName: shipmentData.recipient_name ?? null,
-          recipientPhone: shipmentData.recipient_phone ?? null,
-          recipientAddress: shipmentData.recipient_address ?? null,
-          recipientCity: shipmentData.recipient_city ?? null,
-          trackingNumber: shipmentData.tracking_number ?? null,
-          courier: shipmentData.courier_provider_code ?? null,
+          recipientName: (shipmentData as any).recipient_name ?? null,
+          recipientPhone: (shipmentData as any).recipient_phone ?? null,
+          recipientAddress: (shipmentData as any).recipient_address ?? null,
+          recipientCity: (shipmentData as any).recipient_city ?? null,
+          trackingNumber: (shipmentData as any).tracking_number ?? null,
+          courier: (shipmentData as any).courier_provider_code ?? null,
         },
       });
       return {
@@ -171,7 +167,8 @@ export class ShippingRepository {
         created_at: data.createdAt?.toISOString() ?? new Date().toISOString(),
         updated_at: data.updatedAt?.toISOString() ?? new Date().toISOString(),
       } as unknown as Shipment;
-    } catch (error) {
+    } catch (error: any) {
+      console.warn("createShipment error, returning mock:", error.message);
       return {
         id: `ship_${Date.now()}`,
         shipment_number: `SHP-${Date.now()}`,
@@ -197,8 +194,8 @@ export class ShippingRepository {
           updatedAt: new Date(),
         },
       });
-    } catch (error) {
-      throw new Error(`Failed to update shipment status: ${(error as Error).message}`);
+    } catch (error: any) {
+      throw new Error(`Failed to update shipment status: ${error.message}`);
     }
   }
 }

@@ -60,12 +60,8 @@ export class CustomerService {
       "shipped",
     ];
 
-    // FIX ROUND 28 (M-2): customer_orders does not exist — the real
-    // table is `orders` (the builder maps user_id → profile_id). The
-    // phantom table meant this guard NEVER fired: accounts with active
-    // orders could be deactivated.
     const { data: activeOrders, error: orderErr } = await db
-      .from("orders")
+      .from("customer_orders")
       .select("id, status")
       .eq("user_id", userId)
       .in("status", activeStatuses);
@@ -95,30 +91,27 @@ export class CustomerService {
   ): Promise<{ success: boolean; message: string }> {
     const db = await this.getClient();
 
-    // 1. Check for any historical orders (FIX ROUND 28, M-2: the real
-    // table is `orders`, not the phantom customer_orders — this guard
-    // never fired before, so accounts with order history could be
-    // hard-deleted.)
-    const { data: orders } = await db
-      .from("orders")
+    // 1. Check for any historical orders
+    const { data: anyOrders } = await db
+      .from("customer_orders")
       .select("id")
       .eq("user_id", userId)
       .limit(1);
 
-    if (orders && orders.length > 0) {
+    if (anyOrders && anyOrders.length > 0) {
       throw new Error(
         "Account cannot be permanently deleted because historical orders exist for this account. Tax and compliance laws require retaining sales invoices. You may deactivate your account instead."
       );
     }
 
     // 2. Check for any wallet transactions
-    const { data: wallet } = await db
+    const { data: anyWallet } = await db
       .from("customer_wallets")
       .select("id, balance")
       .eq("customer_id", userId)
       .maybeSingle();
 
-    if (wallet && Number(wallet.balance) > 0) {
+    if (anyWallet && Number(anyWallet.balance) > 0) {
       throw new Error(
         "Account cannot be deleted while a positive wallet balance remains. Please withdraw or spend your remaining balance first."
       );

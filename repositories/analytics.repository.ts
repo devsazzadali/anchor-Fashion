@@ -1,55 +1,9 @@
 import { createAdminDbClient } from "@/lib/db/client";
-import { prisma } from "@/lib/prisma";
 
 export type DateRange = {
   from: Date;
   to: Date;
 };
-
-/**
- * REG-65 batch 1: row shapes for the shim-fed analytics queries.
- * Every analytics query selects an explicit column list; these are
- * exactly the fields the aggregations read (money columns arrive as
- * number | string | null from the driver, hence the unions — every
- * read already goes through Number(...) || 0).
- */
-interface AnalyticsOrderRow {
-  id: string;
-  status?: string | null;
-  created_at: string;
-  grand_total?: number | string | null;
-  total_amount?: number | string | null;
-  payment_method?: string | null;
-  payment_status?: string | null;
-  shipping_total?: number | string | null;
-  shipping_fee?: number | string | null;
-  order_number?: string | null;
-  customer_id?: string | null;
-}
-
-interface AnalyticsCustomerRow {
-  id: string;
-  created_at: string;
-  status?: string | null;
-}
-
-interface AnalyticsOrderItemRow {
-  id: string;
-  order_id: string;
-  product_id?: string | null;
-  product_name?: string | null;
-  quantity?: number | string | null;
-  unit_price?: number | string | null;
-  line_total?: number | string | null;
-}
-
-/** The synthesized product row getSalesAnalytics aggregates against. */
-interface AnalyticsProductRow {
-  id: string;
-  name: string;
-  category_id: string | null;
-  categories: { name: string } | null;
-}
 
 export class AnalyticsRepository {
   /**
@@ -84,8 +38,8 @@ export class AnalyticsRepository {
       .gte("created_at", previousFrom.toISOString())
       .lte("created_at", currentTo.toISOString());
 
-    const customers = allCustomers?.filter((c: AnalyticsCustomerRow) => new Date(c.created_at) >= currentFrom) || [];
-    const previousCustomers = allCustomers?.filter((c: AnalyticsCustomerRow) => new Date(c.created_at) >= previousFrom && new Date(c.created_at) < currentFrom) || [];
+    const customers = allCustomers?.filter((c: any) => new Date(c.created_at) >= currentFrom) || [];
+    const previousCustomers = allCustomers?.filter((c: any) => new Date(c.created_at) >= previousFrom && new Date(c.created_at) < currentFrom) || [];
 
     // Products
     const { count: productsCount } = await db
@@ -100,7 +54,7 @@ export class AnalyticsRepository {
       .from("variants")
       .select("id, product_id");
     const productByVariant = new Map<string, string>(
-      (variantProducts || []).map((v: { id: string; product_id: string }) => [String(v.id), String(v.product_id)] as [string, string])
+      (variantProducts || []).map((v: any) => [String(v.id), String(v.product_id)] as [string, string])
     );
 
     // ── Real profit basis ────────────────────────────────────────────────
@@ -114,10 +68,10 @@ export class AnalyticsRepository {
       .from("products")
       .select("id, cost_price");
     const costByProduct = new Map<string, number>(
-      (productCosts || []).map((p: { id: string; cost_price?: number | string | null }) => [String(p.id), Number(p.cost_price) || 0] as [string, number])
+      (productCosts || []).map((p: any) => [String(p.id), Number(p.cost_price) || 0] as [string, number])
     );
     const profitByOrder = new Map<string, number>();
-    for (const it of (orderItems || []) as AnalyticsOrderItemRow[]) {
+    for (const it of (orderItems || []) as any[]) {
       if (!it.product_id) continue;
       const margin =
         (Number(it.unit_price) || 0) - (costByProduct.get(it.product_id) || 0);
@@ -132,7 +86,7 @@ export class AnalyticsRepository {
       .gte("date", currentFrom.toISOString().split("T")[0])
       .lte("date", currentTo.toISOString().split("T")[0]);
     const expensesTotal = (periodExpenses || []).reduce(
-      (s: number, e: { amount?: number | string | null }) => s + (Number(e.amount) || 0),
+      (s: number, e: any) => s + (Number(e.amount) || 0),
       0
     );
 
@@ -161,7 +115,7 @@ export class AnalyticsRepository {
     let yearlyRevenue = 0;
 
     if (orders && orders.length > 0) {
-      orders.forEach((o: AnalyticsOrderRow) => {
+      orders.forEach((o: any) => {
         const s = (o.status || "").toLowerCase();
         if (s !== "cancelled" && s !== "returned") {
           const createdAt = new Date(o.created_at);
@@ -202,11 +156,11 @@ export class AnalyticsRepository {
       .select("customer_id")
       .gte("created_at", currentFrom.toISOString());
       
-    const activeCustomers = new Set(recentOrders?.map((o: { customer_id?: string | null }) => o.customer_id).filter(Boolean)).size || 0;
+    const activeCustomers = new Set(recentOrders?.map((o: any) => o.customer_id).filter(Boolean)).size || 0;
 
     // Inventory valued at cost: Σ quantity_available × product cost_price.
     const totalInventoryValue = (inventory || []).reduce(
-      (sum: number, item: { quantity_available?: number | string | null; variant_id?: string | null }) =>
+      (sum: number, item: any) =>
         sum +
         (Number(item.quantity_available) || 0) *
           (costByProduct.get(productByVariant.get(String(item.variant_id)) || "") || 0),
@@ -224,7 +178,7 @@ export class AnalyticsRepository {
 
     const revenueByDay: Record<string, number> = {};
     if (orders && orders.length > 0) {
-      orders.forEach((o: AnalyticsOrderRow) => {
+      orders.forEach((o: any) => {
         const s = (o.status || "").toLowerCase();
         if (s !== "cancelled" && s !== "returned" && o.created_at) {
           const d = new Date(o.created_at).toISOString().split("T")[0];
@@ -292,21 +246,22 @@ export class AnalyticsRepository {
 
     const { data: rawOrders, error: ordersError } = await ordersQuery;
     if (ordersError) {
+      console.error("Error fetching orders for sales analytics:", ordersError);
     }
 
     const orders = rawOrders || [];
 
     // Filter valid non-cancelled orders for sales calculation
-    const validOrders: AnalyticsOrderRow[] = orders.filter((o: AnalyticsOrderRow) => {
+    const validOrders = orders.filter((o: any) => {
       const s = (o.status || "").toLowerCase();
       return s !== "cancelled" && s !== "returned";
     });
 
-    const validOrderIds = new Set(validOrders.map((o) => o.id));
+    const validOrderIds = new Set(validOrders.map((o: any) => o.id));
 
     // Daily sales trend
     const salesByDate: Record<string, { revenue: number; ordersCount: number }> = {};
-    validOrders.forEach((order) => {
+    validOrders.forEach((order: any) => {
       const date = new Date(order.created_at).toISOString().split("T")[0];
       if (!salesByDate[date]) {
         salesByDate[date] = { revenue: 0, ordersCount: 0 };
@@ -325,7 +280,7 @@ export class AnalyticsRepository {
 
     // Payment methods breakdown
     const paymentMethods: Record<string, number> = {};
-    validOrders.forEach((order) => {
+    validOrders.forEach((order: any) => {
       let pm = (order.payment_method || "Other").toUpperCase();
       if (pm === "COD") pm = "Cash on Delivery";
       else if (pm === "BKASH") pm = "bKash";
@@ -338,7 +293,7 @@ export class AnalyticsRepository {
 
     // Shipping methods breakdown
     const shippingMethods: Record<string, number> = {};
-    validOrders.forEach((order) => {
+    validOrders.forEach((order: any) => {
       const st = Number(order.shipping_total ?? order.shipping_fee) || 0;
       let sm = "Standard Delivery";
       if (st === 0) sm = "Free Shipping";
@@ -352,76 +307,26 @@ export class AnalyticsRepository {
     });
 
     // Also fetch items, products & addresses to get Category breakdown, Top selling products & customer names
-    // REG-83: the products read goes through Prisma, NOT the fluent
-    // builder — the builder silently drops the embedded `categories(name)`
-    // select, so every product arrived without its category and the
-    // breakdown below bucketed ALL sales under a literal fallback name.
-    const [itemsRes, products, orderRowsRes] = await Promise.all([
+    const [itemsRes, productsRes, addressesRes] = await Promise.all([
       db
         .from("order_items")
         .select("id, order_id, product_id, product_name, quantity, line_total"),
-      prisma.product.findMany({
-        select: {
-          id: true,
-          name: true,
-          categoryId: true,
-          category: { select: { name: true } },
-        },
-      }),
-      // FIX ROUND 28 (M-2): order_addresses does not exist — customer
-      // names/cities for this report come from the shipping_address
-      // JSON persisted on each order, synthesized into the address-row
-      // shape the aggregation below consumes.
-      db.from("orders").select("id, shipping_address"),
+      db
+        .from("products")
+        .select("id, name, category_id, categories(name)"),
+      db
+        .from("order_addresses")
+        .select("order_id, first_name, last_name, city, address_type"),
     ]);
-    const addressesRes: {
-      data: Array<{
-        order_id: string;
-        first_name: string | null;
-        last_name: string | null;
-        city: string | null;
-        address_type: string;
-      }>;
-    } = {
-      data: (orderRowsRes.data || []).map(
-        (o: {
-          id: string;
-          shipping_address?: {
-            first_name?: string | null;
-            last_name?: string | null;
-            city?: string | null;
-          } | null;
-        }) => {
-        const sa = o.shipping_address || {};
-        return {
-          order_id: o.id,
-          first_name: sa.first_name || null,
-          last_name: sa.last_name || null,
-          city: sa.city || null,
-          address_type: "SHIPPING",
-        };
-      }),
-    };
 
-    // Same row shape the aggregation below already consumes.
-    const productRows = products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      category_id: p.categoryId,
-      categories: p.category ? { name: p.category.name } : null,
-    }));
-    const productMap = new Map<string | null | undefined, AnalyticsProductRow>(
-      productRows.map((p): [string, AnalyticsProductRow] => [p.id, p])
-    );
+    const productMap = new Map<string, any>((productsRes.data || []).map((p: any) => [p.id, p]));
     const categoryTotals: Record<string, number> = {};
     const productSalesMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
 
-    (itemsRes.data || []).forEach((item: AnalyticsOrderItemRow) => {
+    (itemsRes.data || []).forEach((item: any) => {
       if (item.order_id && validOrderIds.has(item.order_id)) {
-        const prod = productMap.get(item.product_id);
-        // Honest label for a product with no category on file (the old
-        // fallback invented the category name "Apparel" for everything).
-        const catName = prod?.categories?.name || "Uncategorized";
+        const prod: any = productMap.get(item.product_id);
+        const catName = prod?.categories?.name || "Apparel";
         const lineTotal = Number(item.line_total) || 0;
         const qty = Number(item.quantity) || 1;
 
@@ -454,7 +359,7 @@ export class AnalyticsRepository {
 
     // Customer mapping for recent orders
     const addressMap = new Map<string, string>();
-    (addressesRes.data || []).forEach((addr) => {
+    (addressesRes.data || []).forEach((addr: any) => {
       if (addr.order_id && (addr.first_name || addr.last_name)) {
         addressMap.set(
           addr.order_id,
@@ -463,7 +368,7 @@ export class AnalyticsRepository {
       }
     });
 
-    const recentOrders = validOrders.slice(-8).reverse().map((order) => {
+    const recentOrders = validOrders.slice(-8).reverse().map((order: any) => {
       const customerName =
         addressMap.get(order.id) || "Valued Customer";
 
@@ -482,7 +387,7 @@ export class AnalyticsRepository {
     const totalSales =
       Math.round(
         validOrders.reduce(
-          (sum: number, o) => sum + (Number(o.grand_total ?? o.total_amount) || 0),
+          (sum: number, o: any) => sum + (Number(o.grand_total ?? o.total_amount) || 0),
           0
         ) * 100
       ) / 100;
@@ -491,18 +396,7 @@ export class AnalyticsRepository {
       totalOrdersCount > 0
         ? Math.round((totalSales / totalOrdersCount) * 100) / 100
         : 0;
-    // REG-28: honest order counts. Previously cancelledOrdersCount was
-    // ALL − valid, silently folding RETURNED orders into "cancelled",
-    // and the page's "Total Orders" card displayed the VALID count.
-    // Expose each population under its own name; `totalOrders` in the
-    // return below is now the ALL-orders count its label claims.
-    const cancelledOrdersCount = orders.filter(
-      (o: AnalyticsOrderRow) => (o.status || "").toLowerCase() === "cancelled"
-    ).length;
-    const returnedOrdersCount = orders.filter(
-      (o: AnalyticsOrderRow) => (o.status || "").toLowerCase() === "returned"
-    ).length;
-    const allOrdersCount = orders.length;
+    const cancelledOrdersCount = orders.length - validOrders.length;
 
     return {
       dailySales,
@@ -518,15 +412,9 @@ export class AnalyticsRepository {
       topSellingProducts,
       recentOrders,
       totalSales,
-      // REG-28: totalOrders = ALL orders in range (what the "Total
-      // Orders" label always claimed); the valid-only count travels
-      // under its own name for the sales/AOV context.
-      totalOrders: allOrdersCount,
-      validOrdersCount: totalOrdersCount,
-      allOrdersCount,
+      totalOrders: totalOrdersCount,
       averageOrderValue,
       cancelledOrdersCount,
-      returnedOrdersCount,
     };
   }
 
@@ -560,7 +448,7 @@ export class AnalyticsRepository {
     let totalRefunds = 0;
     let refundedOrdersCount = 0;
 
-    orders?.forEach((order: AnalyticsOrderRow) => {
+    orders?.forEach((order: any) => {
       const normalizedStatus = order.status?.toLowerCase() || "pending";
       if (statusCounts[normalizedStatus] !== undefined) {
         statusCounts[normalizedStatus]++;
@@ -598,7 +486,7 @@ export class AnalyticsRepository {
     const db = await createAdminDbClient();
 
     let customersQuery = db
-      .from("profiles")
+      .from("customer_profiles")
       .select("id, created_at");
     if (dateRange) {
       customersQuery = customersQuery
@@ -612,7 +500,7 @@ export class AnalyticsRepository {
       .select("customer_id, grand_total");
 
     const customerGrowthByDate: Record<string, number> = {};
-    customers?.forEach((c: { created_at: string }) => {
+    customers?.forEach((c: any) => {
       const date = new Date(c.created_at).toISOString().split("T")[0];
       customerGrowthByDate[date] = (customerGrowthByDate[date] || 0) + 1;
     });
@@ -628,7 +516,7 @@ export class AnalyticsRepository {
     const customerSpend: Record<string, number> = {};
     const orderCount: Record<string, number> = {};
 
-    orders?.forEach((o: { customer_id?: string | null; grand_total?: number | string | null; total_amount?: number | string | null }) => {
+    orders?.forEach((o: any) => {
       if (o.customer_id) {
         customerSpend[o.customer_id] =
           (customerSpend[o.customer_id] || 0) + (Number(o.grand_total ?? o.total_amount) || 0);
@@ -694,7 +582,7 @@ export class AnalyticsRepository {
     let lowStock = 0;
     let inStock = 0;
 
-    inventory.forEach((item: { quantity_available?: number | null; reorder_point?: number | null }) => {
+    inventory.forEach((item: any) => {
       if ((item.quantity_available || 0) <= 0) outOfStock++;
       else if ((item.quantity_available || 0) <= (item.reorder_point || 5)) lowStock++;
       else inStock++;
@@ -703,16 +591,14 @@ export class AnalyticsRepository {
     // Valid non-cancelled orders filter
     const validOrderIds = new Set(
       orders
-        .filter((o: AnalyticsOrderRow) => {
+        .filter((o: any) => {
           const s = (o.status || "").toLowerCase();
           return s !== "cancelled" && s !== "returned";
         })
-        .map((o: AnalyticsOrderRow) => o.id)
+        .map((o: any) => o.id)
     );
 
-    const productMap = new Map<string, string>(
-      products.map((prod: { id: string; name: string }): [string, string] => [prod.id, prod.name])
-    );
+    const productMap = new Map(products.map((prod: any) => [prod.id, prod.name]));
 
     // Aggregate Best Sellers & Sales by Product
     const productSales: Record<
@@ -720,7 +606,7 @@ export class AnalyticsRepository {
       { id: string; name: string; quantitySold: number; revenue: number }
     > = {};
 
-    orderItems.forEach((item: AnalyticsOrderItemRow) => {
+    orderItems.forEach((item: any) => {
       // If order_id exists, only include non-cancelled orders
       if (item.order_id && !validOrderIds.has(item.order_id)) return;
 
@@ -759,7 +645,7 @@ export class AnalyticsRepository {
     // Most active products (or newly added products as traffic proxy)
     const mostViewed = products
       .slice(0, 10)
-      .map((p: { id: string; name: string }) => ({
+      .map((p: any) => ({
         id: p.id,
         name: p.name,
         views: 0,
@@ -796,22 +682,18 @@ export class AnalyticsRepository {
     }
     const { data: coupons } = await couponsQuery;
 
-    // FIX ROUND 28 (M-2/m-12): profiles has no accepts_marketing
-    // column (and customer_profiles does not exist) — the newsletter
-    // subscriber count comes from the real newsletter_subscribers
-    // table (active subscriptions).
-    const { data: subscribers } = await db
-      .from("newsletter_subscribers")
-      .select("id")
-      .eq("is_active", true);
+    const { data: customers } = await db
+      .from("customer_profiles")
+      .select("accepts_marketing");
 
     const totalDiscountGiven =
-      coupons?.reduce((acc: number, c: { discount_applied?: number | null }) => acc + (c.discount_applied || 0), 0) || 0;
+      coupons?.reduce((acc: number, c: any) => acc + (c.discount_applied || 0), 0) || 0;
 
-    const newsletterSubscribers = subscribers?.length || 0;
+    const newsletterSubscribers =
+      customers?.filter((c: any) => c.accepts_marketing).length || 0;
 
     const couponUsageStats: Record<string, number> = {};
-    coupons?.forEach((c: { code?: string | null }) => {
+    coupons?.forEach((c: any) => {
       if (c.code) {
         couponUsageStats[c.code] = (couponUsageStats[c.code] || 0) + 1;
       }

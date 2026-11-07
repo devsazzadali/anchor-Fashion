@@ -14,13 +14,6 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
-type SundarbanTrackingEvent = {
-  status: string;
-  description?: string;
-  location?: string;
-  created_at: string;
-};
-
 export class SundarbanProvider implements ICourierProvider {
   readonly id = "sundarban" as const;
   readonly name = "Sundarban Courier";
@@ -86,8 +79,8 @@ export class SundarbanProvider implements ICourierProvider {
         "API_ERROR",
         data.message || "Failed to create Sundarban order"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -121,7 +114,7 @@ export class SundarbanProvider implements ICourierProvider {
 
       if (data.success && data.data) {
         const updates: TrackingUpdate[] = (data.data.events || []).map(
-          (e: SundarbanTrackingEvent) => ({
+          (e: any) => ({
             status: e.status,
             statusDescription: e.description || e.status,
             location: e.location || "",
@@ -144,8 +137,8 @@ export class SundarbanProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Tracking not found");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -183,8 +176,8 @@ export class SundarbanProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -201,7 +194,7 @@ export class SundarbanProvider implements ICourierProvider {
     return map[raw.toLowerCase()] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

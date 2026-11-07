@@ -14,17 +14,6 @@ import {
   ShipmentStatus,
 } from "@/types/shipping.types";
 
-// REG-65: boundary contract for an ECourier track-history entry off the
-// untyped API payload. Fields read without a fallback are asserted as
-// strings; the `type` alias (not an interface) keeps `raw: h` assignable to
-// `Record<string, any>` on TrackingUpdate.
-type EcourierTrackingEvent = {
-  status: string;
-  details?: string;
-  location?: string;
-  date: string;
-};
-
 export class ECourierProvider implements ICourierProvider {
   readonly id = "ecourier" as const;
   readonly name = "eCourier";
@@ -94,8 +83,8 @@ export class ECourierProvider implements ICourierProvider {
         "API_ERROR",
         data.msg || "Failed to create eCourier parcel"
       );
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -120,8 +109,8 @@ export class ECourierProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", data.msg || "Cancel failed");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -141,7 +130,7 @@ export class ECourierProvider implements ICourierProvider {
 
       if (data.success && data.data) {
         const updates: TrackingUpdate[] = (data.data.trackHistory || []).map(
-          (h: EcourierTrackingEvent) => ({
+          (h: any) => ({
             status: h.status,
             statusDescription: h.details || h.status,
             location: h.location || "",
@@ -164,8 +153,8 @@ export class ECourierProvider implements ICourierProvider {
       }
 
       return this.errorResponse("API_ERROR", "Tracking not found");
-    } catch (err) {
-      return this.errorResponse("EXCEPTION", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("EXCEPTION", err.message);
     }
   }
 
@@ -201,8 +190,8 @@ export class ECourierProvider implements ICourierProvider {
           raw: body,
         },
       };
-    } catch (err) {
-      return this.errorResponse("WEBHOOK_ERROR", (err as Error).message);
+    } catch (err: any) {
+      return this.errorResponse("WEBHOOK_ERROR", err.message);
     }
   }
 
@@ -221,7 +210,7 @@ export class ECourierProvider implements ICourierProvider {
     return map[raw] ?? "in_transit";
   }
 
-  private errorResponse<T>(code: string, message: string): ProviderResponse<T> {
+  private errorResponse(code: string, message: string): ProviderResponse<any> {
     return {
       success: false,
       providerId: this.id,

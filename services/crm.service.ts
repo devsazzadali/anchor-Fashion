@@ -4,7 +4,6 @@ import {
   createCRMLeadSchema,
   updateCRMLeadSchema,
   createCRMNoteSchema,
-  contactMessageSchema,
 } from "@/schemas/crm.schema";
 import { CRMLead, CRMNote, CommunicationLog } from "@/types/crm.types";
 
@@ -50,11 +49,7 @@ export class CRMService {
       throw new Error(`A lead with email "${validData.email}" already exists.`);
     }
 
-    // REG-65: zod strips unknown keys, so the legacy notes/custom_fields
-    // destructure reads fields the schema never declares (always undefined
-    // at runtime); the intersection types that legacy shape without
-    // changing what parse returns.
-    const { notes, custom_fields, assigned_agent_id, ...rest } = validData as typeof validData & { notes?: string; custom_fields?: unknown };
+    const { notes, custom_fields, assigned_agent_id, ...rest } = validData as any;
     const leadFields: Record<string, any> = {
       first_name: rest.first_name,
       last_name: rest.last_name || null,
@@ -76,59 +71,8 @@ export class CRMService {
           content: notes.trim(),
         });
       } catch (noteErr) {
+        console.warn("Failed to create initial lead note:", noteErr);
       }
-    }
-
-    return lead;
-  }
-
-  /**
-   * Public storefront "Contact Us" submission (REG-38).
-   *
-   * Destination is `crm_leads` — the store the admin CRM → Leads surface
-   * reads — with the subject + message preserved as a lead note, exactly
-   * how the contact form always intended to file it (source
-   * "Contact Us Form"). A returning sender whose email already has a lead
-   * gets the message appended as a new note on that lead instead of a
-   * "lead already exists" error: a contact form must never refuse a
-   * second message from the same customer.
-   */
-  async submitContactMessage(data: unknown): Promise<CRMLead> {
-    const valid = contactMessageSchema.parse(data);
-    const email = valid.email.trim().toLowerCase();
-    const noteContent = `[Subject: ${valid.subject}]\n\n${valid.message}`;
-
-    const existing = await crmRepository.getLeadByEmail(email);
-    if (existing) {
-      await crmRepository.createNote({
-        lead_id: existing.id,
-        content: noteContent,
-      });
-      return existing;
-    }
-
-    const nameParts = valid.name.trim().split(/\s+/);
-    const firstName = nameParts.shift() || valid.name.trim();
-    const lastName = nameParts.length > 0 ? nameParts.join(" ") : null;
-
-    const leadFields: Record<string, any> = {
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      phone: null,
-      company_name: null,
-      source: "Contact Us Form",
-      status: "new",
-      score: 0,
-      assigned_to: null,
-    };
-    const lead = await crmRepository.createLead(leadFields);
-
-    if (lead?.id) {
-      await crmRepository.createNote({
-        lead_id: lead.id,
-        content: noteContent,
-      });
     }
 
     return lead;
@@ -136,9 +80,7 @@ export class CRMService {
 
   async updateLead(id: string, data: unknown): Promise<CRMLead> {
     const validData = updateCRMLeadSchema.parse(data);
-    // REG-65: same legacy-shape intersection as createLead above — zod
-    // strips the undeclared notes/custom_fields keys.
-    const { notes, custom_fields, assigned_agent_id, ...rest } = validData as typeof validData & { notes?: string; custom_fields?: unknown };
+    const { notes, custom_fields, assigned_agent_id, ...rest } = validData as any;
     const updateFields: Record<string, any> = {};
     if (rest.first_name !== undefined) updateFields.first_name = rest.first_name;
     if (rest.last_name !== undefined) updateFields.last_name = rest.last_name || null;
@@ -159,6 +101,7 @@ export class CRMService {
           content: notes.trim(),
         });
       } catch (noteErr) {
+        console.warn("Failed to create update lead note:", noteErr);
       }
     }
 
@@ -180,7 +123,7 @@ export class CRMService {
 
       // Check if customer profile already exists
       const { data: existingProfile } = await db
-        .from("profiles")
+        .from("customer_profiles")
         .select("id")
         .ilike("email", cleanEmail)
         .maybeSingle();
@@ -222,7 +165,7 @@ export class CRMService {
         }
 
         // 2. Upsert customer_profiles
-        await db.from("profiles").upsert(
+        await db.from("customer_profiles").upsert(
           {
             id: authUserId,
             first_name: firstName,
@@ -234,8 +177,7 @@ export class CRMService {
           { onConflict: "id" }
         );
 
-        // 3. Upsert profiles (FIX ROUND 28: profiles has no `role`
-        // column — role lives in role_id; the phantom key is dropped.)
+        // 3. Upsert profiles
         try {
           await db.from("profiles").upsert(
             {
@@ -244,21 +186,24 @@ export class CRMService {
               last_name: lastName,
               email: cleanEmail,
               phone: phone,
+              role: "customer",
               is_active: true,
             },
             { onConflict: "id" }
           );
         } catch {}
 
-        // 4. CRM customer metadata.
-        // FIX ROUND 28 (M-2, PROPOSAL): the crm_customers table does
-        // NOT exist in this schema — the upsert that stood here was
-        // silently discarded by the row builder on every call. The
-        // table is specified in the Round-28 DDL proposal; until that
-        // DDL lands, CRM metadata for this customer is NOT persisted
-        // and this is logged loudly instead of faked.
-        console.error(
-          `[crm] crm_customers table missing — CRM metadata NOT persisted for profile ${authUserId} (lifecycle FIRST_TIME_BUYER). See Round-28 DDL proposal.`
+        // 4. Upsert crm_customers
+        await db.from("crm_customers").upsert(
+          {
+            profile_id: authUserId,
+            customer_lifecycle_stage: "FIRST_TIME_BUYER",
+            is_vip: false,
+            health_score: 80,
+            total_support_tickets: 0,
+            last_interaction_at: new Date().toISOString(),
+          },
+          { onConflict: "profile_id" }
         );
 
         targetProfileId = authUserId;
@@ -276,7 +221,7 @@ export class CRMService {
 
   async addNoteToCustomer(profileId: string, data: unknown): Promise<CRMNote> {
     const validData = createCRMNoteSchema.parse({
-      ...(data as Record<string, unknown>),
+      ...(data as any),
       profile_id: profileId,
     });
     return await crmRepository.createNote(validData);
@@ -299,8 +244,8 @@ export class CRMService {
     return await crmRepository.getCommunicationLogs(undefined, leadId);
   }
 
-  async logCommunication(data: Partial<CommunicationLog>): Promise<CommunicationLog> {
-    return await crmRepository.createCommunicationLog(data);
+  async logCommunication(data: unknown): Promise<CommunicationLog> {
+    return await crmRepository.createCommunicationLog(data as any);
   }
 
   async getCommunicationLogs(): Promise<CommunicationLog[]> {

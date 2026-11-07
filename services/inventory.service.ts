@@ -30,22 +30,6 @@ export interface ReservationItem {
   quantity: number;
 }
 
-/**
- * REG-65 Batch 9: mirrors repositories/inventory.repository.ts
- * CreateAuditInput (not exported there), including its open index
- * signature — the sole action caller passes zone_id alongside the
- * declared fields.
- */
-interface InventoryAuditInput {
-  warehouse_id: string;
-  status?: string | null;
-  notes?: string | null;
-  scheduled_date?: string | null;
-  blind_count?: boolean | null;
-  created_by?: string | null;
-  [key: string]: unknown;
-}
-
 export class InventoryService {
   private repository: InventoryRepository;
 
@@ -87,6 +71,7 @@ export class InventoryService {
         return { available, reserved, status };
       }
     } catch (e) {
+      console.warn("Prisma getStockAvailability error, checking fallback:", e);
     }
 
     const levels = await this.repository.getStockLevel(variantId, warehouseId).catch(() => []);
@@ -164,17 +149,13 @@ export class InventoryService {
     inventoryId: string,
     newAvailable: number,
     newReserved: number,
-    reason: string,
-    notes?: string,
-    userId?: string
+    reason: string
   ): Promise<void> {
     await this.repository.adjustStock(
       inventoryId,
       newAvailable,
       newReserved,
-      reason,
-      notes,
-      userId
+      reason
     );
   }
 
@@ -197,8 +178,7 @@ export class InventoryService {
     toWarehouseId: string,
     quantity: number,
     reason: string,
-    notes?: string,
-    userId?: string
+    notes?: string
   ): Promise<void> {
     await this.repository.transferStock(
       variantId,
@@ -206,8 +186,7 @@ export class InventoryService {
       toWarehouseId,
       quantity,
       reason,
-      notes,
-      userId
+      notes
     );
     await this.checkStockAlerts(variantId, fromWarehouseId);
     await this.checkStockAlerts(variantId, toWarehouseId);
@@ -292,7 +271,7 @@ export class InventoryService {
     }
   }
 
-  async createAudit(auditData: InventoryAuditInput): Promise<unknown> {
+  async createAudit(auditData: any): Promise<any> {
     return await this.repository.createAudit(auditData);
   }
 
@@ -434,6 +413,7 @@ export class InventoryService {
           },
         });
       } catch (markErr) {
+        console.warn("Failed to mark order items reserved:", markErr);
       }
     }
 
@@ -537,11 +517,13 @@ export class InventoryService {
                 },
               });
             } catch (movementErr) {
+              console.warn("Stock movement logging on cancellation non-fatal warning:", movementErr);
             }
           }
         }
       }
     } catch (e) {
+      console.warn("Prisma releaseOrderInventory error:", e);
     }
   }
 
@@ -618,11 +600,13 @@ export class InventoryService {
                 });
               }
             } catch (smErr) {
+              console.warn("Prisma confirmOrderInventory stock movement logging error:", smErr);
             }
           }
         }
       }
     } catch (e) {
+      console.warn("Prisma confirmOrderInventory error:", e);
     }
   }
 
@@ -646,7 +630,7 @@ export class InventoryService {
     for (const item of items) {
       try {
         const qty = Math.max(1, Number(item.quantity) || 1);
-        let variant = null;
+        let variant: any = null;
 
         // 1. By variantId
         if (item.variantId) {
@@ -687,12 +671,7 @@ export class InventoryService {
             const sizeLower = (item.size || "").toLowerCase().trim();
 
             const matched = variants.find((v) => {
-              const attr = (v.attributes as {
-                Color?: string;
-                color?: string;
-                Size?: string;
-                size?: string;
-              }) || {};
+              const attr = (v.attributes as any) || {};
               const vColor = (attr.Color || attr.color || "").toLowerCase().trim();
               const vSize = (attr.Size || attr.size || "").toLowerCase().trim();
 
@@ -709,12 +688,13 @@ export class InventoryService {
         }
 
         if (!variant) {
+          console.warn(`[Inventory] Could not resolve variant for order item:`, item);
           continue;
         }
 
         // Find inventory level to deduct from
         let targetLevel =
-          variant.inventoryLevels.find((lvl) => lvl.quantityAvailable >= qty) ||
+          variant.inventoryLevels.find((lvl: any) => lvl.quantityAvailable >= qty) ||
           variant.inventoryLevels[0];
 
         if (!targetLevel) {
@@ -766,6 +746,7 @@ export class InventoryService {
           }
         }
       } catch (deductErr) {
+        console.error(`[Inventory] Failed deducting stock for item in order ${orderId}:`, deductErr);
       }
     }
   }

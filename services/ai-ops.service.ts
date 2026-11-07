@@ -6,8 +6,8 @@ import { AIPredictionSchema } from "@/schemas/operations.schemas";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function generateSalesForecast(
-  historicalData: unknown[]
-): Promise<{ forecast?: unknown; error?: string }> {
+  historicalData: any[]
+): Promise<{ forecast?: any; error?: string }> {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
     const prompt = `Based on the following historical sales data, provide a 30-day forecast and highlight any seasonal trends or anomalies.\n\nData:\n${JSON.stringify(historicalData)}\n\nFormat the response as a JSON object with 'forecastedRevenue', 'trendAnalysis', and 'confidence' fields.`;
@@ -23,14 +23,15 @@ export async function generateSalesForecast(
       : { rawResponse: text };
 
     return { forecast: parsedData };
-  } catch (error) {
-    return { error: (error as Error).message || "Failed to generate forecast" };
+  } catch (error: any) {
+    console.error("Error generating sales forecast:", error);
+    return { error: error.message || "Failed to generate forecast" };
   }
 }
 
 export async function generateInventoryInsights(
-  inventoryData: unknown[]
-): Promise<{ insights?: unknown; error?: string }> {
+  inventoryData: any[]
+): Promise<{ insights?: any; error?: string }> {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
     const prompt = `Analyze this inventory data and identify products at risk of stockout, overstock items, and recommend reorder quantities.\n\nData:\n${JSON.stringify(inventoryData)}\n\nFormat as JSON with 'stockoutRisks', 'overstockItems', and 'recommendations'.`;
@@ -45,8 +46,9 @@ export async function generateInventoryInsights(
       : { rawResponse: text };
 
     return { insights: parsedData };
-  } catch (error) {
-    return { error: (error as Error).message || "Failed to generate insights" };
+  } catch (error: any) {
+    console.error("Error generating inventory insights:", error);
+    return { error: error.message || "Failed to generate insights" };
   }
 }
 
@@ -71,7 +73,8 @@ export async function saveAIPrediction(
     if (error) throw new Error(error.message);
 
     return { success: true };
-  } catch (error) {
-    return { error: (error as Error).message || "Failed to save prediction" };
+  } catch (error: any) {
+    console.error("Error saving AI prediction:", error);
+    return { error: error.message || "Failed to save prediction" };
   }
 }

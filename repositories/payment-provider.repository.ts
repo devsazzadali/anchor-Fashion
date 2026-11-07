@@ -1,27 +1,16 @@
 import { createDbClient } from "@/lib/db/client";
 import { PaymentProvider, PaymentProviderCode } from "@/types/payment.types";
 
-// REG-65: row shape for the untyped db shim — only is_active is read;
-// the rest of the row passes through the spread untouched.
-interface PaymentProviderDbRow {
-  is_active?: boolean | null;
-  [key: string]: unknown;
-}
-
 export class PaymentProviderRepository {
   /**
-   * Get all payment providers.
-   * FIX ROUND 28 (M-5): payment_providers has NO `status` column —
-   * the active flag is `is_active`. The old `.eq("status", "active")`
-   * filter poisoned the query (empty result). Rows are mapped back
-   * with a derived `status` for type compatibility.
+   * Get all payment providers
    */
   async getProviders(activeOnly: boolean = false): Promise<PaymentProvider[]> {
     const db = await createDbClient();
     let query = db.from("payment_providers").select("*");
 
     if (activeOnly) {
-      query = query.eq("is_active", true);
+      query = query.eq("status", "active");
     }
 
     const { data, error } = await query;
@@ -30,10 +19,7 @@ export class PaymentProviderRepository {
       throw new Error(`Failed to fetch payment providers: ${error.message}`);
     }
 
-    return (data || []).map((p: PaymentProviderDbRow) => ({
-      ...p,
-      status: p.is_active ? "active" : "inactive",
-    })) as PaymentProvider[];
+    return data as PaymentProvider[];
   }
 
   /**
@@ -58,27 +44,16 @@ export class PaymentProviderRepository {
   }
 
   /**
-   * Update provider config.
-   * FIX ROUND 28 (M-5): translates the legacy payload to real columns
-   * — `status: "active"|"inactive"` becomes `is_active`; `is_fallback`
-   * and `supported_currencies` have no columns and are dropped
-   * explicitly instead of poisoning/silently vanishing.
+   * Update provider config
    */
   async updateProvider(
     id: string,
     data: Partial<PaymentProvider>
   ): Promise<void> {
     const db = await createDbClient();
-    const payload: Record<string, unknown> = { ...data };
-    if (payload.status !== undefined) {
-      payload.is_active = payload.status === "active";
-      delete payload.status;
-    }
-    delete payload.is_fallback;
-    delete payload.supported_currencies;
     const { error } = await db
       .from("payment_providers")
-      .update(payload)
+      .update(data)
       .eq("id", id);
 
     if (error) {
@@ -87,28 +62,23 @@ export class PaymentProviderRepository {
   }
 
   /**
-   * Get fallback provider.
-   * FIX ROUND 28 (M-5): no `is_fallback`/`status` columns exist — the
-   * fallback is the lowest-sort_order active provider.
+   * Get fallback provider
    */
   async getFallbackProvider(): Promise<PaymentProvider | null> {
     const db = await createDbClient();
     const { data, error } = await db
       .from("payment_providers")
       .select("*")
-      .eq("is_active", true)
-      .order("sort_order", { ascending: true })
+      .eq("is_fallback", true)
+      .eq("status", "active")
       .limit(1)
-      .maybeSingle();
+      .single();
 
     if (error) {
       if (error.code === "PGRST116") return null;
       throw new Error(`Failed to fetch fallback provider: ${error.message}`);
     }
-    if (!data) return null;
-    return {
-      ...data,
-      status: data.is_active ? "active" : "inactive",
-    } as PaymentProvider;
+
+    return data as PaymentProvider;
   }
 }

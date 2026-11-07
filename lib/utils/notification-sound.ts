@@ -10,13 +10,7 @@ function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
   try {
     if (!sharedAudioCtx) {
-      const AudioCtx =
-        window.AudioContext ||
-        (
-          window as typeof window & {
-            webkitAudioContext?: typeof AudioContext;
-          }
-        ).webkitAudioContext;
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
         sharedAudioCtx = new AudioCtx();
       }
@@ -26,6 +20,7 @@ function getAudioContext(): AudioContext | null {
     }
     return sharedAudioCtx;
   } catch (err) {
+    console.warn("AudioContext initialization warning:", err);
     return null;
   }
 }
@@ -54,6 +49,7 @@ export function playOrderNotificationSound(): void {
       playChimeSequence(ctx);
     }
   } catch (err) {
+    console.warn("Could not play order notification chime:", err);
   }
 }
 

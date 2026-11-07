@@ -1,50 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PromotionRepository } from "@/lib/repositories/marketing/promotion.repository";
-import { priceWithVat } from "@/lib/utils/vat";
-import { escapeLikeWildcards } from "@/lib/utils/like-escape";
-import { expandSearchTerms } from "@/lib/utils/bengali-search";
-import { Prisma } from "@prisma/client";
-
-/**
- * REG-65 batch 1: the Prisma product row the storefront mapper
- * consumes — exactly the include set every list query in this file
- * fetches (getProductBySlug's wider include is a structural
- * superset, and its null case is checked before the call).
- */
-type StorefrontProductRow = Prisma.ProductGetPayload<{
-  include: {
-    category: { select: { id: true; name: true; slug: true } };
-    brand: { select: { id: true; name: true; slug: true } };
-    productCategories: {
-      include: { category: { select: { id: true; name: true; slug: true } } };
-    };
-    media: true;
-    variants: { include: { inventoryLevels: true } };
-  };
-}>;
-
-/** The mapped storefront DTO the list helpers sort / price on. */
-type StorefrontProduct = NonNullable<
-  ReturnType<typeof mapProductToStorefront>
->;
-
-/**
- * The unit price a product card actually displays: the effective selling
- * price (sale price when set, else base price — mapProductToStorefront has
- * already folded any active promotion into sale_price) with the product's
- * VAT added on top. Mirrors components/product/product-card.tsx exactly so
- * price sorting orders by what the customer sees.
- */
-function displayedUnitPrice(
-  p: {
-    sale_price?: number | null;
-    base_price?: number | null;
-    vat_percent?: number | null;
-  } | null | undefined
-): number {
-  const price = Number(p?.sale_price ?? p?.base_price ?? 0);
-  return priceWithVat(price, Number(p?.vat_percent ?? 0));
-}
 
 export interface ProductListParams {
   category?: string;
@@ -55,38 +10,24 @@ export interface ProductListParams {
   sortBy?: "price_asc" | "price_desc" | "newest" | "rating";
   limit?: number;
   offset?: number;
-  /** Selected size facet values (variant attributes Size/size). */
-  sizes?: string[];
-  /** Selected colour facet values (variant attributes Color/Colour). */
-  colors?: string[];
 }
 
-function mapProductToStorefront(
-  p: StorefrontProductRow,
-  activePromoDiscount?: number | null
-) {
+function mapProductToStorefront(p: any, activePromoDiscount?: number | null) {
   if (!p) return null;
 
   const variants = p.variants || [];
-
-  // Purchasable stock per variant: units available across all of the
-  // variant's warehouse levels. Reserved units are already excluded —
-  // reserving stock decrements quantity_available (InventoryService).
-  // This per-variant figure is computed once, here on the server, and is
-  // the only stock number the storefront displays; the product total is
-  // simply its sum.
-  const variantAvailableStock = variants.map((variant) =>
-    (variant.inventoryLevels || []).reduce(
-      (vSum: number, level) => vSum + (level.quantityAvailable || 0),
-      0
-    )
-  );
-  const totalAvailable = variantAvailableStock.reduce(
-    (sum: number, n: number) => sum + n,
+  const totalAvailable = variants.reduce(
+    (sum: number, variant: any) => {
+      const variantStock = (variant.inventoryLevels || []).reduce(
+        (vSum: number, level: any) => vSum + (level.quantityAvailable || 0),
+        0
+      );
+      return sum + variantStock;
+    },
     0
   );
 
-  const mediaList = (p.media || []).map((m) => ({
+  const mediaList = (p.media || []).map((m: any) => ({
     id: m.id,
     url: m.url,
     url_webp: m.urlWebp,
@@ -96,7 +37,7 @@ function mapProductToStorefront(
     media_type: m.mediaType,
   }));
 
-  const primaryMedia = mediaList.find((m) => m.is_primary) || mediaList[0] || null;
+  const primaryMedia = mediaList.find((m: any) => m.is_primary) || mediaList[0] || null;
 
   const basePriceNum = Number(p.basePrice);
   let salePriceNum = p.salePrice ? Number(p.salePrice) : null;
@@ -122,11 +63,7 @@ function mapProductToStorefront(
     salePrice: salePriceNum,
     vat_percent: Number(p.vatPercent || 0),
     vatPercent: Number(p.vatPercent || 0),
-    // FIX2 (R30 OBS-5 class): cost_price deliberately NOT mapped. This
-    // DTO is serialized into every public storefront payload (home,
-    // listing, PDP, search), so the wholesale cost was readable by any
-    // visitor in the page source. Admin cost views use their own
-    // procurement/inventory queries, never this mapper.
+    cost_price: p.costPrice ? Number(p.costPrice) : null,
     sku: p.sku,
     barcode: p.barcode,
     status: p.status,
@@ -145,16 +82,16 @@ function mapProductToStorefront(
     brand_id: p.brandId,
     category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
     categories: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
-    category_ids: (p.productCategories || []).map((pc) => pc.categoryId).filter(Boolean),
+    category_ids: (p.productCategories || []).map((pc: any) => pc.categoryId).filter(Boolean),
     additional_categories: (p.productCategories || [])
-      .map((pc) => (pc.category ? { id: pc.category.id, name: pc.category.name, slug: pc.category.slug } : null))
+      .map((pc: any) => (pc.category ? { id: pc.category.id, name: pc.category.name, slug: pc.category.slug } : null))
       .filter(Boolean),
     brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
     brands: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
     product_media: mediaList,
     media: mediaList,
     primary_image_url: primaryMedia ? primaryMedia.url : p.imageUrl || "/placeholder.png",
-    variants: variants.map((v, variantIndex: number) => ({
+    variants: variants.map((v: any) => ({
       id: v.id,
       sku: v.sku,
       barcode: v.barcode,
@@ -163,9 +100,7 @@ function mapProductToStorefront(
       weight: v.weight ? Number(v.weight) : null,
       attributes: v.attributes,
       is_active: v.isActive,
-      // Server-computed purchasable stock for THIS variant (see above).
-      available_stock: variantAvailableStock[variantIndex],
-      inventory_levels: (v.inventoryLevels || []).map((il) => ({
+      inventory_levels: (v.inventoryLevels || []).map((il: any) => ({
         id: il.id,
         warehouse_id: il.warehouseId,
         quantity_available: il.quantityAvailable,
@@ -206,50 +141,8 @@ export const CatalogRepository = {
         updated_at: c.updatedAt ? new Date(c.updatedAt).toISOString() : new Date().toISOString(),
       }));
     } catch (e) {
+      console.error("Error fetching categories from Neon:", e);
       return [];
-    }
-  },
-
-  /**
-   * Distinct size / colour facet values across variants of ACTIVE
-   * products, read from the real variant attribute JSON (keys are not
-   * uniform: "Size"/"size", "Color"/"color"/"Colour"/"colour").
-   */
-  async getFilterFacets(): Promise<{ sizes: string[]; colors: string[] }> {
-    try {
-      const variants = await prisma.variant.findMany({
-        where: {
-          isActive: true,
-          product: { status: "ACTIVE", deletedAt: null },
-        },
-        select: { attributes: true },
-      });
-      const sizes = new Set<string>();
-      const colors = new Set<string>();
-      for (const v of variants) {
-        const a = (v.attributes ?? {}) as Record<string, any>;
-        const size = a.Size ?? a.size;
-        const color = a.Color ?? a.color ?? a.Colour ?? a.colour;
-        if (size !== undefined && size !== null && String(size).trim() !== "") {
-          sizes.add(String(size));
-        }
-        if (
-          color !== undefined &&
-          color !== null &&
-          String(color).trim() !== ""
-        ) {
-          colors.add(String(color));
-        }
-      }
-      const sizeList = [...sizes].sort((x, y) => {
-        const nx = parseFloat(x);
-        const ny = parseFloat(y);
-        if (!Number.isNaN(nx) && !Number.isNaN(ny)) return nx - ny;
-        return x.localeCompare(y);
-      });
-      return { sizes: sizeList, colors: [...colors].sort((x, y) => x.localeCompare(y)) };
-    } catch (error) {
-      return { sizes: [], colors: [] };
     }
   },
 
@@ -288,8 +181,9 @@ export const CatalogRepository = {
       const promoDiscount = bestPromo?.discount_percentage ?? null;
       return products
         .map((p) => mapProductToStorefront(p, promoDiscount))
-        .filter((p): p is NonNullable<typeof p> => p !== null);
+        .filter((p): p is NonNullable<typeof p> => p !== null) as any;
     } catch (e) {
+      console.error("Error fetching featured products from Neon:", e);
       return [];
     }
   },
@@ -325,8 +219,9 @@ export const CatalogRepository = {
       const promoDiscount = bestPromo?.discount_percentage ?? null;
       return products
         .map((p) => mapProductToStorefront(p, promoDiscount))
-        .filter((p): p is NonNullable<typeof p> => p !== null);
+        .filter((p): p is NonNullable<typeof p> => p !== null) as any;
     } catch (e) {
+      console.error("Error fetching new arrivals from Neon:", e);
       return [];
     }
   },
@@ -336,7 +231,7 @@ export const CatalogRepository = {
    */
   async getProducts(params: ProductListParams) {
     try {
-      const andClauses: Prisma.ProductWhereInput[] = [
+      const andClauses: any[] = [
         { status: "ACTIVE" },
         { deletedAt: null },
       ];
@@ -382,51 +277,15 @@ export const CatalogRepository = {
         andClauses.push({ brand: { slug: params.brand } });
       }
       if (params.minPrice !== undefined || params.maxPrice !== undefined) {
-        const priceFilter: Prisma.DecimalFilter = {};
+        const priceFilter: any = {};
         if (params.minPrice !== undefined) priceFilter.gte = params.minPrice;
         if (params.maxPrice !== undefined) priceFilter.lte = params.maxPrice;
         andClauses.push({ basePrice: priceFilter });
       }
-      // Size / colour facets: a product qualifies when ONE active variant
-      // matches every selected facet group (values within a group are OR).
-      // Variant attribute keys are not uniform in the catalog data ("Size"
-      // and "size" both occur; colours are stored under "Color"), so each
-      // value is checked against every known key spelling.
-      const SIZE_KEYS = ["Size", "size"];
-      const COLOR_KEYS = ["Color", "color", "Colour", "colour"];
-      if (params.sizes?.length || params.colors?.length) {
-        const variantConds: Prisma.VariantWhereInput[] = [];
-        if (params.sizes?.length) {
-          variantConds.push({
-            OR: params.sizes.flatMap((s) =>
-              SIZE_KEYS.map((k) => ({ attributes: { path: [k], equals: s } }))
-            ),
-          });
-        }
-        if (params.colors?.length) {
-          variantConds.push({
-            OR: params.colors.flatMap((c) =>
-              COLOR_KEYS.map((k) => ({ attributes: { path: [k], equals: c } }))
-            ),
-          });
-        }
-        andClauses.push({
-          variants: { some: { isActive: true, AND: variantConds } },
-        });
-      }
       if (params.search && params.search.trim()) {
-        // REG-43: escape LIKE wildcards in the shopper's term — Prisma
-        // `contains` becomes a Postgres LIKE pattern and an unescaped
-        // "%" or "_" in the term acted as a wildcard (searching "%"
-        // returned the whole catalog).
-        // A3-C8: expandSearchTerms adds the Latin transliteration for
-        // Bengali-script queries ("পাঞ্জাবি" → also "panjabi"), which
-        // previously returned 0 products against the Latin catalog.
-        const terms = expandSearchTerms(params.search).map((t) =>
-          escapeLikeWildcards(t)
-        );
+        const term = params.search.trim();
         andClauses.push({
-          OR: terms.flatMap((term) => [
+          OR: [
             { name: { contains: term, mode: "insensitive" } },
             { description: { contains: term, mode: "insensitive" } },
             { shortDescription: { contains: term, mode: "insensitive" } },
@@ -434,22 +293,13 @@ export const CatalogRepository = {
             { barcode: { contains: term, mode: "insensitive" } },
             { variants: { some: { sku: { contains: term, mode: "insensitive" } } } },
             { variants: { some: { barcode: { contains: term, mode: "insensitive" } } } },
-            // FIX ROUND 29 (D2): category names are searchable too — a
-            // shopper typing "panjabi" expects the Panjabi category's
-            // products even when a name/description lacks the word.
-            { category: { name: { contains: term, mode: "insensitive" } } },
-            {
-              productCategories: {
-                some: { category: { name: { contains: term, mode: "insensitive" } } },
-              },
-            },
-          ]),
+          ],
         });
       }
 
-      const where: Prisma.ProductWhereInput = { AND: andClauses };
+      const where: any = { AND: andClauses };
 
-      let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
+      let orderBy: any = { createdAt: "desc" };
       if (params.sortBy === "price_asc") {
         orderBy = { basePrice: "asc" };
       } else if (params.sortBy === "price_desc") {
@@ -462,19 +312,6 @@ export const CatalogRepository = {
 
       const limit = params.limit || 12;
       const offset = params.offset || 0;
-      // Price sorts must order by the VAT-inclusive price the cards
-      // display, which is a computed value (effective price × (1 + VAT%))
-      // that Prisma cannot orderBy. For those two sorts, fetch the full
-      // matching set, sort by the displayed price in memory, then page.
-      const isPriceSort =
-        params.sortBy === "price_asc" || params.sortBy === "price_desc";
-      // FIX ROUND 29 (D2): a search with no explicit sort is ranked by
-      // relevance (below), not by createdAt — "panjabi" previously
-      // returned the newest knitwear first because every description
-      // mentioning the word ranked equally. Like the price sorts, the
-      // full matching set is fetched and paged in memory; the reported
-      // count stays the database total of ALL matches (unchanged).
-      const isRelevanceSort = Boolean(params.search?.trim()) && !params.sortBy;
 
       const [products, total, bestPromo] = await Promise.all([
         prisma.product.findMany({
@@ -491,7 +328,8 @@ export const CatalogRepository = {
             variants: { include: { inventoryLevels: true } },
           },
           orderBy,
-          ...(isPriceSort || isRelevanceSort ? {} : { take: limit, skip: offset }),
+          take: limit,
+          skip: offset,
         }),
         prisma.product.count({ where }),
         PromotionRepository.getBestActivePromotion().catch(() => null),
@@ -499,64 +337,12 @@ export const CatalogRepository = {
 
       const promoDiscount = bestPromo?.discount_percentage ?? null;
 
-      let mapped = products.map((p) => mapProductToStorefront(p, promoDiscount));
-
-      if (isPriceSort) {
-        const dir = params.sortBy === "price_asc" ? 1 : -1;
-        mapped = mapped
-          .slice()
-          .sort((a, b) => {
-            const diff = displayedUnitPrice(a) - displayedUnitPrice(b);
-            if (diff !== 0) return diff * dir;
-            // Deterministic tie-break: newest first, then id.
-            const ca = String(a?.created_at || "");
-            const cb = String(b?.created_at || "");
-            if (ca !== cb) return cb.localeCompare(ca);
-            return String(a?.id || "").localeCompare(String(b?.id || ""));
-          })
-          .slice(offset, offset + limit);
-      }
-
-      if (isRelevanceSort) {
-        // Tier ladder: exact name > name prefix > name contains > all
-        // query words in the name > category-name match > any other
-        // field (description / SKU / barcode). Newest first inside a
-        // tier, id as the final deterministic tie-break.
-        const term = params.search!.trim().toLowerCase();
-        const words = term.split(/\s+/).filter(Boolean);
-        const tierOf = (p: StorefrontProduct | null): number => {
-          const name = String(p?.name || "").toLowerCase();
-          if (name === term) return 0;
-          if (name.startsWith(term)) return 1;
-          if (name.includes(term)) return 2;
-          if (words.length > 1 && words.every((w) => name.includes(w))) return 3;
-          const catNames = [
-            p?.category?.name,
-            ...(p?.additional_categories || []).map((c) => c?.name),
-          ]
-            .filter((n): n is string => Boolean(n))
-            .map((n: string) => n.toLowerCase());
-          if (catNames.some((n) => n.includes(term) || words.some((w) => n.includes(w)))) return 4;
-          return 5;
-        };
-        mapped = mapped
-          .slice()
-          .sort((a, b) => {
-            const dt = tierOf(a) - tierOf(b);
-            if (dt !== 0) return dt;
-            const ca = String(a?.created_at || "");
-            const cb = String(b?.created_at || "");
-            if (ca !== cb) return cb.localeCompare(ca);
-            return String(a?.id || "").localeCompare(String(b?.id || ""));
-          })
-          .slice(offset, offset + limit);
-      }
-
       return {
-        data: mapped,
+        data: products.map((p) => mapProductToStorefront(p, promoDiscount)),
         count: total,
       };
     } catch (error) {
+      console.error("Error fetching products from Neon:", error);
       return { data: [], count: 0 };
     }
   },
@@ -564,12 +350,6 @@ export const CatalogRepository = {
   /**
    * Fetch single product by slug from Neon PostgreSQL
    */
-  // REG-65 batch 1 HOLDOUT: the return stays Promise<any> — the PDP
-  // page (app/(shop)/products/[slug]/page.tsx) reads seo_title /
-  // seo_description off the result, fields the storefront mapper has
-  // never included (they are undefined at runtime today). A precise
-  // return type forces a page or mapper change — a runtime-visible
-  // decision outside this type-only batch.
   async getProductBySlug(slug: string): Promise<any> {
     try {
       const [product, bestPromo] = await Promise.all([
@@ -579,11 +359,6 @@ export const CatalogRepository = {
               { slug },
               { sku: { equals: slug, mode: "insensitive" } },
             ],
-            // Storefront PDPs must only serve sellable products: without the
-            // status filter, ARCHIVED/DRAFT products stayed publicly
-            // reachable (and buyable-looking) by direct URL after being
-            // deactivated (R30 FIX2, item 8a follow-up).
-            status: "ACTIVE",
             deletedAt: null,
           },
           include: {
@@ -615,6 +390,7 @@ export const CatalogRepository = {
       const promoDiscount = bestPromo?.discount_percentage ?? null;
       return mapProductToStorefront(product, promoDiscount);
     } catch (error) {
+      console.error("Error fetching product by slug from Neon:", error);
       return null;
     }
   },

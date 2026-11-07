@@ -1,7 +1,7 @@
 import { createDbClient } from "@/lib/db/client";
 import { OrderService } from "./order.service";
 import { InventoryService } from "@/services/inventory.service";
-import { FulfillShipmentInput } from "@/schemas/oms.schema";
+import { FulfillShipmentInput } from "@/lib/validations/oms";
 
 export class FulfillmentService {
   private orderService = new OrderService();
@@ -22,6 +22,10 @@ export class FulfillmentService {
       await this.inventoryService.confirmOrderInventory(orderId);
       return true;
     } catch (err) {
+      console.error(
+        `[FulfillmentService] Failed to confirm inventory for order ${orderId}:`,
+        err
+      );
       return false;
     }
   }
