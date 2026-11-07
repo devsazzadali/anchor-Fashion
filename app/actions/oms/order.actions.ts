@@ -6,14 +6,10 @@ import { OrderRepository } from "@/lib/repositories/oms/order.repository";
 import {
   UpdateOrderStatusInput,
   updateOrderStatusSchema,
-} from "@/schemas/oms.schema";
+} from "@/lib/validations/oms";
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "@/lib/auth/server";
 import { isStaffOrManager, getRoleForUser, verifyAuthenticated, verifyStaff } from "@/lib/security/roles";
-import {
-  recordAuditForSessionUser,
-  AUDIT_ACTIONS,
-} from "@/lib/security/audit";
 import { InventoryService } from "@/services/inventory.service";
 import { PaymentService } from "@/services/payment/payment.service";
 
@@ -44,46 +40,12 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
     const role = await getRoleForUser(user);
     const userId = user?.id;
 
-    // REG-33: SUPPORT is READ-ONLY on orders. The manager UI hides the
-    // controls for support accounts, but this action is a public
-    // endpoint — enforce the rule here, server-side, so a crafted
-    // request from a support session cannot mutate an order. Managers
-    // and admins keep full power.
-    if (String(role || "").toUpperCase().trim() === "SUPPORT") {
-      return {
-        success: false,
-        error: "Support accounts are read-only and cannot change order status.",
-      };
-    }
-
-    // REG-27: capture the prior status so the audit row can record
-    // the actual transition (old -> new).
-    const priorOrder = await prisma.order.findUnique({
-      where: { id: validatedData.order_id },
-      select: { status: true, orderNumber: true },
-    });
-
     const updatedOrder = await orderService.updateOrderStatus(
       validatedData.order_id,
       validatedData.new_status,
       userId,
-      role,
-      // FIX ROUND 29 (D8): thread the cancellation reason/note through
-      // so an admin cancel records it exactly like a customer cancel.
-      { reason: validatedData.reason, note: validatedData.note }
+      role
     );
-
-    // REG-27: audit the status change (actor = the acting user).
-    await recordAuditForSessionUser({
-      action: AUDIT_ACTIONS.ORDER_STATUS_CHANGED,
-      entity: "order",
-      entityId: validatedData.order_id,
-      oldValues: { status: priorOrder?.status ?? null },
-      newValues: {
-        status: validatedData.new_status,
-        order_number: priorOrder?.orderNumber ?? null,
-      },
-    });
 
     if (validatedData.reason) {
       try {
@@ -96,6 +58,7 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
           is_customer_visible: false,
         });
       } catch (noteErr) {
+        console.warn("[updateOrderStatusAction] Note recording skipped:", noteErr);
       }
     }
 
@@ -119,14 +82,15 @@ export async function updateOrderStatusAction(input: UpdateOrderStatusInput) {
           });
         }
       } catch (emailErr) {
+        console.warn("[updateOrderStatusAction] Failed to send order confirmation email:", emailErr);
       }
     }
 
     revalidatePath(`/admin/orders/${validatedData.order_id}`);
     revalidatePath("/admin/orders");
     return { success: true, data: updatedOrder };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -157,8 +121,8 @@ export async function getOrderDetailsAction(id: string) {
     }
 
     return { success: true, data: details };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -201,8 +165,9 @@ export async function fetchOrdersAction(params: {
 
     const orders = await orderRepo.getOrders(params, null);
     return { success: true, data: orders };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to fetch orders" };
+  } catch (error: any) {
+    console.error("[fetchOrdersAction Error]:", error);
+    return { success: false, error: error.message || "Failed to fetch orders" };
   }
 }
 
@@ -212,8 +177,9 @@ export async function fetchOrderMetricsAction() {
   try {
     const metrics = await orderRepo.getOrderMetrics(null);
     return { success: true, data: metrics };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to fetch metrics" };
+  } catch (error: any) {
+    console.error("[fetchOrderMetricsAction Error]:", error);
+    return { success: false, error: error.message || "Failed to fetch metrics" };
   }
 }
 
@@ -223,8 +189,8 @@ export async function fetchOrdersForFulfillmentAction() {
   try {
     const orders = await orderRepo.getOrdersForFulfillment();
     return { success: true, data: orders };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -275,14 +241,6 @@ export async function cancelCustomerOrderAction(
         where: { id: orderId, status: order.status },
         data: {
           status: "CANCELLED",
-          // FIX ROUND 25: stamp the real cancelled_at column — this path
-          // never wrote it, so the customer's Cancellation Details panel
-          // showed "Cancelled At: Unknown" for every customer-cancelled
-          // order. The chosen reason has no column on orders
-          // (schema-verified); it is recorded in order_status_history
-          // (step 7 below) and the panel derives it from there — see
-          // lib/orders/cancellation-display.ts.
-          cancelledAt: new Date(),
         }
       });
     } catch (updateError) {
@@ -297,6 +255,7 @@ export async function cancelCustomerOrderAction(
       const inventoryService = new InventoryService();
       await inventoryService.releaseOrderInventory(order.id);
     } catch (invError) {
+      console.error(`[cancelCustomerOrderAction] Failed to release inventory for order ${order.id}`, invError);
     }
 
     // 6. Handle Payment/Refund State Safely & Idempotently
@@ -322,6 +281,7 @@ export async function cancelCustomerOrderAction(
         }
       }
     } catch (refundError) {
+      console.error(`[cancelCustomerOrderAction] Failed to process refund for order ${order.id}`, refundError);
       refundStatus = "failed/pending";
     }
 
@@ -336,6 +296,7 @@ export async function cancelCustomerOrderAction(
         },
       });
     } catch (histErr) {
+      console.error("[cancelCustomerOrderAction] Failed to write status history", histErr);
     }
 
     // 8. Customer Notification (Notification Idempotency via single winner update)
@@ -351,6 +312,7 @@ export async function cancelCustomerOrderAction(
         },
       });
     } catch (notifErr) {
+      console.error("[cancelCustomerOrderAction] Failed to create notification", notifErr);
     }
 
     revalidatePath("/account/orders");
@@ -358,8 +320,9 @@ export async function cancelCustomerOrderAction(
     if (order.id) revalidatePath(`/account/orders/${order.id}`);
 
     return { success: true, data: updatedOrder };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "An unexpected error occurred" };
+  } catch (error: any) {
+    console.error("[cancelCustomerOrderAction Error]:", error);
+    return { success: false, error: error.message || "An unexpected error occurred" };
   }
 }
 

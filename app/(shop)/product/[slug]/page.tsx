@@ -3,12 +3,7 @@ import { CatalogService } from "@/lib/services/catalog.service";
 import { ReviewRepository } from "@/lib/repositories/catalog/review.repository";
 import { FlashSaleService } from "@/lib/services/marketing/flash-sale.service";
 import { ProductDetailView } from "@/components/product/product-detail-view";
-import { getFreeShippingThreshold } from "@/lib/actions/settings.actions";
 import { notFound } from "next/navigation";
-import { getSiteUrl } from "@/lib/site-url";
-
-// FIX2 (OBS-6): canonical base via lib/site-url (was hardcoded .com).
-const siteUrl = getSiteUrl();
 
 export const revalidate = 60;
 
@@ -68,6 +63,7 @@ export default async function ProductDetailPage({
   try {
     flashSale = await FlashSaleService.getFlashSaleForProduct(product.id);
   } catch (err) {
+    console.warn("Could not fetch flash sale for product:", err);
   }
 
   // 2. Fetch related products in the same category (safe fallback)
@@ -86,6 +82,7 @@ export default async function ProductDetailPage({
       relatedProducts = (featured || []).filter((p: any) => p.id !== product.id);
     }
   } catch (err) {
+    console.warn("Could not fetch related products:", err);
   }
 
   // 3. Fetch real reviews from database (safe fallback)
@@ -93,6 +90,7 @@ export default async function ProductDetailPage({
   try {
     reviews = await ReviewRepository.getReviewsByProductId(product.id);
   } catch (err) {
+    console.warn("Could not fetch reviews:", err);
   }
 
   // 4. Build JSON-LD structured metadata
@@ -117,7 +115,7 @@ export default async function ProductDetailPage({
     },
     offers: {
       "@type": "Offer",
-      url: `${siteUrl}/product/${product.slug}`,
+      url: `https://anchorfashion.com/product/${product.slug}`,
       priceCurrency: "BDT",
       price: effectivePrice,
       itemCondition: "https://schema.org/NewCondition",
@@ -138,7 +136,6 @@ export default async function ProductDetailPage({
         flashSale={flashSale}
         reviews={reviews}
         relatedProducts={relatedProducts}
-        freeShippingThreshold={await getFreeShippingThreshold().catch(() => 0)}
       />
     </>
   );

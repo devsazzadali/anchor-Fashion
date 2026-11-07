@@ -20,6 +20,7 @@ export default async function TasksPage() {
     const res = await fetchTasksAction();
     safeTasks = Array.isArray(res?.data) ? res.data : [];
   } catch (err) {
+    console.error("TasksPage fetchTasksAction failed:", err);
     safeTasks = [];
   }
 

@@ -23,6 +23,7 @@ export default async function ProfilePage() {
     const customerService = new CustomerService();
     profile = await customerService.getProfile(user.id);
   } catch (err) {
+    console.error("Error fetching customer profile:", err);
   }
 
   // Fallback profile if DB record is temporarily unavailable or new

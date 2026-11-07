@@ -38,8 +38,9 @@ export async function fetchAdminUsersAction() {
     });
 
     return { success: true, data: usersList };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("[fetchAdminUsersAction]", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -69,8 +70,9 @@ export async function toggleUserStatusAction(userId: string, isActive: boolean) 
 
     revalidatePath("/admin/users");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("[toggleUserStatusAction]", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -126,6 +128,7 @@ export async function createAdminUserAction(data: {
         ),
       });
     } catch (emailErr) {
+      console.warn("[createAdminUserAction] Failed to send welcome email:", emailErr);
     }
 
     // 2. Insert or Update Profile
@@ -152,13 +155,15 @@ export async function createAdminUserAction(data: {
           },
         });
       } catch (directUpdateErr) {
+        console.warn("[createAdminUserAction] Profile role assignment note:", directUpdateErr);
       }
     }
 
     revalidatePath("/admin/users");
     return { success: true, password: finalPassword };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("[createAdminUserAction]", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -175,7 +180,8 @@ export async function updateUserPasswordAction(userId: string, newPassword: stri
     if (error) throw error;
     revalidatePath("/admin/users");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to update password" };
+  } catch (error: any) {
+    console.error("[updateUserPasswordAction]", error);
+    return { success: false, error: error.message || "Failed to update password" };
   }
 }

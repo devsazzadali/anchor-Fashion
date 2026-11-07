@@ -1,5 +1,4 @@
 import { Metadata } from "next";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
@@ -13,7 +12,6 @@ import {
   Clock,
 } from "lucide-react";
 import { getFaqsAction, getStorePoliciesAction } from "@/app/actions/cms/faq-policy.actions";
-import { FALLBACK_DELIVERY_FEES } from "@/lib/constants/shipping";
 import { SupportFaqClient } from "@/features/support/components/SupportFaqClient";
 
 export const dynamic = "force-dynamic";
@@ -44,15 +42,6 @@ export default async function SupportTopicPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-
-  // Order tracking has a dedicated full-page tracker at /track-order with
-  // its own layout and timeline UI; this support shell has no content
-  // block for the slug and rendered an empty page. Send visitors straight
-  // to the real tracker instead of duplicating it inside the support
-  // shell.
-  if (slug === "track-order") {
-    redirect("/track-order");
-  }
 
   const [faqsRes, policiesRes] = await Promise.all([
     slug === "faq" ? getFaqsAction() : Promise.resolve({ success: true, data: [] }),
@@ -249,7 +238,7 @@ export default async function SupportTopicPage({
                     <strong>{policies?.shipping?.inside_dhaka_delivery_time || "24 to 48 hours"}</strong>.
                   </p>
                   <p className="text-xs font-semibold text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
-                    Standard Shipping: ৳{policies?.shipping?.inside_dhaka_fee ?? FALLBACK_DELIVERY_FEES.insideDhaka} | Free above ৳
+                    Standard Shipping: ৳{policies?.shipping?.inside_dhaka_fee ?? 60} | Free above ৳
                     {policies?.shipping?.free_shipping_threshold ?? 999}
                   </p>
                 </div>
@@ -264,7 +253,7 @@ export default async function SupportTopicPage({
                     <strong>{policies?.shipping?.outside_dhaka_delivery_time || "3 to 5 business days"}</strong> via courier.
                   </p>
                   <p className="text-xs font-semibold text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
-                    Standard Shipping: ৳{policies?.shipping?.outside_dhaka_fee ?? FALLBACK_DELIVERY_FEES.outsideDhaka} | Free above ৳
+                    Standard Shipping: ৳{policies?.shipping?.outside_dhaka_fee ?? 120} | Free above ৳
                     {policies?.shipping?.free_shipping_threshold ?? 999}
                   </p>
                 </div>

@@ -41,7 +41,8 @@ Please generate the content now.
       content: response.text,
       usage: response.usage,
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Content Generator Error:", error);
     return NextResponse.json(
       { error: "Failed to generate content" },
       { status: 500 }

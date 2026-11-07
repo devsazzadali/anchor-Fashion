@@ -26,14 +26,6 @@ export async function dispatchOrderAction(
 
     const role = await getRoleForUser(user);
 
-    // REG-33: dispatching is an order mutation — SUPPORT is read-only.
-    if (String(role || "").toUpperCase().trim() === "SUPPORT") {
-      return {
-        success: false,
-        error: "Support accounts are read-only and cannot dispatch orders.",
-      };
-    }
-
     const adminDb = await createAdminDbClient();
     const orderService = new OrderService();
     const shippingService = new ShippingService();
@@ -105,19 +97,14 @@ export async function dispatchOrderAction(
     // Phase 8: a 'created' draft with no consignment (left behind by a
     // failed submission) must not block a retry — only shipments that
     // actually reached a courier count as active.
-    // FIX ROUND 28 (B-1 class): shipments has no consignment_id column
-    // — the courier consignment id is stored as tracking_number. The
-    // old select/filter read a field that never exists, so a booked
-    // 'created' shipment did not count as active and a retry could
-    // double-book the courier.
     const { data: existingShipments } = await adminDb
       .from("shipments")
-      .select("id, status, tracking_number")
+      .select("id, status, consignment_id")
       .eq("order_id", orderId)
       .neq("status", "cancelled");
 
     const activeShipments = (existingShipments || []).filter(
-      (s: any) => s.status !== "created" || s.tracking_number
+      (s: any) => s.status !== "created" || s.consignment_id
     );
 
     if (activeShipments.length > 0) {
@@ -204,7 +191,8 @@ export async function dispatchOrderAction(
     revalidatePath(`/admin/orders/${orderId}`);
     return { success: true, data: assignedShipment };
 
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to dispatch order" };
+  } catch (error: any) {
+    console.error("[dispatchOrderAction Error]:", error);
+    return { success: false, error: error.message || "Failed to dispatch order" };
   }
 }

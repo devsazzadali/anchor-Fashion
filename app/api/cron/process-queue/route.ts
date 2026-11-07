@@ -49,8 +49,8 @@ export async function GET(req: Request) {
           await QueueService.markJobCompleted(job.id);
           successCount++;
         }
-      } catch (err) {
-        await QueueService.markJobFailed(job.id, (err as Error).message);
+      } catch (err: any) {
+        await QueueService.markJobFailed(job.id, err.message);
         failCount++;
       }
     }
@@ -61,7 +61,8 @@ export async function GET(req: Request) {
       success: successCount,
       failed: failCount,
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Queue processing error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

@@ -12,8 +12,9 @@ export async function fetchInventoryAction(limit?: number, search?: string) {
   try {
     const data = await inventoryRepo.getInventoryDashboard(limit, search);
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("fetchInventoryAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -35,8 +36,8 @@ export async function adjustStockAction(
     );
     revalidatePath("/manager/inventory");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -48,8 +49,8 @@ export async function getAuditsAction() {
   try {
     const data = await inventoryRepo.getAudits();
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -59,8 +60,8 @@ export async function getAuditByIdAction(id: string) {
   try {
     const data = await inventoryRepo.getAuditById(id);
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -71,8 +72,8 @@ export async function createAuditAction(data: any) {
     const result = await inventoryRepo.createAudit(data);
     revalidatePath("/manager/inventory/audits");
     return { success: true, data: result };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -84,8 +85,8 @@ export async function updateAuditStatusAction(id: string, status: string) {
     revalidatePath("/manager/inventory/audits");
     revalidatePath(`/manager/inventory/audits/${id}`);
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -95,8 +96,8 @@ export async function getAuditItemsAction(auditId: string) {
   try {
     const data = await inventoryRepo.getAuditItems(auditId);
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -107,8 +108,8 @@ export async function createAuditItemsAction(items: any[], auditId: string) {
     await inventoryRepo.createAuditItems(items);
     revalidatePath(`/manager/inventory/audits/${auditId}`);
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -119,8 +120,8 @@ export async function updateAuditItemCountAction(itemId: string, countedQuantity
     await inventoryRepo.updateAuditItemCount(itemId, countedQuantity);
     revalidatePath(`/manager/inventory/audits/${auditId}`);
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -132,7 +133,7 @@ export async function getMovementsAction(page = 1, limit = 50, warehouseId?: str
   try {
     const data = await inventoryRepo.getMovements(page, limit, warehouseId, variantId);
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }

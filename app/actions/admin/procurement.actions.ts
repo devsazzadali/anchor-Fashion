@@ -1,7 +1,6 @@
 "use server";
 
 import { createAdminDbClient } from "@/lib/db/client";
-import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { verifyStaff } from "@/lib/security/roles";
 
@@ -126,8 +125,8 @@ export async function createSupplierProfileAction(data: {
     } catch {}
 
     return { success: true, data: mapSupplierRow(supplier) };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to create supplier profile" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to create supplier profile" };
   }
 }
 
@@ -209,8 +208,8 @@ export async function updateSupplierProfileAction(
     } catch {}
 
     return { success: true, data: mapSupplierRow(updated) };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to update supplier profile" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to update supplier profile" };
   }
 }
 
@@ -231,8 +230,8 @@ export async function deleteSupplierProfileAction(id: string) {
     } catch {}
 
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to delete supplier profile" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to delete supplier profile" };
   }
 }
 
@@ -263,43 +262,22 @@ export async function getWarehouses() {
 export async function getVariants() {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
-  // Prisma, not the fluent builder: the builder never resolves the
-  // embedded `product:products(...)` join for variants, so every label
-  // fell back to the literal "Product" and — with the product's real
-  // cost_price unreachable — the unit cost was fabricated as 60% of the
-  // retail price. The old query also capped the list at 300 rows,
-  // silently omitting most of the ~719 variants. No cap now: every
-  // active variant is selectable, labelled with its real product name,
-  // attributes and SKU, and costed from the same cost the product
-  // record presents (variant cost, else product COGS).
-  const variants = await prisma.variant.findMany({
-    where: { isActive: true },
-    orderBy: { sku: "asc" },
-    select: {
-      id: true,
-      sku: true,
-      priceOverride: true,
-      salePrice: true,
-      costPrice: true,
-      attributes: true,
-      product: {
-        select: { id: true, name: true, basePrice: true, costPrice: true },
-      },
-    },
-  });
+  const db = createAdminDbClient();
+  const { data, error } = await db
+    .from("variants")
+    .select("id, sku, price_override, sale_price, attributes, product:products(id, name, base_price, cost_price)")
+    .limit(300);
+    
+  if (error) return { success: false, error: error.message };
 
   return {
     success: true,
-    data: variants.map((v) => {
+    data: (data || []).map((v: any) => {
       const pName = v.product?.name || "Product";
-      const attrStr = v.attributes
-        ? Object.values(v.attributes as any).filter(Boolean).join(" / ")
-        : "";
+      const attrStr = v.attributes ? Object.values(v.attributes).filter(Boolean).join(" / ") : "";
       const label = attrStr ? `${pName} (${v.sku} - ${attrStr})` : `${pName} (${v.sku})`;
-      const price = Number(
-        v.salePrice ?? v.priceOverride ?? v.product?.basePrice ?? 0
-      );
-      const costPrice = Number(v.costPrice ?? v.product?.costPrice ?? 0);
+      const price = Number(v.sale_price || v.price_override || v.product?.base_price || 0);
+      const costPrice = Number(v.product?.cost_price || (price ? price * 0.6 : 0));
       return {
         id: v.id,
         sku: v.sku,
@@ -329,7 +307,7 @@ export async function createProcurementOrder(
   }>
 ) {
   // SECURITY: server actions are public endpoints; authorize every call.
-  const user = await verifyStaff();
+  await verifyStaff();
   try {
     const db = createAdminDbClient();
 
@@ -362,53 +340,46 @@ export async function createProcurementOrder(
 
     const poNumber = poData.po_number || `PO-${Date.now().toString().slice(-6)}`;
 
-    // 3. Insert the order with authoritative grand total.
-    // S4-6: the real tables are `purchase_orders` / `purchase_order_items`
-    // (columns: warehouse_id, expected_date / purchase_order_id,
-    // quantity). This action previously inserted into a nonexistent
-    // `procurement_orders` table — the DB layer answered with an empty
-    // success, `po` came back null, and reading `po.id` threw
-    // "Cannot read properties of null (reading 'id')" on every submit.
-    const createdBy =
-      (user as any)?.id &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((user as any).id)
-        ? (user as any).id
-        : null;
+    // 3. Insert Procurement Order with authoritative grand total
     const { data: po, error: poError } = await db
-      .from("purchase_orders")
+      .from("procurement_orders")
       .insert({
         po_number: poNumber,
         supplier_id: poData.supplier_id,
-        warehouse_id: poData.destination_warehouse_id,
-        expected_date: poData.expected_delivery_date || null,
+        destination_warehouse_id: poData.destination_warehouse_id,
+        expected_delivery_date: poData.expected_delivery_date || null,
         total_amount: grandTotal,
         notes: poData.notes || `Subtotal: BDT ${subtotal.toFixed(2)}, Tax (${(taxRate * 100).toFixed(0)}%): BDT ${taxAmount.toFixed(2)}, Grand Total: BDT ${grandTotal.toFixed(2)}`,
         status: "DRAFT",
-        created_by: createdBy,
       })
       .select()
       .single();
 
     if (poError) return { success: false, error: poError.message };
-    if (!po) return { success: false, error: "Failed to create purchase order: no row was persisted." };
 
     // 4. Insert Items with line totals
     const itemsToInsert = processedItems.map((item) => ({
-      purchase_order_id: po.id,
+      po_id: po.id,
       variant_id: item.variant_id,
-      quantity: item.quantity_ordered,
+      quantity_ordered: item.quantity_ordered,
       unit_cost: item.unit_cost,
       total_cost: item.total_cost,
     }));
 
     const { error: itemsError } = await db
-      .from("purchase_order_items")
+      .from("procurement_items")
       .insert(itemsToInsert);
 
     if (itemsError) {
-      // Roll back the order so a failed item insert never orphans a PO.
-      await db.from("purchase_orders").delete().eq("id", po.id);
-      return { success: false, error: itemsError.message || "Failed to create purchase order items." };
+      console.warn("Could not insert with total_cost column, retrying with base columns:", itemsError);
+      await db.from("procurement_items").insert(
+        processedItems.map((item) => ({
+          po_id: po.id,
+          variant_id: item.variant_id,
+          quantity_ordered: item.quantity_ordered,
+          unit_cost: item.unit_cost,
+        }))
+      );
     }
 
     revalidatePath("/admin/inventory/purchases");
@@ -423,8 +394,8 @@ export async function createProcurementOrder(
         grandTotal,
       },
     };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to create procurement order" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to create procurement order" };
   }
 }
 
@@ -433,72 +404,28 @@ export async function getProcurementOrderDetails(poId: string) {
   await verifyStaff();
   try {
     const db = createAdminDbClient();
-    // S4-6: read the real `purchase_orders` family (see
-    // createProcurementOrder). Relations are resolved manually — the DB
-    // layer does not attach embedded selects — and mapped into the
-    // shape the purchases client renders (supplier_profiles /
-    // warehouses / expected_delivery_date / quantity_ordered / variants).
     const { data: po, error: poErr } = await db
-      .from("purchase_orders")
-      .select("*")
+      .from("procurement_orders")
+      .select("*, supplier_profiles(*), warehouses(*)")
       .eq("id", poId)
       .single();
 
     if (poErr) return { success: false, error: poErr.message };
-    if (!po) return { success: false, error: "Purchase order not found" };
 
-    const [{ data: supplier }, { data: warehouse }, { data: items }] = await Promise.all([
-      db.from("suppliers").select("*").eq("id", po.supplier_id).maybeSingle(),
-      db.from("warehouses").select("*").eq("id", po.warehouse_id).maybeSingle(),
-      db.from("purchase_order_items").select("*").eq("purchase_order_id", poId),
-    ]);
-
-    const itemRows = items || [];
-    const variantIds = [...new Set(itemRows.map((i: any) => i.variant_id).filter(Boolean))];
-    let variantById = new Map<string, any>();
-    if (variantIds.length > 0) {
-      const { data: variants } = await db
-        .from("variants")
-        .select("id, sku, attributes, product_id")
-        .in("id", variantIds);
-      const productIds = [...new Set((variants || []).map((v: any) => v.product_id).filter(Boolean))];
-      const { data: products } = productIds.length
-        ? await db.from("products").select("id, name").in("id", productIds)
-        : { data: [] as any[] };
-      const productById = new Map<string, any>((products || []).map((p: any) => [p.id, p] as [string, any]));
-      variantById = new Map<string, any>(
-        (variants || []).map((v: any) => {
-          const pName = productById.get(v.product_id)?.name || "Product";
-          const attrStr = v.attributes ? Object.values(v.attributes).filter(Boolean).join(" / ") : "";
-          const label = attrStr ? `${pName} (${v.sku} - ${attrStr})` : `${pName} (${v.sku})`;
-          return [v.id, { id: v.id, sku: v.sku, name: label }] as [string, any];
-        })
-      );
-    }
+    const { data: items } = await db
+      .from("procurement_items")
+      .select("*, variants(id, sku, name)")
+      .eq("po_id", poId);
 
     return {
       success: true,
       data: {
         ...po,
-        expected_delivery_date: po.expected_date || null,
-        supplier_profiles: supplier
-          ? {
-              company_name: supplier.name,
-              contact_person: supplier.contact_name || "",
-              email: supplier.email || "",
-              phone: supplier.phone || "",
-            }
-          : null,
-        warehouses: warehouse ? { name: warehouse.name, code: warehouse.code || "" } : null,
-        items: itemRows.map((i: any) => ({
-          ...i,
-          quantity_ordered: i.quantity,
-          variants: variantById.get(i.variant_id) || null,
-        })),
+        items: items || [],
       },
     };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to fetch PO details" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to fetch PO details" };
   }
 }
 
@@ -511,7 +438,7 @@ export async function updateProcurementOrderStatus(
   try {
     const db = createAdminDbClient();
     const { error } = await db
-      .from("purchase_orders")
+      .from("procurement_orders")
       .update({ status, updated_at: new Date().toISOString() })
       .eq("id", poId);
 
@@ -520,23 +447,21 @@ export async function updateProcurementOrderStatus(
     revalidatePath("/admin/inventory/purchases");
     revalidatePath("/admin/operations/procurement/purchase-orders");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to update PO status" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to update PO status" };
   }
 }
 
 export async function receiveProcurementOrderAction(poId: string, notes?: string) {
   // SECURITY: server actions are public endpoints; authorize every call.
-  const user = await verifyStaff();
+  await verifyStaff();
   try {
     const db = createAdminDbClient();
 
-    // 1. Fetch PO and items (S4-6: real `purchase_orders` family; the
-    // embedded-items select is not resolved by the DB layer, so items
-    // are fetched with their own query.)
+    // 1. Fetch PO and items
     const { data: po, error: poErr } = await db
-      .from("purchase_orders")
-      .select("*")
+      .from("procurement_orders")
+      .select("*, procurement_items(*)")
       .eq("id", poId)
       .single();
 
@@ -548,30 +473,20 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
       return { success: false, error: "This purchase order has already been received." };
     }
 
-    const destinationWarehouseId = po.warehouse_id;
+    const destinationWarehouseId = po.destination_warehouse_id;
     if (!destinationWarehouseId) {
       return { success: false, error: "No destination warehouse assigned to this PO." };
     }
 
-    const { data: itemRows } = await db
-      .from("purchase_order_items")
-      .select("*")
-      .eq("purchase_order_id", poId);
-    const items = itemRows || [];
+    const items = po.procurement_items || [];
     if (items.length === 0) {
       return { success: false, error: "Purchase order has no items to receive." };
     }
 
-    const createdBy =
-      (user as any)?.id &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((user as any).id)
-        ? (user as any).id
-        : null;
-
     // 2. Increment stock in inventory_levels for each item
     for (const item of items) {
       const variantId = item.variant_id;
-      const qtyReceived = Number(item.quantity) || 0;
+      const qtyReceived = Number(item.quantity_ordered) || 0;
       if (!variantId || qtyReceived <= 0) continue;
 
       const { data: existingLevel } = await db
@@ -601,29 +516,24 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
         });
       }
 
-      // Record stock movement — real stock_movements columns only
-      // (movement_type / quantity / previous_quantity / new_quantity /
-      // reference_type / reference_id / notes / created_by).
+      // Record stock movement
       try {
         await db.from("stock_movements").insert({
           variant_id: variantId,
           warehouse_id: destinationWarehouseId,
-          movement_type: "IN",
-          quantity: qtyReceived,
-          previous_quantity: previousQty,
-          new_quantity: newQty,
-          reference_type: "PURCHASE_ORDER",
-          reference_id: po.id,
-          notes: notes || `Goods received from PO: ${po.po_number || poId}`,
-          created_by: createdBy,
+          quantity_change: qtyReceived,
+          reason: notes || `Goods received from PO: ${po.po_number || poId}`,
+          reason_code: "PURCHASE_RECEIPT",
+          reference_id: po.po_number || poId,
         });
-      } catch (e) {
+      } catch (e: any) {
+        console.warn("Could not insert stock_movements log:", e?.message);
       }
     }
 
     // 3. Mark PO as DELIVERED / FULFILLED
     await db
-      .from("purchase_orders")
+      .from("procurement_orders")
       .update({
         status: "DELIVERED",
         updated_at: new Date().toISOString(),
@@ -636,8 +546,8 @@ export async function receiveProcurementOrderAction(poId: string, notes?: string
     revalidatePath("/admin/inventory/movement");
 
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to receive goods" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to receive goods" };
   }
 }
 

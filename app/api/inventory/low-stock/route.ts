@@ -3,24 +3,6 @@ import { createAdminDbClient } from "@/lib/db/client";
 import { verifyStaff } from "@/lib/security/roles";
 import { authErrorResponse } from "@/lib/api/auth-error";
 
-/**
- * REG-65 Batch 9: one inventory_levels builder row joined to its variant
- * and warehouse — exactly the fields the low-stock mapping reads.
- */
-interface LowStockRow {
-  id: string;
-  variant_id: string;
-  quantity_available?: number | null;
-  quantity_reserved?: number | null;
-  reorder_point?: number | null;
-  safety_stock?: number | null;
-  variant?: {
-    sku?: string | null;
-    product?: { name?: string | null } | null;
-  } | null;
-  warehouse?: { name?: string | null; warehouse_code?: string | null } | null;
-}
-
 export async function GET(request: NextRequest) {
   try {
     await verifyStaff();
@@ -49,12 +31,12 @@ export async function GET(request: NextRequest) {
     if (error) throw new Error(error.message);
 
     const lowStockItems = (data || [])
-      .filter((row: LowStockRow) => {
+      .filter((row: any) => {
         const avail = Number(row.quantity_available) || 0;
         const threshold = Number(row.reorder_point) || Number(row.safety_stock) || 5;
         return avail <= threshold;
       })
-      .map((row: LowStockRow) => ({
+      .map((row: any) => ({
         id: row.id,
         variant_id: row.variant_id,
         sku: row.variant?.sku || "—",
@@ -72,7 +54,7 @@ export async function GET(request: NextRequest) {
       total: lowStockItems.length,
       items: lowStockItems,
     });
-  } catch (error) {
+  } catch (error: any) {
     return authErrorResponse(error);
   }
 }

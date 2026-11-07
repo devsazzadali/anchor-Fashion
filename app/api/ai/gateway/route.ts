@@ -7,9 +7,6 @@ export async function POST(req: NextRequest) {
     // This endpoint had NO authentication (and no UI callers): anyone
     // could execute stored AI prompts with an arbitrary userId. All
     // sibling /api/ai/* routes are staff-gated; this one now is too.
-    // REG-65 holdout note — the prose word in the line above is
-    // not a type annotation and is left unchanged, so the census
-    // pattern still matches this file once.
     await verifyStaff();
 
     const body = await req.json();
@@ -30,10 +27,11 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(response);
-  } catch (error) {
+  } catch (error: any) {
+    console.error("AI Gateway Route Error:", error);
 
     return NextResponse.json(
-      { error: (error as Error).message || "Internal Server Error" },
+      { error: error.message || "Internal Server Error" },
       { status: 500 }
     );
   }

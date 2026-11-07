@@ -7,9 +7,7 @@ import Link from "next/link";
 import { jost } from "@/lib/fonts";
 
 export const metadata = {
-  // REG-69: full authored title (the root template that used to append
-  // the brand suffix is gone; this page was its one bare-title consumer).
-  title: "Search Products | Anchor Fashion",
+  title: "Search Products",
   description: "Search luxury apparel, fashion edits and accessories at Anchor Fashion.",
 };
 
@@ -43,10 +41,7 @@ export default async function SearchPage({
         <h1 className="mt-1 text-2xl sm:text-3xl md:text-4xl font-light tracking-tight text-gray-900">
           {query ? (
             <>
-              {/* REG-44: a very long unbroken query (300+ chars) overflowed
-                  the page horizontally — wrap it anywhere instead of
-                  letting it stretch the layout. */}
-              Results for &ldquo;<span className="font-medium text-black [overflow-wrap:anywhere]">{query}</span>&rdquo;
+              Results for &ldquo;<span className="font-medium text-black">{query}</span>&rdquo;
             </>
           ) : (
             "Explore Our Collection"
@@ -87,7 +82,7 @@ export default async function SearchPage({
         </div>
       ) : products.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-6 lg:grid-cols-4 xl:grid-cols-5">
-          {products.map((product) => (
+          {products.map((product: any) => (
             <ProductCard key={product.id} product={product} />
           ))}
         </div>
@@ -97,7 +92,7 @@ export default async function SearchPage({
             <Search className="h-6 w-6" strokeWidth={1.5} />
           </div>
           <h2 className="mb-1 text-lg font-medium text-gray-900">No results found</h2>
-          <p className="mb-6 text-xs text-gray-500 leading-relaxed [overflow-wrap:anywhere]">
+          <p className="mb-6 text-xs text-gray-500 leading-relaxed">
             We couldn&apos;t find anything matching &ldquo;{query}&rdquo;. Try checking for typos or searching with broader keywords.
           </p>
           <Button asChild variant="outline" className="rounded-full border-black px-6 py-2.5 text-xs font-semibold uppercase tracking-wider text-black transition-colors hover:bg-black hover:text-white">

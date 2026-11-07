@@ -1,7 +1,6 @@
 "use server";
 
 import { createAdminDbClient } from "@/lib/db/client";
-import { FALLBACK_DELIVERY_FEES } from "@/lib/constants/shipping";
 import { verifyStaff } from "@/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
@@ -36,13 +35,9 @@ export interface ReturnPolicyConfig {
 
 const DEFAULT_SHIPPING_POLICY: ShippingPolicyConfig = {
   inside_dhaka_delivery_time: "24 to 48 hours",
-  // REG-63: the fallback pair is the ONE canonical constant
-  // (lib/constants/shipping) — the same pair the order engine falls
-  // back to when delivery zones cannot be loaded. These defaults are
-  // what /support/shipping renders until an admin saves policy settings.
-  inside_dhaka_fee: FALLBACK_DELIVERY_FEES.insideDhaka,
+  inside_dhaka_fee: 60,
   outside_dhaka_delivery_time: "3 to 5 business days",
-  outside_dhaka_fee: FALLBACK_DELIVERY_FEES.outsideDhaka,
+  outside_dhaka_fee: 120,
   free_shipping_threshold: 999,
   courier_partners: "Pathao, Steadfast, Paperfly",
   processing_time: "Same day dispatch for orders before 2:00 PM",
@@ -82,8 +77,7 @@ const DEFAULT_FAQS: Omit<FAQItem, "id" | "created_at">[] = [
   {
     category: "Orders & Delivery",
     question: "What are the standard shipping charges?",
-    // REG-63: was ৳60/৳120 — a pair nothing else in the system charges.
-    answer: `Standard shipping is ৳${FALLBACK_DELIVERY_FEES.insideDhaka} inside Dhaka and ৳${FALLBACK_DELIVERY_FEES.outsideDhaka} outside Dhaka. Enjoy FREE shipping on all orders over ৳999.`,
+    answer: "Standard shipping is ৳60 inside Dhaka and ৳120 outside Dhaka. Enjoy FREE shipping on all orders over ৳999.",
     display_order: 3,
   },
   {
@@ -165,6 +159,7 @@ async function seedDefaultFaqs(db: any) {
       }
     }
   } catch (err) {
+    console.error("[seedDefaultFaqs error]:", err);
   }
   return null;
 }
@@ -196,8 +191,9 @@ export async function getFaqsAction(): Promise<{
     }
 
     return { success: true, data: ((data as any[]) || []).map(mapFaqRow) };
-  } catch (error) {
-    return { success: false, data: [], error: (error as Error).message };
+  } catch (error: any) {
+    console.error("[getFaqsAction]", error);
+    return { success: false, data: [], error: error.message };
   }
 }
 
@@ -241,8 +237,9 @@ export async function createFaqAction(payload: {
     revalidatePath("/admin/cms/faqs");
 
     return { success: true, data: mapFaqRow(data) };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("[createFaqAction]", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -284,8 +281,9 @@ export async function updateFaqAction(
     revalidatePath("/admin/cms/faqs");
 
     return { success: true, data: mapFaqRow(data) };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("[updateFaqAction]", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -305,8 +303,9 @@ export async function deleteFaqAction(id: string): Promise<{
     revalidatePath("/admin/cms/faqs");
 
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("[deleteFaqAction]", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -341,6 +340,7 @@ export async function getStorePoliciesAction(): Promise<{
 
     return { shipping, returns };
   } catch (error) {
+    console.error("[getStorePoliciesAction]", error);
     return { shipping: DEFAULT_SHIPPING_POLICY, returns: DEFAULT_RETURN_POLICY };
   }
 }
@@ -394,6 +394,7 @@ export async function updateStorePoliciesAction(payload: {
           );
         }
       } catch (syncErr) {
+        console.warn("[updateStorePoliciesAction sync store_info warning]:", syncErr);
       }
     }
 
@@ -416,7 +417,8 @@ export async function updateStorePoliciesAction(payload: {
     revalidatePath("/admin/cms/faqs");
 
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("[updateStorePoliciesAction]", error);
+    return { success: false, error: error.message };
   }
 }

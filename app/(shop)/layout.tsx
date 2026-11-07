@@ -1,9 +1,6 @@
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
-import {
-  getStoreInfo,
-  getFreeShippingThreshold,
-} from "@/lib/actions/settings.actions";
+import { getStoreInfo } from "@/lib/actions/settings.actions";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { FloatingPromotion } from "@/components/marketing/floating-promotion";
 import { PromotionPopupBanner } from "@/components/marketing/PromotionPopupBanner";
@@ -11,15 +8,13 @@ import { CartDrawer } from "@/components/cart/cart-drawer";
 import { PromotionRepository } from "@/lib/repositories/marketing/promotion.repository";
 
 import { getCachedCategories } from "@/lib/cache/catalog-cache";
-import { getSiteUrl } from "@/lib/site-url";
 
 export default async function ShopLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [categories, storeInfo, activePromotion, freeShippingThreshold] =
-    await Promise.all([
+  const [categories, storeInfo, activePromotion] = await Promise.all([
     getCachedCategories().catch(() => []),
     getStoreInfo().catch(() => ({
       store_name: "Anchor Fashion Enterprise",
@@ -31,7 +26,6 @@ export default async function ShopLayout({
       free_shipping_threshold: "999",
     })),
     PromotionRepository.getBestActivePromotion().catch(() => null),
-    getFreeShippingThreshold().catch(() => 0),
   ]);
 
   const safeStoreInfo = storeInfo || {
@@ -50,9 +44,8 @@ export default async function ShopLayout({
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": safeStoreInfo.store_name || "Anchor Fashion",
-    // FIX2 (OBS-6): canonical base via lib/site-url (was hardcoded .com).
-    "url": getSiteUrl(),
-    "logo": `${getSiteUrl()}/icon.svg`,
+    "url": "https://anchorfashion.com",
+    "logo": "https://anchorfashion.com/icon.svg",
     "contactPoint": {
       "@type": "ContactPoint",
       "telephone": safeStoreInfo.phone || "+880 1711-223344",
@@ -77,7 +70,7 @@ export default async function ShopLayout({
       <MobileBottomNav />
       <FloatingPromotion />
       <PromotionPopupBanner initialPromotion={activePromotion} />
-      <CartDrawer freeShippingThreshold={freeShippingThreshold} />
+      <CartDrawer />
     </div>
   );
 }

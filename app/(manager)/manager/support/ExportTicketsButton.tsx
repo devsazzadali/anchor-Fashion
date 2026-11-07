@@ -41,8 +41,8 @@ export function ExportTicketsButton({ tickets = [] }: { tickets?: any[] }) {
       link.click();
       document.body.removeChild(link);
       toast.success("Tickets exported successfully");
-    } catch (err) {
-      toast.error("Failed to export tickets: " + ((err as Error).message || "Unknown error"));
+    } catch (err: any) {
+      toast.error("Failed to export tickets: " + (err.message || "Unknown error"));
     }
   };
 

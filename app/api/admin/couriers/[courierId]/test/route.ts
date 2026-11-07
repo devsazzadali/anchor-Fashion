@@ -19,13 +19,13 @@ export async function POST(
       success: true,
       data: health,
     });
-  } catch (err) {
+  } catch (err: any) {
     return NextResponse.json(
       {
         success: false,
         error: {
           code: "TEST_CONNECTION_FAILED",
-          message: (err as Error).message || "Failed to test courier connection",
+          message: err.message || "Failed to test courier connection",
         },
       },
       { status: 500 }

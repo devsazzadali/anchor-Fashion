@@ -11,7 +11,6 @@ import { LoyaltyService } from "@/services/loyalty.service";
 import { verifyAuthenticated } from "@/lib/security/roles";
 import { prisma } from "@/lib/prisma";
 import { ReviewRepository } from "@/lib/repositories/catalog/review.repository";
-import { bdMobileSchema } from "@/schemas/phone.schema";
 
 const customerService = new CustomerService();
 
@@ -46,45 +45,6 @@ export async function updateProfileAction(formData: FormData) {
   });
 
   revalidatePath("/account/profile");
-  return { success: true };
-}
-
-/**
- * Registration collects a mobile number, but sign-up itself goes straight
- * to Neon Auth (authClient.signUp.email), which knows nothing about the
- * profiles table. The register form calls this action immediately after a
- * successful sign-up, while the fresh session is active, so the number
- * lands on the new account's profile (created by the same upsert the
- * account page uses, keyed by the auth user id). The phone is validated
- * server-side with the same BD-mobile schema the form enforces.
- */
-export async function saveRegistrationPhoneAction(
-  phone: string,
-  firstName?: string,
-  lastName?: string
-) {
-  await verifyAuthenticated();
-  const { user } = await getServerSession();
-
-  if (!user) {
-    return { success: false, error: "Not authenticated" };
-  }
-
-  const parsed = bdMobileSchema.safeParse(phone);
-  if (!parsed.success) {
-    return {
-      success: false,
-      error: parsed.error.issues[0]?.message || "Invalid phone number",
-    };
-  }
-
-  await customerService.updateProfile(user.id, {
-    first_name: firstName || undefined,
-    last_name: lastName || undefined,
-    phone: parsed.data,
-    email: user.email,
-  });
-
   return { success: true };
 }
 
@@ -136,6 +96,7 @@ export async function uploadAvatarAction(formData: FormData) {
       });
 
     if (uploadError) {
+      console.error("Avatar upload error:", uploadError);
       return { success: false, error: uploadError.message };
     }
 
@@ -167,6 +128,7 @@ export async function uploadAvatarAction(formData: FormData) {
     revalidatePath("/account");
     return { success: true, avatarUrl };
   } catch (err: any) {
+    console.error("Upload avatar exception:", err);
     return { success: false, error: err.message || "Failed to upload avatar" };
   }
 }
@@ -585,11 +547,7 @@ export async function createReviewAction(data: {
       user?.name ||
       "Customer";
 
-    // Insert the review into the real table. REG-39: new reviews land as
-    // PENDING moderation (is_approved=false). The PDP read path and the
-    // rating aggregates only count approved reviews, so nothing a customer
-    // writes is public until an admin approves it in
-    // Admin → Products → Reviews.
+    // Insert the review into the real table.
     const { data: review, error: insertError } = await adminClient
       .from("reviews")
       .insert({
@@ -600,7 +558,7 @@ export async function createReviewAction(data: {
         title: data.title || null,
         comment: reviewContent,
         images: data.images || [],
-        is_approved: false,
+        is_approved: true,
       })
       .select()
       .single();
@@ -610,8 +568,7 @@ export async function createReviewAction(data: {
     // Keep products.rating / review_count truthful (real aggregates).
     await ReviewRepository.recalculateProductRating(data.productId);
 
-    // Revalidate storefront paths (the pending review itself stays hidden
-    // until approval; this keeps the PDP's approved list/ratings fresh).
+    // Revalidate paths so reviews appear immediately
     const { data: prod } = await adminClient
       .from("products")
       .select("slug")
@@ -833,6 +790,7 @@ export async function voteReviewHelpfulAction(
 
     return { success: true, helpful_votes: nextVotes };
   } catch (error: any) {
+    console.error("Error in voteReviewHelpfulAction:", error);
     return { success: false, error: error.message };
   }
 }

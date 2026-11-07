@@ -39,6 +39,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, message: "Cache revalidated" });
   } catch (error) {
+    console.error("Webhook error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

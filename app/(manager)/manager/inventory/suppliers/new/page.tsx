@@ -62,8 +62,8 @@ export default function NewSupplierPage() {
       } else {
         toast.error(res.error || "Failed to create supplier");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Something went wrong creating supplier");
+    } catch (err: any) {
+      toast.error(err.message || "Something went wrong creating supplier");
     }
   }
 

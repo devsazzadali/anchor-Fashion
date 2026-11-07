@@ -72,8 +72,9 @@ export async function fetchTasksAction(status?: ManagerTask["status"]) {
   try {
     const data = await taskRepo.getTasks(status);
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message, data: [] };
+  } catch (error: any) {
+    console.error("fetchTasksAction error:", error);
+    return { success: false, error: error.message, data: [] };
   }
 }
 
@@ -97,7 +98,8 @@ export async function fetchStaffMembersAction() {
     }));
 
     return { success: true, data: staff };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("fetchStaffMembersAction error:", error);
     return { success: false, data: [] };
   }
 }
@@ -156,6 +158,7 @@ export async function createTaskAction(data: {
           });
         }
       } catch (emailErr) {
+        console.warn("[createTaskAction] Failed to send task email:", emailErr);
       }
     }
 
@@ -163,10 +166,12 @@ export async function createTaskAction(data: {
       revalidatePath("/admin/tasks");
       revalidatePath("/manager/tasks");
     } catch (e) {
+      console.warn("revalidatePath warning:", e);
     }
     return { success: true, data: task };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to create task" };
+  } catch (error: any) {
+    console.error("createTaskAction error:", error);
+    return { success: false, error: error.message || "Failed to create task" };
   }
 }
 
@@ -199,10 +204,12 @@ export async function updateTaskAction(
       revalidatePath("/admin/tasks");
       revalidatePath("/manager/tasks");
     } catch (e) {
+      console.warn("revalidatePath warning:", e);
     }
     return { success: true, data: task };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to update task" };
+  } catch (error: any) {
+    console.error("updateTaskAction error:", error);
+    return { success: false, error: error.message || "Failed to update task" };
   }
 }
 
@@ -215,9 +222,11 @@ export async function deleteTaskAction(id: string) {
       revalidatePath("/admin/tasks");
       revalidatePath("/manager/tasks");
     } catch (e) {
+      console.warn("revalidatePath warning:", e);
     }
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message || "Failed to delete task" };
+  } catch (error: any) {
+    console.error("deleteTaskAction error:", error);
+    return { success: false, error: error.message || "Failed to delete task" };
   }
 }

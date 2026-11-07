@@ -3,7 +3,6 @@ import { createDbClient, createAdminDbClient } from "@/lib/db/client";
 import { InvoiceToolbar } from "@/components/print/invoice-toolbar";
 import { InvoiceSheet, InvoiceData } from "@/components/print/invoice-sheet";
 import { getStoreInfo, getInvoiceInfo } from "@/lib/actions/settings.actions";
-import { dhakaDateParts, formatDhakaDate, formatDhakaTime } from "@/lib/utils/datetime";
 
 export default async function CustomerPrintInvoicePage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -48,7 +47,7 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   if (order.customer_id) {
     try {
       const { data: cProfile } = await adminDb
-        .from("profiles")
+        .from("customer_profiles")
         .select("first_name, last_name, email, phone")
         .eq("id", order.customer_id)
         .maybeSingle();
@@ -72,29 +71,46 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
     }
   }
 
-  // REG-85: Authorization — the order's owner, or staff whose role is
-  // resolved from the profiles table. This mirrors the account order-detail
-  // page exactly. The previous check trusted user_metadata/app_metadata
-  // role claims (self-declared — any signed-in user could claim "ADMIN")
-  // and treated an email-address match as ownership (anyone who registered
-  // with the email typed at guest checkout could pull the full invoice —
-  // name, phone and address — of an order that was never linked to them).
-  // Neither is proof of anything; both paths are removed.
+  // Authorization: Order owner, staff/management, or matching customer email can view invoice
   const isOwner =
-    order.customer_id === user.id || order.profile_id === user.id;
+    order.customer_id === user.id ||
+    order.profile_id === user.id ||
+    (order as any).profileId === user.id;
   if (!isOwner) {
-    const { data: profile } = await adminDb
-      .from("profiles")
-      .select("roles(name)")
-      .eq("id", user.id)
-      .maybeSingle();
-    const roleName = String(
-      Array.isArray(profile?.roles)
-        ? profile?.roles[0]?.name
-        : (profile?.roles as any)?.name || ""
-    ).toUpperCase();
-    const isStaff = ["SUPERADMIN", "ADMIN", "MANAGER", "STAFF", "SUPPORT"].includes(roleName);
-    if (!isStaff) {
+    let role = user.user_metadata?.role || user.app_metadata?.role;
+    if (!role) {
+      const { data: profile } = await adminDb
+        .from("profiles")
+        .select("roles(name)")
+        .eq("id", user.id)
+        .maybeSingle();
+      role = String(
+        Array.isArray(profile?.roles)
+          ? profile?.roles[0]?.name
+          : (profile?.roles as any)?.name || ""
+      );
+    }
+    const roleUpper = String(role || "").toUpperCase();
+    const isStaff = [
+      "SUPERADMIN",
+      "ADMIN",
+      "MANAGER",
+      "WAREHOUSE_MANAGER",
+      "MARKETING_MANAGER",
+      "FINANCE_MANAGER",
+      "STAFF",
+      "SUPPORT",
+    ].includes(roleUpper);
+
+    const isEmailOwner = Boolean(
+      user.email &&
+      (
+        (shippingAddress?.email && user.email.toLowerCase() === shippingAddress.email.toLowerCase()) ||
+        (customer?.email && user.email.toLowerCase() === customer.email.toLowerCase())
+      )
+    );
+
+    if (!isStaff && !isEmailOwner) {
       return notFound();
     }
   }
@@ -104,29 +120,12 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   try {
     const { data: shipments } = await adminDb
       .from("shipments")
-      .select("*")
+      .select("*, courier_providers(name, logo_url)")
       .eq("order_id", order.id)
       .neq("status", "cancelled")
       .order("created_at", { ascending: false })
       .limit(1);
     activeShipment = shipments?.[0] || null;
-    // REG-83: shipments has no courier_provider_id FK and courier_providers
-    // has no logo_url column, so the old embedded select could never
-    // attach. The provider is keyed by CODE (shipments.courier_provider_code)
-    // — resolve it with an explicit bound query and attach the same shape.
-    if (activeShipment?.courier_provider_code) {
-      const { data: provider } = await adminDb
-        .from("courier_providers")
-        .select("name")
-        .eq("code", activeShipment.courier_provider_code)
-        .maybeSingle();
-      if (provider) {
-        activeShipment = {
-          ...activeShipment,
-          courier_providers: { name: provider.name },
-        };
-      }
-    }
   } catch {
     // Non-critical, fallback to standard shipping
   }
@@ -138,11 +137,16 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
   const invoiceNumber = order.invoice_number || (order.order_number ? order.order_number.replace(/^ORD-/, "INV-") : "INV-ONLINE");
   const orderNumber = order.order_number || order.id?.slice(0, 8).toUpperCase() || "ORD-0000";
 
-  // S5-6: Asia/Dhaka rendering (see the admin invoice page).
   const orderDateObj = new Date(order.created_at || Date.now());
-  const { day, month, year } = dhakaDateParts(orderDateObj);
-  const orderDate = formatDhakaDate(orderDateObj);
-  const orderTime = formatDhakaTime(orderDateObj);
+  const day = String(orderDateObj.getDate()).padStart(2, "0");
+  const month = String(orderDateObj.getMonth() + 1).padStart(2, "0");
+  const year = orderDateObj.getFullYear();
+  const orderDate = `${day}-${month}-${year}`;
+
+  const hours = String(orderDateObj.getHours()).padStart(2, "0");
+  const minutes = String(orderDateObj.getMinutes()).padStart(2, "0");
+  const seconds = String(orderDateObj.getSeconds()).padStart(2, "0");
+  const orderTime = `${hours}:${minutes}:${seconds}`;
 
   const cleanNumericDigits = (order.id || "").replace(/\D/g, "").slice(0, 10);
   const barcodeValue = `${year.toString().slice(-2)}${month}${day}${cleanNumericDigits.padEnd(10, "0")}`;
@@ -250,11 +254,10 @@ export default async function CustomerPrintInvoicePage(props: { params: Promise<
 
   return (
     <div className="min-h-screen bg-slate-100 py-4 sm:py-8 print:py-0 print:bg-white text-slate-900 font-sans antialiased">
-      {/* Screen Toolbar — view-only for customers: no print/download */}
+      {/* Screen Toolbar & AutoPrint */}
       <InvoiceToolbar
         backUrl={`/account/orders/${order.id}`}
         backLabel="Back to Order Details"
-        allowPrint={false}
       />
 
       {/* Printable Sheet */}

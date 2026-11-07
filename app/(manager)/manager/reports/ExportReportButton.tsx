@@ -60,8 +60,8 @@ export function ExportReportButton({ kpis, topSellers, days = 30 }: ExportReport
       document.body.removeChild(link);
 
       toast.success("Business report exported successfully");
-    } catch (err) {
-      toast.error("Failed to export report: " + ((err as Error).message || "Unknown error"));
+    } catch (err: any) {
+      toast.error("Failed to export report: " + (err.message || "Unknown error"));
     }
   };
 

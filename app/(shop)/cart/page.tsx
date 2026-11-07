@@ -1,6 +1,5 @@
 import { Metadata } from "next";
 import { fetchCartAction } from "@/lib/actions/cart.actions";
-import { getFreeShippingThreshold } from "@/lib/actions/settings.actions";
 import { CartClient } from "@/components/cart/cart-client";
 
 export const dynamic = "force-dynamic";
@@ -11,15 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CartPage() {
-  const [{ cart, success }, freeShippingThreshold] = await Promise.all([
-    fetchCartAction(),
-    getFreeShippingThreshold().catch(() => 0),
-  ]);
+  const { cart, success } = await fetchCartAction();
 
-  return (
-    <CartClient
-      initialCart={success && cart ? cart : null}
-      freeShippingThreshold={freeShippingThreshold}
-    />
-  );
+  return <CartClient initialCart={success && cart ? cart : null} />;
 }

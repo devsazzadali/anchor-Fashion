@@ -16,7 +16,7 @@ export default async function CategoriesPage() {
 
   // Include all active valid categories
   const validCategories = dbCategories.filter(
-    (c) => c && c.id && c.is_active !== false
+    (c: any) => c && c.id && c.is_active !== false
   );
 
   return (

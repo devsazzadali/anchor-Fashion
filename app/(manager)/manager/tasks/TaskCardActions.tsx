@@ -52,8 +52,8 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
       } else {
         toast.error(res.error || "Failed to update task");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setLoading(false);
     }
@@ -70,8 +70,8 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
       } else {
         toast.error(res.error || "Failed to delete task");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setLoading(false);
     }

@@ -180,17 +180,12 @@ export default async function CheckoutSuccessPage({
 
         {claimPhone !== null && (
           <div className="mx-auto mb-8 max-w-md rounded-lg border border-[#C9A86A]/50 bg-amber-50/70 p-5 text-center">
-            {/* FIX ROUND 29 (D11): this box was Bengali-only on an
-                English storefront page (the button below it was already
-                English). The storefront has no locale switcher — its
-                pages are authored in English — so the box now matches
-                the page language. */}
             <p className="mb-1 text-base font-semibold text-slate-900">
-              Set a password to make this account yours
+              Password সেট করে অ্যাকাউন্টটি নিজের করুন
             </p>
             <p className="mb-4 text-sm text-slate-600">
-              This order was saved under your mobile number. Set a password
-              and you can see all your orders in your account.
+              এই অর্ডারটি আপনার মোবাইল নম্বরে সেভ হয়েছে। Password সেট করলেই
+              সব অর্ডার আপনার অ্যাকাউন্টে দেখতে পাবেন।
             </p>
             <Button asChild className="bg-[#C9A86A] hover:bg-[#b09156] text-white">
               <Link

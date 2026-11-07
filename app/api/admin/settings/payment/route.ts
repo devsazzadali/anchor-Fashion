@@ -15,10 +15,10 @@ export async function POST(req: Request) {
     // could ever pass, so saving payment settings always failed with 403.
     try {
       await verifyAdmin();
-    } catch (authErr) {
-      const status = (authErr as Error)?.message === "Unauthorized" ? 401 : 403;
+    } catch (authErr: any) {
+      const status = authErr?.message === "Unauthorized" ? 401 : 403;
       return NextResponse.json(
-        { success: false, error: (authErr as Error)?.message || "Forbidden" },
+        { success: false, error: authErr?.message || "Forbidden" },
         { status }
       );
     }
@@ -80,6 +80,7 @@ export async function POST(req: Request) {
           const { encrypt } = await import("@/utils/encryption.util");
           resolvedPass = encrypt(pass);
         } catch (encErr) {
+          console.warn("[Admin Payment Settings] Encryption failed, storing as-is:", encErr);
         }
       }
 
@@ -103,9 +104,10 @@ export async function POST(req: Request) {
 
     if (error) throw error;
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[Admin Settings API] Error:", error);
     return NextResponse.json(
-      { success: false, error: (error as Error).message },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }

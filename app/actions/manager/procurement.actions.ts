@@ -15,8 +15,9 @@ export async function getSuppliersAction() {
   try {
     const data = await procurementRepo.getSuppliers();
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("getSuppliersAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -26,8 +27,9 @@ export async function getWarehousesAction() {
   try {
     const data = await procurementRepo.getWarehouses();
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("getWarehousesAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -37,8 +39,9 @@ export async function getSupplierByIdAction(id: string) {
   try {
     const data = await procurementRepo.getSupplierById(id);
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("getSupplierByIdAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -49,8 +52,9 @@ export async function createSupplierAction(supplier: Omit<Supplier, "id" | "crea
     const data = await procurementRepo.createSupplier(supplier);
     revalidatePath("/manager/inventory/suppliers");
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("createSupplierAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -62,8 +66,9 @@ export async function updateSupplierAction(id: string, updates: Partial<Supplier
     revalidatePath("/manager/inventory/suppliers");
     revalidatePath(`/manager/inventory/suppliers/${id}`);
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("updateSupplierAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -75,8 +80,9 @@ export async function getPurchaseOrdersAction() {
   try {
     const data = await procurementRepo.getPurchaseOrders();
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("getPurchaseOrdersAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -86,8 +92,9 @@ export async function getPurchaseOrderByIdAction(id: string) {
   try {
     const data = await procurementRepo.getPurchaseOrderById(id);
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("getPurchaseOrderByIdAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -101,8 +108,9 @@ export async function createPurchaseOrderAction(
     const data = await procurementRepo.createPurchaseOrder(poData, items);
     revalidatePath("/manager/inventory/purchase-orders");
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("createPurchaseOrderAction error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -114,7 +122,8 @@ export async function updatePurchaseOrderStatusAction(id: string, status: string
     revalidatePath("/manager/inventory/purchase-orders");
     revalidatePath(`/manager/inventory/purchase-orders/${id}`);
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error("updatePurchaseOrderStatusAction error:", error);
+    return { success: false, error: error.message };
   }
 }

@@ -62,7 +62,7 @@ export default async function InventoryMovementsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                movements.map((movement) => (
+                movements.map((movement: any) => (
                   <TableRow key={movement.id}>
                     <TableCell className="text-sm whitespace-nowrap">
                       {format(new Date(movement.created_at), "MMM d, yyyy HH:mm")}

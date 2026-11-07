@@ -48,6 +48,7 @@ export default async function AccountOverviewPage() {
       include: { role: true },
     });
   } catch (err) {
+    console.error("[Account Overview] Profile lookup error:", err);
   }
 
   const role = profile?.role?.name || (user as any).role || "CUSTOMER";
@@ -102,6 +103,7 @@ export default async function AccountOverviewPage() {
       }));
 
     } catch (err) {
+      console.error("[Account Overview] Orders lookup error:", err);
     }
   }
 
@@ -115,6 +117,7 @@ export default async function AccountOverviewPage() {
       });
       savedItemsCount = wishlist?._count?.items || 0;
     } catch (err) {
+      console.error("[Account Overview] Wishlist lookup error:", err);
     }
   }
 

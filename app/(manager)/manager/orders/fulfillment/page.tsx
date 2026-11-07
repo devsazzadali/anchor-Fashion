@@ -60,7 +60,7 @@ export default async function FulfillmentBoardPage() {
                       <div className="text-sm text-muted-foreground flex items-center gap-1">
                         <Package className="h-4 w-4" />
                         {/* @ts-ignore */}
-                        {order.items?.reduce((acc: number, curr) => acc + curr.quantity, 0) || 0} items
+                        {order.items?.reduce((acc: number, curr: any) => acc + curr.quantity, 0) || 0} items
                       </div>
                       <div className="pt-2 border-t flex items-center justify-between text-xs text-muted-foreground">
                         <span>{order.created_at ? format(new Date(order.created_at), "MMM d, HH:mm") : "-"}</span>

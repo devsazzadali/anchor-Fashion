@@ -27,23 +27,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
-import { getSiteUrl } from "@/lib/site-url";
-
-// FIX2 (OBS-6): canonical base via lib/site-url (was hardcoded .com).
-const siteUrl = getSiteUrl();
 
 export const metadata = {
   title: "All Products | Anchor Fashion",
   description:
     "Explore our full collection of premium apparel, formal wear, casual luxury, and accessories at Anchor Fashion.",
   alternates: {
-    canonical: `${siteUrl}/products`,
+    canonical: "https://anchorfashion.com/products",
   },
   openGraph: {
     title: "All Products | Anchor Fashion",
     description:
       "Explore our full collection of premium apparel, formal wear, casual luxury, and accessories at Anchor Fashion.",
-    url: `${siteUrl}/products`,
+    url: "https://anchorfashion.com/products",
     siteName: "Anchor Fashion",
     images: [{ url: "/og-image.jpg", width: 1200, height: 630 }],
     type: "website",
@@ -79,17 +75,6 @@ export default async function ProductsPage({
     typeof params.maxPrice === "string" && !isNaN(Number(params.maxPrice))
       ? Number(params.maxPrice)
       : undefined;
-  // Size / colour facets travel as comma-separated URL params so several
-  // values can be active at once.
-  const parseFacet = (v: string | string[] | undefined): string[] =>
-    typeof v === "string"
-      ? v
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [];
-  const selectedSizes = parseFacet(params.size);
-  const selectedColors = parseFacet(params.color);
 
   let sortBy: ProductListParams["sortBy"] = "newest";
   if (sort === "price_asc" || sort === "price_desc" || sort === "rating") {
@@ -104,11 +89,9 @@ export default async function ProductsPage({
   if (sort) safeParams.sort = sort;
   if (minPrice !== undefined) safeParams.minPrice = String(minPrice);
   if (maxPrice !== undefined) safeParams.maxPrice = String(maxPrice);
-  if (selectedSizes.length) safeParams.size = selectedSizes.join(",");
-  if (selectedColors.length) safeParams.color = selectedColors.join(",");
 
   // Fetch catalog data in parallel
-  const [prodResult, rawCategories, rawBrands, facets] =
+  const [prodResult, rawCategories, rawBrands] =
     await Promise.all([
       CatalogService.getProducts({
         category,
@@ -118,12 +101,9 @@ export default async function ProductsPage({
         search,
         sortBy,
         limit: 50,
-        sizes: selectedSizes.length ? selectedSizes : undefined,
-        colors: selectedColors.length ? selectedColors : undefined,
       }),
       CatalogService.getCategories(),
       CatalogService.getBrands(),
-      CatalogService.getFilterFacets(),
     ]);
 
   const products = prodResult?.data || [];
@@ -131,7 +111,7 @@ export default async function ProductsPage({
 
   // Clean real categories and brands (remove placeholder/QA records)
   const filteredCategories: any[] = ((rawCategories as any[]) || []).filter(
-    (c) =>
+    (c: any) =>
       c.slug !== "jhkjhkj" &&
       !c.slug?.startsWith("qa-") &&
       !c.slug?.startsWith("test-dummy")
@@ -142,21 +122,19 @@ export default async function ProductsPage({
       : (rawCategories as any[] ?? []);
 
   const filteredBrands: any[] = ((rawBrands as any[]) || []).filter(
-    (b) => b.slug !== "jhkjhkj" && !b.slug?.startsWith("qa-")
+    (b: any) => b.slug !== "jhkjhkj" && !b.slug?.startsWith("qa-")
   );
   const brands: any[] =
     filteredBrands.length > 0 ? filteredBrands : (rawBrands as any[] ?? []);
 
-  const currentCategoryObj = categories.find((c) => c.slug === category);
-  const currentBrandObj = brands.find((b) => b.slug === brand);
+  const currentCategoryObj = categories.find((c: any) => c.slug === category);
+  const currentBrandObj = brands.find((b: any) => b.slug === brand);
 
   const activeFilterCount = [
     category,
     brand,
     minPrice !== undefined || maxPrice !== undefined,
     search,
-    selectedSizes.length > 0,
-    selectedColors.length > 0,
   ].filter(Boolean).length;
 
   const pageTitle = search
@@ -180,13 +158,13 @@ export default async function ProductsPage({
         "@type": "ListItem",
         position: 1,
         name: "Home",
-        item: siteUrl,
+        item: "https://anchorfashion.com",
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "Products",
-        item: `${siteUrl}/products`,
+        item: "https://anchorfashion.com/products",
       },
       ...(category
         ? [
@@ -194,7 +172,7 @@ export default async function ProductsPage({
               "@type": "ListItem",
               position: 3,
               name: currentCategoryObj?.name || category,
-              item: `${siteUrl}/products?category=${category}`,
+              item: `https://anchorfashion.com/products?category=${category}`,
             },
           ]
         : []),
@@ -295,8 +273,6 @@ export default async function ProductsPage({
                 <ProductFilters
                   categories={categories}
                   brands={brands}
-                  sizes={facets.sizes}
-                  colors={facets.colors}
                   productCount={products.length}
                 />
               </div>
@@ -364,7 +340,7 @@ export default async function ProductsPage({
         >
           All
         </Link>
-        {categories.slice(0, 10).map((cat) => {
+        {categories.slice(0, 10).map((cat: any) => {
           const isSelected = category === cat.slug;
           return (
             <Link
@@ -461,44 +437,6 @@ export default async function ProductsPage({
             </span>
           )}
 
-          {selectedSizes.map((s) => (
-            <span
-              key={`size-${s}`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-800 shadow-sm"
-            >
-              <span>Size: {s}</span>
-              <Link
-                href={`/products?${new URLSearchParams({
-                  ...safeParams,
-                  size: selectedSizes.filter((x) => x !== s).join(","),
-                }).toString()}`}
-                className="hover:text-red-600"
-                aria-label={`Remove size ${s}`}
-              >
-                <X className="h-3 w-3" />
-              </Link>
-            </span>
-          ))}
-
-          {selectedColors.map((c) => (
-            <span
-              key={`color-${c}`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-800 shadow-sm"
-            >
-              <span>Colour: {c}</span>
-              <Link
-                href={`/products?${new URLSearchParams({
-                  ...safeParams,
-                  color: selectedColors.filter((x) => x !== c).join(","),
-                }).toString()}`}
-                className="hover:text-red-600"
-                aria-label={`Remove colour ${c}`}
-              >
-                <X className="h-3 w-3" />
-              </Link>
-            </span>
-          ))}
-
           <Link
             href="/products"
             className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-[#C9A86A] hover:text-black transition-colors"
@@ -526,8 +464,6 @@ export default async function ProductsPage({
               <ProductFilters
                 categories={categories}
                 brands={brands}
-                sizes={facets.sizes}
-                colors={facets.colors}
                 productCount={products.length}
               />
             </Suspense>

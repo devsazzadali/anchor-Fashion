@@ -109,19 +109,7 @@ export default async function ProductsPage({
                   </TableCell>
                   <TableCell>{formatCurrency((product as any).base_price || 0)}</TableCell>
                   <TableCell>
-                    {/* FIX ROUND 29 (D6): was the static word "Tracked" —
-                        mapToAdminProduct already returns the real total
-                        (stockQuantity = Σ quantity_available across all
-                        variants/warehouses); show it. */}
-                    <span
-                      className={`text-sm font-medium ${
-                        ((product as any).stockQuantity ?? 0) <= 0
-                          ? "text-destructive"
-                          : "text-foreground"
-                      }`}
-                    >
-                      {((product as any).stockQuantity ?? 0).toLocaleString()}
-                    </span>
+                    <span className="text-sm text-muted-foreground">Tracked</span>
                   </TableCell>
                   <TableCell>
                     <Badge

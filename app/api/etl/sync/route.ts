@@ -25,12 +25,18 @@ export async function POST(request: Request) {
     // 2. Perform the ETL materialization
     // In a real scenario, this would trigger a complex dbt transformation or complex database function.
     // Here we simulate the pipeline routing based on sync type.
+    console.warn(
+      `[ETL] Starting sync for type: ${syncType} on dateKey: ${dateKey}`
+    );
 
     if (syncType === "sales") {
+      console.warn(`[ETL] Synchronized sales facts for ${dateKey}`);
     } else if (syncType === "inventory") {
       // Simulate loading inventory movements
+      console.warn(`[ETL] Synchronized inventory facts for ${dateKey}`);
     } else if (syncType === "marketing") {
       // Simulate loading marketing conversions
+      console.warn(`[ETL] Synchronized marketing conversions for ${dateKey}`);
     } else {
       return NextResponse.json(
         { error: `Unknown sync type: ${syncType}` },
@@ -43,11 +49,12 @@ export async function POST(request: Request) {
       message: `Successfully synchronized ${syncType} data for date ${dateKey}`,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[ETL Sync Error]:", error);
     return NextResponse.json(
       {
         error: "Internal server error during ETL synchronization",
-        details: (error as Error).message,
+        details: error.message,
       },
       { status: 500 }
     );

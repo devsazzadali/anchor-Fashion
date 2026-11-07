@@ -50,7 +50,7 @@ export async function updateCustomerByAdminAction(
 
     // 2. Check for duplicate email across other customer profiles
     const { data: existingEmail } = await db
-      .from("profiles")
+      .from("customer_profiles")
       .select("id, email")
       .ilike("email", cleanEmail)
       .neq("id", cleanId)
@@ -66,7 +66,7 @@ export async function updateCustomerByAdminAction(
     // 3. Check for duplicate phone across other customer profiles if phone provided
     if (cleanPhone) {
       const { data: existingPhone } = await db
-        .from("profiles")
+        .from("customer_profiles")
         .select("id, phone")
         .eq("phone", cleanPhone)
         .neq("id", cleanId)
@@ -108,11 +108,12 @@ export async function updateCustomerByAdminAction(
       authUpdates
     );
     if (authErr) {
+      console.warn("[updateCustomerByAdminAction] Auth update warning:", authErr.message);
     }
 
     // 5. Update customer_profiles table
     const { error: custErr } = await db
-      .from("profiles")
+      .from("customer_profiles")
       .update({
         first_name: cleanFirstName,
         last_name: cleanLastName,
@@ -141,18 +142,27 @@ export async function updateCustomerByAdminAction(
       // non-fatal if profiles table row does not exist
     }
 
-    // 7. CRM customer metadata (lifecycleStage, isVip)
+    // 7. Update or upsert CRM customer metadata (lifecycleStage, isVip)
     if (data.lifecycleStage || data.isVip !== undefined) {
-      // FIX ROUND 28 (M-2, PROPOSAL): the crm_customers table does NOT
-      // exist in this schema — the upsert that stood here was silently
-      // discarded, so lifecycle/VIP edits never persisted while the UI
-      // reported success. The table is specified in the Round-28 DDL
-      // proposal; until it lands, fail honestly.
-      return {
-        success: false,
-        error:
-          "CRM metadata (lifecycle stage / VIP) cannot be saved yet — the crm_customers table is pending a schema update. Profile details were saved.",
+      const crmPayload: {
+        profile_id: string;
+        customer_lifecycle_stage?: string;
+        is_vip?: boolean;
+        last_interaction_at: string;
+      } = {
+        profile_id: cleanId,
+        last_interaction_at: new Date().toISOString(),
       };
+      if (data.lifecycleStage) {
+        crmPayload.customer_lifecycle_stage = data.lifecycleStage;
+      }
+      if (data.isVip !== undefined) {
+        crmPayload.is_vip = data.isVip;
+      }
+
+      await db
+        .from("crm_customers")
+        .upsert(crmPayload, { onConflict: "profile_id" });
     }
 
     // 8. Revalidate all related CRM paths
@@ -161,10 +171,11 @@ export async function updateCustomerByAdminAction(
     revalidatePath("/manager/customers");
 
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[updateCustomerByAdminAction] Error:", error);
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to update customer details.",
+      error: error?.message || "Failed to update customer details.",
     };
   }
 }
@@ -194,16 +205,14 @@ export async function deleteCustomerByAdminAction(
     await Promise.allSettled([
       db.from("support_tickets").delete().eq("customer_id", cleanId),
       db.from("customer_addresses").delete().eq("customer_id", cleanId),
-      // FIX ROUND 28 (sweep): no customer_notifications delete — that
-      // table does not exist in this schema.
+      db.from("customer_notifications").delete().eq("customer_id", cleanId),
       db.from("loyalty_accounts").delete().eq("customer_id", cleanId),
-      // FIX ROUND 28 (M-2): no crm_customers delete — that table does
-      // not exist in this schema (see the Round-28 DDL proposal).
+      db.from("crm_customers").delete().eq("profile_id", cleanId),
     ]);
 
     // 3. Delete customer profile
     const { error: profileErr } = await db
-      .from("profiles")
+      .from("customer_profiles")
       .delete()
       .eq("id", cleanId);
 
@@ -229,6 +238,7 @@ export async function deleteCustomerByAdminAction(
     // 5. Delete user from Neon Auth
     const { error: authErr } = await db.auth.admin.deleteUser(cleanId);
     if (authErr) {
+      console.warn("[deleteCustomerByAdminAction] Auth delete warning:", authErr.message);
     }
 
     // 6. Revalidate routes
@@ -236,58 +246,11 @@ export async function deleteCustomerByAdminAction(
     revalidatePath("/manager/customers");
 
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[deleteCustomerByAdminAction] Error:", error);
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to delete customer.",
-    };
-  }
-}
-
-/**
- * S6-4(c): admin wallet adjustment for the customer detail page.
- * Signed amount (positive = credit, negative = debit) + a REQUIRED
- * reason; writes through WalletService.adjustBalance, which records a
- * wallet_transactions audit row (reference_type ADMIN_ADJUSTMENT,
- * reason + admin identity in the description).
- */
-export async function adjustCustomerWalletAction(data: {
-  customerId: string;
-  amount: number;
-  reason: string;
-}): Promise<{ success: boolean; balance?: number; error?: string }> {
-  try {
-    const admin = await verifyAdmin();
-
-    const cleanId = data.customerId?.trim();
-    const cleanReason = data.reason?.trim();
-    const amount = Number(data.amount);
-
-    if (!cleanId) {
-      return { success: false, error: "Customer ID is required." };
-    }
-    if (!cleanReason) {
-      return { success: false, error: "A reason is required for wallet adjustments." };
-    }
-    if (!amount || !Number.isFinite(amount)) {
-      return { success: false, error: "Enter a non-zero adjustment amount." };
-    }
-
-    const { WalletService } = await import("@/services/wallet.service");
-    const adminMarker = admin?.email || admin?.id || "admin";
-    const { wallet } = await WalletService.adjustBalance({
-      userId: cleanId,
-      signedAmount: amount,
-      reason: cleanReason,
-      adminMarker,
-    });
-
-    revalidatePath(`/admin/customers/${cleanId}`);
-    return { success: true, balance: Number(wallet.balance) };
-  } catch (error) {
-    return {
-      success: false,
-      error: (error as Error)?.message || "Failed to adjust wallet.",
+      error: error?.message || "Failed to delete customer.",
     };
   }
 }
@@ -306,10 +269,11 @@ export async function getCustomerPasswordAction(
 
     const password = (data.user?.user_metadata as any)?.assigned_password || null;
     return { success: true, password };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[getCustomerPasswordAction] Error:", error);
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to retrieve customer password.",
+      error: error?.message || "Failed to retrieve customer password.",
     };
   }
 }

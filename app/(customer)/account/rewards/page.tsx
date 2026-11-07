@@ -28,6 +28,7 @@ export default function RewardsPage() {
         setRewards(catalogRes.data || []);
       }
     } catch (err) {
+      console.error(err);
       toast.error("Failed to load rewards data.");
     } finally {
       setLoading(false);
@@ -53,8 +54,8 @@ export default function RewardsPage() {
       } else {
         toast.error(res.error || "Failed to redeem reward");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to redeem reward");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to redeem reward");
     }
   };
 

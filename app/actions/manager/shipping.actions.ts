@@ -12,8 +12,8 @@ export async function getCouriersAction() {
   try {
     const data = await shippingRepo.getCouriers();
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -24,8 +24,8 @@ export async function updateCourierStatusAction(id: string, is_active: boolean) 
     await shippingRepo.updateCourierStatus(id, is_active);
     revalidatePath("/admin/shipping/couriers");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -35,7 +35,7 @@ export async function getZonesAction() {
   try {
     const data = await shippingRepo.getZones();
     return { success: true, data };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }

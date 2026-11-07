@@ -2,15 +2,13 @@ import { NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { CourierFactory } from "@/lib/couriers/courier.factory";
 import { CourierError } from "@/lib/couriers/errors";
-import { verifyManager } from "@/lib/security/roles";
+import { verifyStaff } from "@/lib/security/roles";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    // REG-72: creating a shipment commits stock to a courier — requires a
-    // manager-level role, not any staff account.
-    const user = await verifyManager();
+    const user = await verifyStaff();
 
     const body = await req.json();
     const { orderId, courierId, weight = 0.5, note } = body;
@@ -139,17 +137,13 @@ export async function POST(req: Request) {
       throw new Error(`Failed to persist shipment in database: ${insertError.message}`);
     }
 
-    // 8. Create initial tracking event.
-    // FIX ROUND 28 (sweep, B-1 class): shipment_tracking_events real
-    // columns are (shipment_id, status, timestamp, location, notes) —
-    // tracking_number / status_description / provider_raw do not
-    // exist and were silently dropped, leaving a bare status row.
+    // 8. Create initial tracking event
     await adminDb.from("shipment_tracking_events").insert({
       shipment_id: newShipment.id,
+      tracking_number: shipmentResult.trackingCode,
       status: "created",
-      timestamp: new Date().toISOString(),
-      location: null,
-      notes: "Consignment created with courier partner",
+      status_description: "Consignment created with courier partner",
+      provider_raw: (shipmentResult.rawResponse as any) || {},
     });
 
     // 9. Update order status if OMS requires it
@@ -167,27 +161,14 @@ export async function POST(req: Request) {
         trackingCode: shipmentResult.trackingCode,
       },
     });
-  } catch (err) {
-    // REG-72: auth failures from the manager gate are 401/403, not 500 —
-    // the same mapping the sibling tracking route gets from authErrorResponse.
-    const authStatus =
-      typeof (err as Error)?.message === "string" && (err as Error).message.startsWith("Unauthorized")
-        ? 401
-        : typeof (err as Error)?.message === "string" && (err as Error).message.includes("Forbidden")
-          ? 403
-          : null;
-    if (authStatus) {
-      return NextResponse.json(
-        { success: false, error: { code: "FORBIDDEN", message: (err as Error).message } },
-        { status: authStatus }
-      );
-    }
+  } catch (err: any) {
+    console.error("[CreateShipment API Error]:", err);
     return NextResponse.json(
       {
         success: false,
         error: {
           code: err instanceof CourierError ? err.name : "SHIPMENT_CREATION_FAILED",
-          message: (err as Error).message || "Failed to create shipment",
+          message: err.message || "Failed to create shipment",
         },
       },
       { status: 500 }
