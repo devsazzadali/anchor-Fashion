@@ -59,8 +59,6 @@ export interface WishlistItem {
     slug: string;
     price: number;
     sale_price?: number | null;
-    /** Per-product VAT % — VAT is charged on top of the selling price. */
-    vat_percent?: number;
     main_image_url?: string | null;
     stock_quantity: number;
   };
@@ -131,8 +129,6 @@ export interface Order {
   coupon_id?: string | null;
   /** Coupon code applied to this order (orders.coupon_code column). */
   coupon_code?: string | null;
-  /** Public view-only invoice token (orders.invoice_token column). */
-  invoice_token?: string | null;
   payment_method: string;
   payment_status?: string | null;
   payment_intent_id?: string | null;

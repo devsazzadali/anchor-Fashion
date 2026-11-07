@@ -67,14 +67,14 @@ export class StripeProvider implements PaymentProvider {
           message: data.error?.message || "Failed to initiate Stripe payment",
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         providerId: this.id,
         timestamp: new Date().toISOString(),
         error: {
           code: "EXCEPTION",
-          message: (error as Error).message,
+          message: error.message,
         },
       };
     }
@@ -120,23 +120,23 @@ export class StripeProvider implements PaymentProvider {
           message: "Payment not successful",
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         providerId: this.id,
         timestamp: new Date().toISOString(),
         error: {
           code: "EXCEPTION",
-          message: (error as Error).message,
+          message: error.message,
         },
       };
     }
   }
 
   async processWebhook(
-    payload: unknown,
+    payload: any,
     signature: string
-  ): Promise<IntegrationResponse<unknown>> {
+  ): Promise<IntegrationResponse<any>> {
     // Requires stripe signature verification using the endpoint secret
     return {
       success: true,

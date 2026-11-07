@@ -59,6 +59,9 @@ export abstract class BasePaymentProvider implements IPaymentProviderService {
   ): boolean {
     // Default implementation returns true.
     // Must be overridden by providers that support signature validation.
+    console.warn(
+      `[${this.providerCode}] validateWebhookSignature not explicitly implemented.`
+    );
     return true;
   }
 

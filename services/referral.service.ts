@@ -101,11 +101,13 @@ export class ReferralService {
   static async attributeReferral(referralCodeStr: string, referredCustomerId: string): Promise<void> {
     const referralCode = await this.getCodeByString(referralCodeStr);
     if (!referralCode) {
+      console.warn(`Referral code not found or inactive: ${referralCodeStr}`);
       return;
     }
 
     // Prevent self-referral
     if (referralCode.customer_id === referredCustomerId) {
+      console.warn(`Self-referral attempted by customer: ${referredCustomerId}`);
       return;
     }
 
@@ -115,6 +117,7 @@ export class ReferralService {
     });
 
     if (existing) {
+      console.warn(`Customer ${referredCustomerId} is already attributed to a referrer.`);
       return;
     }
 
@@ -128,7 +131,8 @@ export class ReferralService {
           status: "PENDING",
         },
       });
-    } catch (err) {
+    } catch (err: any) {
+      console.error(`Failed to attribute referral: ${err.message}`);
     }
   }
 
@@ -174,6 +178,7 @@ export class ReferralService {
         referenceId: attribution.id,
       });
     } catch (err) {
+      console.error(`Error rewarding points for referral ${attribution.id}:`, err);
     }
   }
 
@@ -227,6 +232,7 @@ export class ReferralService {
         );
       }
     } catch (err) {
+      console.error("Failed to reverse referral points:", err);
     }
   }
 

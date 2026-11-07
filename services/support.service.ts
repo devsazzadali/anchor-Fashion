@@ -71,7 +71,7 @@ export class SupportService {
     data: unknown
   ): Promise<TicketMessage> {
     const validData = createTicketMessageSchema.parse({
-      ...(data as Record<string, unknown>),
+      ...(data as any),
       ticket_id: ticketId,
     });
 

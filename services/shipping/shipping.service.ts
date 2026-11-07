@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { CourierGatewayService } from "@/services/courier/courier-gateway.service";
-import { CourierRegistry } from "@/services/courier/courier-registry";
 import { ShipmentRepository } from "@/repositories/shipment.repository";
 import { DeliveryZoneRepository } from "@/repositories/delivery-zone.repository";
 import {
@@ -92,33 +91,16 @@ export class ShippingService {
 
   /**
    * Update shipment metadata (not status transitions — use assignCourier / cancel)
-   *
-   * FIX ROUND 23: the payload is translated to the shipments table's REAL
-   * columns. The fluent DB builder silently discards an entire update when
-   * any key is unknown (lib/db/query.ts: `keys.some((k) => !fields[k])` →
-   * gracefulEmpty), and this method previously spread the camelCase input
-   * plus a phantom `updated_by` — so every metadata update was a no-op
-   * that reported success. `consignmentId` / `failureReason` have no
-   * column on shipments and are dropped here rather than poisoning the
-   * write; `estimatedDeliveryDate` maps to the real `estimated_delivery`.
    */
   async updateShipment(
     id: string,
     input: UpdateShipmentInput,
     updatedBy?: string
   ): Promise<Shipment> {
-    void updatedBy; // shipments has no updated_by column — audit goes via events
-    const payload: Record<string, any> = {};
-    if (input.courierProviderCode !== undefined)
-      payload.courier_provider_code = input.courierProviderCode;
-    if (input.status !== undefined) payload.status = input.status;
-    if (input.trackingNumber !== undefined)
-      payload.tracking_number = input.trackingNumber;
-    if (input.estimatedDeliveryDate !== undefined)
-      payload.estimated_delivery = input.estimatedDeliveryDate;
-    if (input.specialInstructions !== undefined)
-      payload.special_instructions = input.specialInstructions;
-    return this.shipmentRepo.updateShipment(id, payload);
+    return this.shipmentRepo.updateShipment(id, {
+      ...input,
+      updated_by: updatedBy ?? null,
+    });
   }
 
   /**
@@ -135,11 +117,9 @@ export class ShippingService {
 
     if (shipment.status === status) return shipment;
 
-    // FIX ROUND 23: real columns only — the previous payload carried the
-    // phantom `updated_by`, so the builder discarded the whole update and
-    // status changes made here never persisted.
     const updated = await this.shipmentRepo.updateShipment(shipmentId, {
       status,
+      updated_by: updatedBy ?? null,
     });
 
     await this.shipmentRepo.addEvent(
@@ -169,30 +149,12 @@ export class ShippingService {
             item.quantity
           );
         } catch (err) {
+          console.error(`Failed to reduce stock for variant ${item.sku}`, err);
         }
       }
     }
 
     return updated;
-  }
-
-  /**
-   * FIX ROUND 25: a courier code is assignable only when CourierRegistry
-   * has it registered — i.e. an ACTIVE courier_providers row exists for
-   * it (the registry's Phase-8 rule; the sandbox test provider included:
-   * it registers only when an operator has added it under Shipping →
-   * Couriers). Throws an operator-facing message instead of letting the
-   * registry's raw internal error surface after a partial write.
-   */
-  private async assertProviderAssignable(
-    courierCode: CourierProviderCode
-  ): Promise<void> {
-    const registered = await CourierRegistry.getInstance().has(courierCode);
-    if (!registered) {
-      throw new Error(
-        `Courier "${courierCode}" is not registered or is inactive. Add it under Shipping → Couriers first. No changes were made.`
-      );
-    }
   }
 
   /**
@@ -215,20 +177,10 @@ export class ShippingService {
       );
     }
 
-    // FIX ROUND 25: refuse unregistered/inactive couriers BEFORE any
-    // write. Previously the assignment persisted and the failure only
-    // surfaced afterwards as the registry's raw "[CourierRegistry]
-    // Provider '…' is not registered or inactive." throw from inside
-    // the provider submission — an operator-facing dead end (the
-    // shipment page offered every provider TYPE, registered or not).
-    await this.assertProviderAssignable(courierCode);
-
-    // Update courier assignment (real columns only — FIX ROUND 23: the
-    // phantom `updated_by` key made the builder discard this write, so
-    // the assignment never persisted and submitToProvider then received
-    // a null row and threw on `courier_provider_code`).
+    // Update courier assignment
     const updated = await this.shipmentRepo.updateShipment(shipmentId, {
       courier_provider_code: courierCode,
+      updated_by: updatedBy ?? null,
     });
 
     await this.shipmentRepo.addEvent(
@@ -256,10 +208,6 @@ export class ShippingService {
     const shipment = await this.shipmentRepo.getShipmentById(shipmentId);
     if (!shipment) throw new Error(`Shipment ${shipmentId} not found`);
 
-    // FIX ROUND 25: same registration guard as assignCourier — refuse
-    // before cancelling the existing consignment or writing anything.
-    await this.assertProviderAssignable(newCourierCode);
-
     // Cancel with previous provider if possible
     if (shipment.courier_provider_code && shipment.consignment_id) {
       try {
@@ -268,16 +216,19 @@ export class ShippingService {
           shipment.consignment_id
         );
       } catch (err) {
+        console.warn(
+          `[ShippingService] Could not cancel with previous provider: ${err}`
+        );
       }
     }
 
-    // Clear old consignment data & assign new (real columns only —
-    // FIX ROUND 23: `consignment_id` is not a shipments column; keeping
-    // it in the payload made the builder discard the whole update).
+    // Clear old consignment data & assign new
     await this.shipmentRepo.updateShipment(shipmentId, {
       courier_provider_code: newCourierCode,
+      consignment_id: null,
       tracking_number: null,
       status: "created",
+      updated_by: updatedBy ?? null,
     });
 
     await this.shipmentRepo.addEvent(
@@ -326,16 +277,12 @@ export class ShippingService {
     );
 
     if (result.success && result.data) {
-      // FIX ROUND 23: persist only real columns. The previous payload
-      // carried `consignment_id`, `label_url` and `updated_by` — none of
-      // them are shipments columns, so the builder silently discarded
-      // the ENTIRE write and a successful booking never saved its
-      // tracking number. The provider consignment id has no storage
-      // column in this schema; tracking runs on the tracking code
-      // (Steadfast status_by_trackingcode), which is what persists here.
       return this.shipmentRepo.updateShipment(shipment.id, {
+        consignment_id: result.data.consignmentId,
         tracking_number: result.data.trackingCode,
+        label_url: result.data.labelUrl ?? null,
         status: "pickup_requested",
+        updated_by: submittedBy ?? null,
       });
     }
 
@@ -345,22 +292,27 @@ export class ShippingService {
     // that never happened. Record the failure on the shipment timeline,
     // keep the shipment as a 'created' draft, and surface the provider's
     // message to the operator.
+    console.error(`[ShippingService] Provider submit failed:`, result.error);
     try {
       await this.shipmentRepo.addEvent(
         shipment.id,
         "submission_failed",
         {
           provider: shipment.courier_provider_code,
-          error: result.error?.message || String(result.error || "Unknown provider error"),
-          code: result.error?.code || null,
+          error: (result.error as any)?.message || String(result.error || "Unknown provider error"),
+          code: (result.error as any)?.code || null,
         },
         submittedBy,
         "admin"
       );
     } catch (eventErr) {
+      console.warn(
+        "[ShippingService] Could not record submission_failed event:",
+        eventErr
+      );
     }
     throw new Error(
-      result.error?.message ||
+      (result.error as any)?.message ||
         "The courier rejected the shipment submission."
     );
   }
@@ -388,13 +340,14 @@ export class ShippingService {
           shipment.consignment_id
         );
       } catch (err) {
+        console.warn("[ShippingService] Provider cancel failed:", err);
       }
     }
 
-    // Real columns only — FIX ROUND 23: `failure_reason` / `updated_by`
-    // are not shipments columns and poisoned the whole update.
     const updated = await this.shipmentRepo.updateShipment(shipmentId, {
       status: "cancelled",
+      failure_reason: reason ?? null,
+      updated_by: cancelledBy ?? null,
     });
 
     await this.shipmentRepo.addEvent(
@@ -425,7 +378,7 @@ export class ShippingService {
 
     if (!result.success || !result.data) return shipment;
 
-    const { estimatedDelivery, updates } = result.data;
+    const { status, estimatedDelivery, updates } = result.data;
 
     // Persist tracking events
     for (const update of updates) {
@@ -439,17 +392,11 @@ export class ShippingService {
       });
     }
 
-    // FIX ROUND 23: the previous payload ({ provider_status,
-    // estimated_delivery_date }) named two non-existent columns, so the
-    // builder discarded it wholesale. The only persistable field from a
-    // tracking pull is the estimated delivery (real column
-    // `estimated_delivery`); provider status itself has no column —
-    // status transitions arrive via processWebhookEvent.
-    const updates_payload: Record<string, any> = {};
+    // Update shipment status if provider status maps to a different state
+    const updates_payload: Record<string, any> = { provider_status: status };
     if (estimatedDelivery)
-      updates_payload.estimated_delivery = estimatedDelivery;
+      updates_payload.estimated_delivery_date = estimatedDelivery;
 
-    if (Object.keys(updates_payload).length === 0) return shipment;
     return this.shipmentRepo.updateShipment(shipmentId, updates_payload);
   }
 
@@ -465,6 +412,9 @@ export class ShippingService {
       event.trackingNumber
     );
     if (!shipment) {
+      console.warn(
+        `[ShippingService] No shipment found for tracking: ${event.trackingNumber}`
+      );
       return;
     }
 
@@ -478,11 +428,10 @@ export class ShippingService {
       provider_raw: event.raw,
     });
 
-    // Update shipment status (real columns only — FIX ROUND 23: the
-    // phantom `provider_status` key made the builder discard this write,
-    // so webhook-driven status changes never persisted either).
+    // Update shipment status
     await this.shipmentRepo.updateShipment(shipment.id, {
       status: event.status as ShipmentStatus,
+      provider_status: event.status,
     });
 
     // Log webhook event
@@ -513,6 +462,7 @@ export class ShippingService {
         await orderService.updateOrderStatus(shipment.order_id, "shipped", undefined, "webhook").catch(() => {});
       }
     } catch (omsErr) {
+      console.error(`[ShippingService] Failed to sync webhook event to OMS for order ${shipment.order_id}:`, omsErr);
     }
   }
 

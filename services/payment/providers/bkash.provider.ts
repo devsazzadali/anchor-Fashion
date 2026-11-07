@@ -34,12 +34,13 @@ export class BKashProvider extends BasePaymentProvider {
         gatewayUrl: bkashRes.bkashURL,
         status: "pending",
       };
-    } catch (err) {
+    } catch (err: any) {
+      console.error("[BKashProvider] initializePayment failed:", err.message);
       return {
         sessionId: "",
         gatewayUrl: "",
         status: "failed",
-        error: (err as Error).message,
+        error: err.message,
       };
     }
   }
@@ -89,22 +90,21 @@ export class BKashProvider extends BasePaymentProvider {
         gatewayResponse: executeRes,
         message: executeRes.statusMessage || "bKash transaction verification failed",
       };
-    } catch (err) {
+    } catch (err: any) {
+      console.error("[BKashProvider] verifyPayment error:", err.message);
       return {
         isValid: false,
         transactionId,
         status: "failed",
-        gatewayResponse: { error: (err as Error).message },
-        message: (err as Error).message,
+        gatewayResponse: { error: err.message },
+        message: err.message,
       };
     }
   }
 
   async processRefund(params: RefundRequestParams): Promise<RefundResult> {
     try {
-      const paymentID =
-        (params as RefundRequestParams & { paymentID?: string }).paymentID ||
-        params.transactionId;
+      const paymentID = (params as any).paymentID || params.transactionId;
       const refundRes = await BKashService.refundPayment({
         paymentID,
         amount: params.amount,
@@ -125,11 +125,12 @@ export class BKashProvider extends BasePaymentProvider {
         status: "failed",
         error: refundRes.statusMessage || "bKash refund failed",
       };
-    } catch (err) {
+    } catch (err: any) {
+      console.error("[BKashProvider] processRefund error:", err.message);
       return {
         refundId: "",
         status: "failed",
-        error: (err as Error).message,
+        error: err.message,
       };
     }
   }

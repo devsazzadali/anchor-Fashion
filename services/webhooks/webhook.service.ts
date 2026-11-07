@@ -26,6 +26,7 @@ export class WebhookService {
 
       return crypto.timingSafeEqual(signatureBuffer, digestBuffer);
     } catch (error) {
+      console.error("[WebhookService] Signature verification error:", error);
       return false;
     }
   }
@@ -36,7 +37,7 @@ export class WebhookService {
   static async enqueueIncomingWebhook(
     eventType: string,
     provider: string,
-    payload: Record<string, unknown>
+    payload: any
   ): Promise<boolean> {
     return await QueueService.pushJob({
       eventType: `WEBHOOK_IN_${eventType.toUpperCase()}`,
@@ -52,7 +53,7 @@ export class WebhookService {
   static async triggerOutgoingWebhook(
     webhookId: string,
     eventType: string,
-    payload: Record<string, unknown>
+    payload: any
   ): Promise<boolean> {
     try {
       const db = createAdminDbClient();
@@ -65,11 +66,19 @@ export class WebhookService {
       });
 
       if (error) {
+        console.error(
+          "[WebhookService] Failed to queue outgoing webhook:",
+          error
+        );
         return false;
       }
 
       return true;
     } catch (error) {
+      console.error(
+        "[WebhookService] Exception queueing outgoing webhook:",
+        error
+      );
       return false;
     }
   }

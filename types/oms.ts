@@ -68,15 +68,6 @@ export interface Order {
   items_count?: number;
   items_preview?: string;
   shipping_address?: any | null;
-  /** FIX ROUND 29 (D8): status history rows (snake_case), populated by
-   *  mapPrismaOrderToOms for the detail view's timeline + cancellation
-   *  panel. */
-  order_status_history?: {
-    status: string;
-    notes: string | null;
-    changed_by: string | null;
-    created_at: string | null;
-  }[];
 }
 
 export interface OrderItem {
@@ -87,10 +78,6 @@ export interface OrderItem {
   sku: string;
   product_name: string;
   variant_name: string | null;
-  /** S5-1: readable variant attributes from variants.attributes JSON. */
-  variant_size?: string | null;
-  variant_color?: string | null;
-  variant_label?: string | null;
   unit_price: number;
   quantity: number;
   discount: number;
@@ -208,32 +195,11 @@ export interface OrderAddressDetails {
   address_type?: string | null;
 }
 
-/** REG-17: the order's latest shipment, attached by the OMS repository. */
-export interface OrderShipmentSummary {
-  id: string;
-  shipment_number: string | null;
-  status: string | null;
-  tracking_number: string | null;
-  courier_provider_code: string | null;
-  courier: string | null;
-  // FIX ROUND 23: display name resolved from courier_providers by code
-  // in OrderRepository.getOrderById's shipment attach.
-  courier_name?: string | null;
-  recipient_name: string | null;
-  recipient_city: string | null;
-  is_cod: boolean;
-  cod_amount: number | null;
-  created_at: string | null;
-  shipped_at: string | null;
-  delivered_at: string | null;
-}
-
 export interface OrderWithDetails extends Order {
   items: OrderItem[];
   customer?: OrderCustomerDetails | null;
   shippingAddress?: OrderAddressDetails | null;
   billingAddress?: OrderAddressDetails | null;
   manualPayment?: any | null;
-  shipment?: OrderShipmentSummary | null;
 }
 

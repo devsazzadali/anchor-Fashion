@@ -140,6 +140,7 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
         set({ session: res.session });
       }
     } catch (syncErr) {
+      console.warn("[useCheckoutStore] Step sync warning:", syncErr);
     }
   },
 
