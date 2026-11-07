@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import {
   Collection,
   CreateCollectionInput,
@@ -28,12 +27,12 @@ export class CollectionRepository {
     await prisma.setting.upsert({
       where: { key: SETTINGS_KEY },
       update: {
-        value: collections,
+        value: collections as any,
         updatedAt: new Date(),
       },
       create: {
         key: SETTINGS_KEY,
-        value: collections,
+        value: collections as any,
         category: "catalog",
         description: "Curated product collections",
       },
@@ -53,12 +52,7 @@ export class CollectionRepository {
   static async getCollectionBySlug(
     slug: string,
     activeOnly: boolean = true
-  ): Promise<{
-    collection: Collection | null;
-    products: Prisma.ProductGetPayload<{
-      include: { variants: true; media: true; category: true };
-    }>[];
-  }> {
+  ): Promise<{ collection: Collection | null; products: any[] }> {
     const collections = await this.getRawCollections();
     const collection =
       collections.find(
@@ -69,9 +63,7 @@ export class CollectionRepository {
       return { collection: null, products: [] };
     }
 
-    let products: Prisma.ProductGetPayload<{
-      include: { variants: true; media: true; category: true };
-    }>[] = [];
+    let products: any[] = [];
     if (collection.product_ids && collection.product_ids.length > 0) {
       products = await prisma.product.findMany({
         where: {
@@ -144,18 +136,8 @@ export class CollectionRepository {
   }
 
   static async deleteCollection(id: string): Promise<void> {
-    // REG-40: despite the historical name, this is a DEACTIVATION —
-    // the collection is kept with is_active=false (recoverable via
-    // Edit → Active), exactly like categories and brands. It
-    // previously removed the entry from the stored list outright
-    // while the UI copy claimed it would "deactivate"; behaviour and
-    // wording now agree.
     const collections = await this.getRawCollections();
-    const updated = collections.map((c) =>
-      c.id === id
-        ? { ...c, is_active: false, updated_at: new Date().toISOString() }
-        : c
-    );
-    await this.saveCollections(updated);
+    const filtered = collections.filter((c) => c.id !== id);
+    await this.saveCollections(filtered);
   }
 }

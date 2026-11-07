@@ -85,10 +85,10 @@ export async function cancelSteadfastOrder(
       success: data.status === 200,
       message: data.message || (data.status === 200 ? "Order cancelled" : "Cancellation failed"),
     };
-  } catch (err) {
+  } catch (err: any) {
     return {
       success: false,
-      message: (err as Error).message || "Failed to cancel Steadfast order",
+      message: err.message || "Failed to cancel Steadfast order",
     };
   }
 }

@@ -7,7 +7,7 @@ import {
   createDeliveryZoneAction,
   updateDeliveryZoneAction,
   createShippingRateAction,
-} from "@/lib/actions/delivery-zones.actions";
+} from "@/actions/delivery-zones.actions";
 
 export const zoneKeys = {
   all: ["delivery-zones"] as const,

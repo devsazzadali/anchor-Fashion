@@ -26,9 +26,8 @@ import {
   deleteWarehouseZoneAction,
   createWarehouseBinAction,
   deleteWarehouseBinAction,
-} from "@/lib/actions/warehouse.actions";
+} from "@/actions/warehouse.actions";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 export function AddZoneButton({ warehouseId }: { warehouseId: string }) {
   const router = useRouter();
@@ -268,10 +267,9 @@ export function DeleteZoneButton({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleDelete = async () => {
-    setShowConfirm(false);
+    if (!confirm(`Are you sure you want to delete zone "${zoneName}" and all its bins?`)) return;
     setLoading(true);
     const res = await deleteWarehouseZoneAction(zoneId, warehouseId);
     setLoading(false);
@@ -284,31 +282,16 @@ export function DeleteZoneButton({
   };
 
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 text-destructive hover:bg-destructive/10"
-        onClick={() => setShowConfirm(true)}
-        disabled={loading}
-        title="Delete Zone"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
-
-      {/* Delete gate — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={showConfirm}
-        title="Delete zone?"
-        description={`Are you sure you want to delete zone "${zoneName}" and all its bins?`}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        variant="destructive"
-        isLoading={loading}
-        onConfirm={handleDelete}
-        onCancel={() => setShowConfirm(false)}
-      />
-    </>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7 text-destructive hover:bg-destructive/10"
+      onClick={handleDelete}
+      disabled={loading}
+      title="Delete Zone"
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </Button>
   );
 }
 
@@ -323,10 +306,9 @@ export function DeleteBinButton({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleDelete = async () => {
-    setShowConfirm(false);
+    if (!confirm(`Delete storage bin "${binCode}"?`)) return;
     setLoading(true);
     const res = await deleteWarehouseBinAction(binId, warehouseId);
     setLoading(false);
@@ -339,30 +321,15 @@ export function DeleteBinButton({
   };
 
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6 text-destructive/80 hover:text-destructive hover:bg-destructive/10"
-        onClick={() => setShowConfirm(true)}
-        disabled={loading}
-        title="Delete Bin"
-      >
-        <Trash2 className="h-3 w-3" />
-      </Button>
-
-      {/* Delete gate — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={showConfirm}
-        title="Delete bin?"
-        description={`Delete storage bin "${binCode}"?`}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        variant="destructive"
-        isLoading={loading}
-        onConfirm={handleDelete}
-        onCancel={() => setShowConfirm(false)}
-      />
-    </>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-6 w-6 text-destructive/80 hover:text-destructive hover:bg-destructive/10"
+      onClick={handleDelete}
+      disabled={loading}
+      title="Delete Bin"
+    >
+      <Trash2 className="h-3 w-3" />
+    </Button>
   );
 }

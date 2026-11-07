@@ -8,8 +8,8 @@ export interface AuditLogPayload {
   action: AuditEvent;
   entity_type: string;
   entity_id: string;
-  old_data?: unknown;
-  new_data?: unknown;
+  old_data?: any;
+  new_data?: any;
   ip_address?: string;
   user_agent?: string;
 }
@@ -30,6 +30,7 @@ export class AuditLogger {
     // In serverless environments, this might need to be awaited or sent to a queue (e.g. Inngest)
     this.writeToDatabase(payload).catch((err) => {
       // Fallback to console if DB insert fails (or forward to Sentry/Datadog)
+      console.error("[AUDIT LOG FAILURE]", err, payload);
     });
   }
 

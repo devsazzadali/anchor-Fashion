@@ -40,6 +40,7 @@ export const EncryptionService = {
       decrypted = Buffer.concat([decrypted, decipher.final()]);
       return decrypted.toString();
     } catch (error) {
+      console.error("Decryption failed", error);
       return null;
     }
   },

@@ -22,7 +22,6 @@
 import prisma from "@/lib/prisma";
 import { randomUUID } from "crypto";
 import { DB_TABLES, type DbFieldMeta, type DbTableMeta } from "./field-map";
-import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 
 const SAFE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function assertIdent(name: string, kind = "identifier"): string {
@@ -30,98 +29,6 @@ function assertIdent(name: string, kind = "identifier"): string {
     throw new Error(`Invalid SQL ${kind}`);
   }
   return name;
-}
-
-/* ------------------------------------------------------------------ */
-/* REG-83: embedded-select support matrix.                             */
-/*                                                                     */
-/* PostgREST-style embedded selects (`relation(cols)`) are attached    */
-/* by attachRelations() for exactly the (table → relations) pairs      */
-/* below. Any other embedded select used to be SILENTLY DROPPED — the  */
-/* caller received rows without the relation and no error, which       */
-/* produced wrong data downstream (e.g. analytics bucketing every      */
-/* product under a literal fallback category name). Unsupported        */
-/* embedded selects now fail loudly: an error result in development,   */
-/* an explicit error log in production, until the call site is         */
-/* migrated to a Prisma read.                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * REG-84: hard ceiling for SELECTs that specify no limit/range of
- * their own. Far above every current table (largest ≈ 719 rows), so
- * no current result set changes; it exists to stop pathological
- * full-table materialization as tables grow, and it LOGS LOUDLY when
- * it bites instead of truncating silently.
- */
-const MAX_UNBOUNDED_ROWS = 10000;
-
-const EMBEDDED_SELECT_SUPPORT: Record<string, ReadonlySet<string>> = {
-  profiles: new Set(["roles"]),
-  customer_profiles: new Set(["roles"]),
-  orders: new Set(["order_items", "order_status_history"]),
-  customer_orders: new Set(["order_items", "order_status_history"]),
-  products: new Set(["variants", "product_media", "categories"]),
-  store_products: new Set(["variants", "product_media", "categories"]),
-  // FIX ROUND 28 (M-1): payment_sessions → orders. The bKash/SSLCommerz
-  // callbacks' primary lookup `payment_sessions.select("*, orders(*)")`
-  // silently received rows WITHOUT the order because this pair was
-  // unsupported, so only fallback keys could ever find the order. The
-  // attach branch below resolves the order explicitly via order_id.
-  payment_sessions: new Set(["orders"]),
-};
-
-/** Splits a select list on top-level commas (paren-depth aware). */
-function splitSelectList(selectCols: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let current = "";
-  for (const ch of selectCols) {
-    if (ch === "(") depth++;
-    else if (ch === ")") depth--;
-    if (ch === "," && depth === 0) {
-      parts.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
-  }
-  if (current.trim()) parts.push(current);
-  return parts;
-}
-
-/** Extracts embedded relation names (`relation(cols)`, `alias:relation(cols)`, `relation!hint(cols)`). */
-function parseEmbeddedRelations(selectCols: string): string[] {
-  if (!selectCols || selectCols.trim() === "*") return [];
-  const relations: string[] = [];
-  for (const segment of splitSelectList(selectCols)) {
-    const open = segment.indexOf("(");
-    if (open === -1) continue;
-    let head = segment.slice(0, open).trim();
-    if (head.includes(":")) head = head.split(":").pop()!.trim(); // alias:relation
-    head = head.split("!")[0].trim(); // relation!hint
-    if (SAFE_IDENT.test(head)) relations.push(head);
-  }
-  return relations;
-}
-
-/**
- * Throws (dev) / logs (production) for every embedded relation in the
- * select that attachRelations() cannot attach for this table.
- */
-function assertEmbeddedSelectsSupported(tableName: string, selectCols: string): void {
-  const supported = EMBEDDED_SELECT_SUPPORT[tableName];
-  for (const relation of parseEmbeddedRelations(selectCols)) {
-    if (supported?.has(relation)) continue;
-    const message =
-      `[DbQueryBuilder] Unsupported embedded select "${relation}(...)" on table "${tableName}" — ` +
-      `this builder cannot attach that relation, so rows would be returned WITHOUT it. ` +
-      `Migrate this call site to a Prisma read (REG-83).`;
-    if (process.env.NODE_ENV !== "production") {
-      const err = new Error(message) as Error & { code?: string };
-      err.code = "REG83_UNSUPPORTED_EMBED";
-      throw err;
-    }
-  }
 }
 
 export function serializePlain(val: any): any {
@@ -509,25 +416,17 @@ export class DbQueryBuilder implements PromiseLike<any> {
     const hasLead = pattern.startsWith("%");
     const hasTrail = pattern.endsWith("%") && pattern.length > 1;
     const core = pattern.replace(/^%/, "").replace(/%$/, "");
-    // REG-43: the leading/trailing % are the caller's contains markers;
-    // the core is literal text. Prisma turns contains/startsWith/
-    // endsWith into a Postgres LIKE pattern without escaping, so any
-    // %/_/\ inside the core must be escaped or it acts as a wildcard
-    // (a search for "%" matched every row). The equals branch is an
-    // exact match (no LIKE) and stays untouched.
     if (!pattern.includes("%") && !pattern.includes("_")) {
       frag = { [r.meta.field]: { equals: pattern, ...mode } };
-    } else if (hasLead && hasTrail) {
-      frag = { [r.meta.field]: { contains: escapeLikeWildcards(core), ...mode } };
-    } else if (hasTrail && !hasLead) {
-      frag = { [r.meta.field]: { startsWith: escapeLikeWildcards(core), ...mode } };
-    } else if (hasLead && !hasTrail) {
-      frag = { [r.meta.field]: { endsWith: escapeLikeWildcards(core), ...mode } };
+    } else if (hasLead && hasTrail && !core.includes("%") && !core.includes("_")) {
+      frag = { [r.meta.field]: { contains: core, ...mode } };
+    } else if (hasTrail && !hasLead && !core.includes("%") && !core.includes("_")) {
+      frag = { [r.meta.field]: { startsWith: core, ...mode } };
+    } else if (hasLead && !hasTrail && !core.includes("%") && !core.includes("_")) {
+      frag = { [r.meta.field]: { endsWith: core, ...mode } };
     } else {
-      // Pattern with wildcards in the middle (e.g. "a%b" with no edge
-      // markers): match the literal core — escaping keeps %/_ literal
-      // instead of the previous behaviour of silently deleting them.
-      frag = { [r.meta.field]: { contains: escapeLikeWildcards(core), ...mode } };
+      // Complex pattern: best-effort contains on the literal core.
+      frag = { [r.meta.field]: { contains: core.replace(/[%_]/g, ""), ...mode } };
     }
     this.andFragments.push(frag);
     return this;
@@ -667,9 +566,8 @@ export class DbQueryBuilder implements PromiseLike<any> {
         if (r.meta.type !== "String") { this.poisoned = true; return this; }
         const mode = op === "ilike" ? { mode: "insensitive" as const } : {};
         const core = val.replace(/^%/, "").replace(/%$/, "");
-        // REG-43: escape the literal core — see likeImpl.
         orFrags.push(val.includes("%")
-          ? { [field]: { contains: escapeLikeWildcards(core), ...mode } }
+          ? { [field]: { contains: core, ...mode } }
           : { [field]: { equals: val, ...mode } });
         continue;
       }
@@ -710,7 +608,7 @@ export class DbQueryBuilder implements PromiseLike<any> {
     const r = this.resolve(col);
     if (!r) { this.poisoned = true; return this; }
     this.andFragments.push({
-      [r.meta.field]: { contains: escapeLikeWildcards(query), mode: "insensitive" },
+      [r.meta.field]: { contains: query, mode: "insensitive" },
     });
     return this;
   }
@@ -825,10 +723,6 @@ export class DbQueryBuilder implements PromiseLike<any> {
   }
 
   private async attachRelations(rows: any[]) {
-    // REG-83: fail loudly on embedded selects this builder cannot attach
-    // (checked even for empty result sets, and outside the try/catch
-    // below so the development error is never swallowed into a warning).
-    assertEmbeddedSelectsSupported(this.tableName, this.selectCols);
     if (!rows || rows.length === 0) return rows;
     try {
       if (
@@ -869,71 +763,6 @@ export class DbQueryBuilder implements PromiseLike<any> {
           }
           for (const row of rows) {
             row.order_items = itemMap.get(row.id) || [];
-          }
-        }
-      }
-
-      // FIX ROUND 27: order_status_history embed on orders — the R25
-      // cancellation panel (and the order Timeline) read this relation,
-      // but it was missing from EMBEDDED_SELECT_SUPPORT and had no attach
-      // branch, so in production the embed vanished silently and the
-      // panel always showed "Not specified" / "Unknown" even though the
-      // CANCELLED history row carries the customer's reason. Mirrors the
-      // order_items attach above.
-      if (
-        (this.tableName === "orders" || this.tableName === "customer_orders") &&
-        this.selectCols.includes("order_status_history")
-      ) {
-        const orderIds = rows.map((r) => r.id).filter(Boolean);
-        if (orderIds.length > 0) {
-          const history = await prisma.orderStatusHistory.findMany({
-            where: { orderId: { in: orderIds } },
-          });
-          const histMeta = DB_TABLES["order_status_history"];
-          const histMap = new Map<string, any[]>();
-          for (const h of history as any[]) {
-            const snake: Record<string, any> = {};
-            for (const col of Object.keys(histMeta.fields)) {
-              const f = histMeta.fields[col].field;
-              if (f in h) snake[col] = serializePlain(h[f]);
-            }
-            if (!histMap.has(snake.order_id)) histMap.set(snake.order_id, []);
-            histMap.get(snake.order_id)!.push(snake);
-          }
-          for (const row of rows) {
-            row.order_status_history = histMap.get(row.id) || [];
-          }
-        }
-      }
-
-      // FIX ROUND 28 (M-1): payment_sessions → orders embed. PostgREST
-      // returns a single object for a many-to-one embed, so row.orders
-      // is the order row (or null), resolved via the session's order_id.
-      if (
-        this.tableName === "payment_sessions" &&
-        this.selectCols.includes("orders")
-      ) {
-        const orderIds = [
-          ...new Set(rows.map((r) => r.order_id).filter(Boolean)),
-        ];
-        if (orderIds.length > 0) {
-          const orders = await prisma.order.findMany({
-            where: { id: { in: orderIds } },
-          });
-          const orderMeta = DB_TABLES["orders"];
-          const orderMap = new Map<string, any>();
-          for (const o of orders as any[]) {
-            const snake: Record<string, any> = {};
-            for (const col of Object.keys(orderMeta.fields)) {
-              const f = orderMeta.fields[col].field;
-              if (f in o) snake[col] = serializePlain(o[f]);
-            }
-            orderMap.set(snake.id, snake);
-          }
-          for (const row of rows) {
-            row.orders = row.order_id
-              ? orderMap.get(row.order_id) || null
-              : null;
           }
         }
       }
@@ -983,40 +812,10 @@ export class DbQueryBuilder implements PromiseLike<any> {
               }
             } catch {}
           }
-          // FIX ROUND 28 (m-12): categories embed — the gate previously
-          // let `categories(...)` selects through with NO attach branch,
-          // so consumers (e.g. analytics) received products with no
-          // category at all. Many-to-one via category_id → single object.
-          if (this.selectCols.includes("categories")) {
-            try {
-              const categoryIds = [
-                ...new Set(rows.map((r) => r.category_id).filter(Boolean)),
-              ];
-              if (categoryIds.length > 0) {
-                const cats = (await (prisma as any).category.findMany({
-                  where: { id: { in: categoryIds } },
-                })) as any[];
-                const catMeta = DB_TABLES["categories"];
-                const catMap = new Map<string, any>();
-                for (const c of cats) {
-                  const snake: Record<string, any> = {};
-                  for (const col of Object.keys(catMeta.fields)) {
-                    const f = catMeta.fields[col].field;
-                    if (f in c) snake[col] = serializePlain(c[f]);
-                  }
-                  catMap.set(snake.id, snake);
-                }
-                for (const row of rows) {
-                  row.categories = row.category_id
-                    ? catMap.get(row.category_id) || null
-                    : null;
-                }
-              }
-            } catch {}
-          }
         }
       }
     } catch (relErr) {
+      console.warn("[attachRelations] Notice:", relErr);
     }
     return rows;
   }
@@ -1088,13 +887,7 @@ export class DbQueryBuilder implements PromiseLike<any> {
           return this.finish([], count);
         }
         if (this.postFilters.length > 0) {
-          let rows = await delegate.findMany({
-            where,
-            orderBy,
-            take: MAX_UNBOUNDED_ROWS,
-          });
-          if (rows.length >= MAX_UNBOUNDED_ROWS) {
-          }
+          let rows = await delegate.findMany({ where, orderBy });
           for (const pf of this.postFilters) rows = rows.filter(pf);
           if (this.wantCount) count = rows.length;
           if (this.limitCount) {
@@ -1110,17 +903,8 @@ export class DbQueryBuilder implements PromiseLike<any> {
           } else if (this.rangeStart !== undefined && this.rangeEnd !== undefined) {
             args.skip = this.rangeStart;
             args.take = this.rangeEnd - this.rangeStart + 1;
-          } else {
-            // REG-84: caller asked for "everything" — bound it.
-            args.take = MAX_UNBOUNDED_ROWS;
           }
           const rows = await delegate.findMany(args);
-          if (
-            !this.limitCount &&
-            this.rangeStart === undefined &&
-            rows.length >= MAX_UNBOUNDED_ROWS
-          ) {
-          }
           result = rows.map((r: any) => this.toSnakeRow(r));
           if (this.wantCount) {
             count = await delegate.count({ where });
@@ -1254,17 +1038,7 @@ export class DbQueryBuilder implements PromiseLike<any> {
         if (data === null) return this.gracefulEmpty();
 
         const where = this.where();
-        // REG-84 (Round 19): the row fetch behind an update was the last
-        // unbounded materialization in this builder — bound it with the
-        // same MAX_UNBOUNDED_ROWS ceiling + loud log the select path got
-        // in Round 18, so a pathological filter can never pull a whole
-        // table into memory before the per-row update loop.
-        const existing = await delegate.findMany({
-          where,
-          take: MAX_UNBOUNDED_ROWS,
-        });
-        if (existing.length >= MAX_UNBOUNDED_ROWS) {
-        }
+        const existing = await delegate.findMany({ where });
         if (existing.length === 0) return this.finish([], null);
 
         // Preserve @updatedAt columns the caller did not set: the raw-SQL
@@ -1303,17 +1077,7 @@ export class DbQueryBuilder implements PromiseLike<any> {
 
       if (this.action === "delete") {
         const where = this.where();
-        // REG-84 (Round 19, same-class extension of the update bound):
-        // this fetch only ECHOES the deleted rows back to the caller —
-        // deleteMany below still removes every matching row — so bound
-        // the echo with the same ceiling + loud log rather than
-        // materializing a whole table just to return it.
-        const existing = await delegate.findMany({
-          where,
-          take: MAX_UNBOUNDED_ROWS,
-        });
-        if (existing.length >= MAX_UNBOUNDED_ROWS) {
-        }
+        const existing = await delegate.findMany({ where });
         if (existing.length > 0) {
           await delegate.deleteMany({ where });
         }

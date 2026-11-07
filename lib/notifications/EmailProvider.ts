@@ -23,10 +23,6 @@ export interface EmailPayload {
 }
 
 export class EmailProvider {
-  // REG-65 holdout: the error member below stays loosely typed — callers
-  // read a message field off it (marketing campaign log, notification
-  // delivery log), so narrowing the return type forces caller changes
-  // outside this type-only batch.
   /**
    * Sends an email using the Resend API.
    * @param payload The email payload (to, subject, html, etc.)
@@ -42,6 +38,7 @@ export class EmailProvider {
   ): Promise<{ id?: string; error?: any }> {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey || apiKey === "re_dummy_key" || apiKey.trim() === "") {
+      console.warn("[EmailProvider] No valid RESEND_API_KEY configured. Simulating email dispatch.");
       return { id: `sim_${Date.now()}_${Math.random().toString(36).substring(7)}` };
     }
 
@@ -61,16 +58,18 @@ export class EmailProvider {
       });
 
       if (response.error) {
+        console.error("EmailProvider error:", response.error);
         return {
           error:
-            response.error?.message ||
+            (response.error as any)?.message ||
             JSON.stringify(response.error),
         };
       }
 
       return { id: response.data?.id };
-    } catch (error) {
-      return { error: (error as Error)?.message || String(error) };
+    } catch (error: any) {
+      console.error("EmailProvider fatal error:", error);
+      return { error: error?.message || String(error) };
     }
   }
 }

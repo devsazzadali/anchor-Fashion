@@ -1,28 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { CheckoutSession, CheckoutStep } from "@/types/checkout.types";
 import { AddressFormValues } from "@/schemas/checkout.schema";
 
-// Prisma checkout_sessions row shape, as this mapper reads it. The
-// snapshot columns stay unknown here because the mapper only ever
-// re-asserts them to AddressFormValues below.
-interface CheckoutSessionRecord {
-  id: string;
-  userId: string | null;
-  guestEmail: string | null;
-  cartId: string;
-  currentStep: string;
-  shippingAddressSnapshot: unknown;
-  billingAddressSnapshot: unknown;
-  shippingMethod: string | null;
-  paymentMethod: string | null;
-  couponCode: string | null;
-  expiresAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-function mapToCheckoutSession(record: CheckoutSessionRecord): CheckoutSession {
+function mapToCheckoutSession(record: any): CheckoutSession {
   return {
     id: record.id,
     user_id: record.userId,
@@ -59,7 +39,8 @@ export class CheckoutRepository {
 
       if (!record) return null;
       return mapToCheckoutSession(record);
-    } catch (error) {
+    } catch (error: any) {
+      console.error("CheckoutRepository.getSession error:", error);
       return null;
     }
   }
@@ -91,8 +72,9 @@ export class CheckoutRepository {
       });
 
       return mapToCheckoutSession(record);
-    } catch (error) {
-      throw new Error(`Failed to create checkout session: ${(error as Error).message}`);
+    } catch (error: any) {
+      console.error("CheckoutRepository.createSession error:", error);
+      throw new Error(`Failed to create checkout session: ${error.message}`);
     }
   }
 
@@ -104,18 +86,12 @@ export class CheckoutRepository {
     updates: Partial<CheckoutSession>
   ): Promise<CheckoutSession> {
     try {
-      const data: Prisma.CheckoutSessionUpdateInput = {};
+      const data: any = {};
       if (updates.current_step !== undefined) data.currentStep = updates.current_step;
       if (updates.shipping_address_snapshot !== undefined) {
-        // REG-65 holdout: the snapshot value may be null, but the Prisma
-        // JSON input type accepts only the JsonNull sentinel, not a plain
-        // null — passing the value through untyped is the current
-        // behaviour, and reconciling the null vocabulary is out of scope.
         data.shippingAddressSnapshot = updates.shipping_address_snapshot as any;
       }
       if (updates.billing_address_snapshot !== undefined) {
-        // REG-65 holdout: same null-vocabulary mismatch as the shipping
-        // snapshot above.
         data.billingAddressSnapshot = updates.billing_address_snapshot as any;
       }
       if (updates.shipping_method !== undefined) data.shippingMethod = updates.shipping_method;
@@ -130,8 +106,9 @@ export class CheckoutRepository {
       });
 
       return mapToCheckoutSession(record);
-    } catch (error) {
-      throw new Error(`Failed to update checkout session: ${(error as Error).message}`);
+    } catch (error: any) {
+      console.error("CheckoutRepository.updateSession error:", error);
+      throw new Error(`Failed to update checkout session: ${error.message}`);
     }
   }
 

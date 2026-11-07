@@ -1,97 +1,45 @@
-import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { createAdminDbClient } from "@/lib/db/client";
 
-/**
- * REG-27: audit_logs was decorative — the only writer in the codebase
- * was the warehouse service, so the Audit Logs page showed 8 warehouse
- * test rows and nothing else. This module is now the ONE writer every
- * key admin action uses. It targets the real `audit_logs` table shape
- * (Prisma `AuditLog`): userId, action, entity, entityId, oldValues,
- * newValues, ipAddress, createdAt.
- *
- * The previous implementation in this file (`logSecurityEvent`) was
- * dead code — zero callers — and inserted columns that do not exist
- * (event_type / actor_id / metadata / user_agent), so it would have
- * errored had anything ever called it. It is replaced by recordAudit.
- *
- * Rules:
- *  - actor is ALWAYS the acting user's profile id — never "System"
- *    for a human action.
- *  - auditing must never break the action it records: failures are
- *    logged to the server console and swallowed.
- */
-export async function recordAudit(entry: {
-  userId: string | null;
-  action: string;
-  entity: string;
-  entityId?: string | null;
-  oldValues?: unknown;
-  newValues?: unknown;
-  ipAddress?: string | null;
-}): Promise<void> {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        userId: entry.userId ?? null,
-        action: entry.action,
-        entity: entry.entity,
-        entityId: entry.entityId ?? null,
-        oldValues: (entry.oldValues ?? undefined) as Prisma.InputJsonValue,
-        newValues: (entry.newValues ?? undefined) as Prisma.InputJsonValue,
-        ipAddress: entry.ipAddress ?? null,
-      },
-    });
-  } catch (err) {
-  }
+export type SecurityEventType =
+  | "LOGIN_SUCCESS"
+  | "LOGIN_FAILED"
+  | "LOGOUT"
+  | "PASSWORD_RESET_REQUESTED"
+  | "PASSWORD_CHANGED"
+  | "ROLE_CHANGED"
+  | "PERMISSION_DENIED";
+
+export interface AuditLogEntry {
+  event_type: SecurityEventType;
+  user_id?: string;
+  actor_id?: string;
+  metadata?: Record<string, any>;
+  ip_address?: string;
+  user_agent?: string;
 }
 
 /**
- * REG-27: resolve the acting user from the current Neon Auth session
- * and record an audit row for them. The audit_logs.userId column is a
- * FK to profiles.id, and profile ids are the auth ids for provisioned
- * accounts; fall back to an email match for legacy profiles whose id
- * predates the re-keying. If no profile resolves, the row is skipped
- * (a null actor would read as "System", which human actions must
- * never claim).
+ * Logs a security event to the audit_logs table securely using the Admin client.
+ * This should only be called from server environments.
  */
-export async function recordAuditForSessionUser(entry: {
-  action: string;
-  entity: string;
-  entityId?: string | null;
-  oldValues?: unknown;
-  newValues?: unknown;
-  ipAddress?: string | null;
-}): Promise<void> {
+export async function logSecurityEvent(entry: AuditLogEntry) {
   try {
-    const { getServerSession } = await import("@/lib/auth/server");
-    const { user } = await getServerSession();
-    if (!user?.id) return;
-
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { id: user.id },
-          ...(user.email ? [{ email: user.email }] : []),
-        ],
+    const db = createAdminDbClient();
+    const { error } = await db.from("audit_logs").insert([
+      {
+        event_type: entry.event_type,
+        user_id: entry.user_id,
+        actor_id: entry.actor_id || entry.user_id,
+        metadata: entry.metadata || {},
+        ip_address: entry.ip_address,
+        user_agent: entry.user_agent,
       },
-      select: { id: true },
-    });
-    if (!profile) return;
+    ]);
 
-    await recordAudit({ ...entry, userId: profile.id });
-  } catch (err) {
+    if (error) {
+      console.error("Failed to write audit log:", error);
+    }
+  } catch (error) {
+    console.error("Audit logging error:", error);
   }
 }
-
-/** Canonical audit action names (warehouse history used the same style). */
-export const AUDIT_ACTIONS = {
-  USER_SIGNED_IN: "USER_SIGNED_IN",
-  ORDER_STATUS_CHANGED: "ORDER_STATUS_CHANGED",
-  PRODUCT_CREATED: "PRODUCT_CREATED",
-  PRODUCT_UPDATED: "PRODUCT_UPDATED",
-  SETTINGS_UPDATED: "SETTINGS_UPDATED",
-  USER_CREATED: "USER_CREATED",
-  USER_DEACTIVATED: "USER_DEACTIVATED",
-  USER_ACTIVATED: "USER_ACTIVATED",
-  CAMPAIGN_SENT: "CAMPAIGN_SENT",
-} as const;

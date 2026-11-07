@@ -10,7 +10,7 @@ import {
   updateLeadAction,
   convertLeadAction,
   addCustomerNoteAction,
-} from "@/lib/actions/crm.actions";
+} from "@/actions/crm.actions";
 
 export function useCustomers() {
   return useQuery({

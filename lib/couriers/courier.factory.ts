@@ -7,24 +7,6 @@ import { decryptCredentialsObject } from "@/utils/encryption.util";
 import { createAdminDbClient } from "@/lib/db/client";
 import { CourierError } from "./errors";
 
-/**
- * Row shape getProviderFromDatabase reads off courier_providers rows:
- * the real columns (code / api_key / api_secret / config) plus the
- * legacy members the logistics caller still reads (dead at runtime —
- * see the Phase 8 note below, but the caller compiles against them).
- */
-interface CourierProviderRecord {
-  code: string;
-  api_key?: string | null;
-  api_secret?: string | null;
-  config?: Record<string, unknown>;
-  is_active?: boolean;
-  is_sandbox?: unknown;
-  webhook_secret?: string;
-  credentials?: Record<string, unknown>;
-  settings?: { storeId?: string };
-}
-
 export class CourierFactory {
   /**
    * Instantiates a CourierProvider with provided configuration and decrypted credentials
@@ -86,7 +68,7 @@ export class CourierFactory {
    */
   static async getProviderFromDatabase(
     codeOrId: string
-  ): Promise<{ provider: CourierProvider; record: CourierProviderRecord }> {
+  ): Promise<{ provider: CourierProvider; record: any }> {
     const db = createAdminDbClient();
 
     const isUuid =

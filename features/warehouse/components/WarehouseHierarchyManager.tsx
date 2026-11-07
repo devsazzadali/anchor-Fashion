@@ -48,7 +48,6 @@ import {
   Info,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { WarehouseZone, WarehouseBin } from "@/types/inventory.types";
 import {
   createWarehouseZoneAction,
@@ -58,7 +57,7 @@ import {
   deleteRackAction,
   createWarehouseBinAction,
   deleteWarehouseBinAction,
-} from "@/lib/actions/warehouse.actions";
+} from "@/actions/warehouse.actions";
 
 interface ZoneWithBins extends WarehouseZone {
   bins?: WarehouseBin[];
@@ -146,18 +145,8 @@ export function WarehouseHierarchyManager({
     }
   };
 
-  type PendingDelete =
-    | { kind: "zone"; zone: WarehouseZone }
-    | { kind: "rack"; zoneId: string; rackCode: string }
-    | { kind: "bin"; binId: string }
-    | null;
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
-
-  const handleDeleteZone = (zone: WarehouseZone) => {
-    setPendingDelete({ kind: "zone", zone });
-  };
-
-  const runDeleteZone = async (zone: WarehouseZone) => {
+  const handleDeleteZone = async (zone: WarehouseZone) => {
+    if (!confirm(`Are you sure you want to delete zone "${zone.name}"?`)) return;
     const res = await deleteWarehouseZoneAction(zone.id, warehouseId);
     if (res.success) {
       toast.success("Zone deleted");
@@ -199,11 +188,8 @@ export function WarehouseHierarchyManager({
     }
   };
 
-  const handleDeleteRack = (zoneId: string, rackCode: string) => {
-    setPendingDelete({ kind: "rack", zoneId, rackCode });
-  };
-
-  const runDeleteRack = async (zoneId: string, rackCode: string) => {
+  const handleDeleteRack = async (zoneId: string, rackCode: string) => {
+    if (!confirm(`Delete rack "${rackCode}" and all its shelves?`)) return;
     const res = await deleteRackAction(zoneId, rackCode, warehouseId);
     if (res.success) {
       toast.success("Rack deleted");
@@ -246,11 +232,8 @@ export function WarehouseHierarchyManager({
     }
   };
 
-  const handleDeleteBin = (binId: string) => {
-    setPendingDelete({ kind: "bin", binId });
-  };
-
-  const runDeleteBin = async (binId: string) => {
+  const handleDeleteBin = async (binId: string) => {
+    if (!confirm("Are you sure you want to delete this bin?")) return;
     const res = await deleteWarehouseBinAction(binId, warehouseId);
     if (res.success) {
       toast.success("Bin deleted");
@@ -778,37 +761,6 @@ export function WarehouseHierarchyManager({
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Delete gates — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={!!pendingDelete}
-        title={
-          pendingDelete?.kind === "zone"
-            ? "Delete zone?"
-            : pendingDelete?.kind === "rack"
-              ? "Delete rack?"
-              : "Delete bin?"
-        }
-        description={
-          pendingDelete?.kind === "zone"
-            ? `Are you sure you want to delete zone "${pendingDelete.zone.name}"?`
-            : pendingDelete?.kind === "rack"
-              ? `Delete rack "${pendingDelete.rackCode}" and all its shelves?`
-              : "Are you sure you want to delete this bin?"
-        }
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        variant="destructive"
-        onConfirm={() => {
-          if (!pendingDelete) return;
-          const pending = pendingDelete;
-          setPendingDelete(null);
-          if (pending.kind === "zone") runDeleteZone(pending.zone);
-          else if (pending.kind === "rack") runDeleteRack(pending.zoneId, pending.rackCode);
-          else runDeleteBin(pending.binId);
-        }}
-        onCancel={() => setPendingDelete(null)}
-      />
     </div>
   );
 }

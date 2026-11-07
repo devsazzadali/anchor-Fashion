@@ -27,7 +27,7 @@ export interface PushPayload {
   icon?: string;
   badge?: string;
   url?: string;
-  data?: Record<string, unknown>;
+  data?: any;
 }
 
 export class PushProvider {
@@ -39,7 +39,7 @@ export class PushProvider {
   static async send(
     subscription: PushSubscription,
     payload: PushPayload
-  ): Promise<{ success: boolean; error?: unknown }> {
+  ): Promise<{ success: boolean; error?: any }> {
     try {
       const data = JSON.stringify({
         title: payload.title,
@@ -56,7 +56,8 @@ export class PushProvider {
 
       await webpush.sendNotification(subscription, data);
       return { success: true };
-    } catch (error) {
+    } catch (error: any) {
+      console.error("PushProvider error:", error);
       // If the subscription is no longer valid (e.g. 410 Gone), we should ideally return a specific error
       // so the caller can remove the subscription from the database.
       return { success: false, error };

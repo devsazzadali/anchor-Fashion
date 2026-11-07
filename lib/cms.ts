@@ -23,7 +23,7 @@ export interface CmsPage {
 export interface CmsPageBlock {
   id: string;
   section_type: string;
-  content_json: unknown;
+  content_json: any;
   display_order: number;
 }
 
@@ -58,6 +58,7 @@ export async function getBlogPostBySlug(slug: string): Promise<CmsPost | null> {
     .single();
 
   if (error) {
+    console.error(`Error fetching blog post ${slug}:`, error);
     return null;
   }
   return data;
@@ -88,6 +89,7 @@ export async function getPageBySlug(slug: string): Promise<CmsPage | null> {
     .order("display_order", { ascending: true });
 
   if (blocksError) {
+    console.error(`Error fetching page blocks for ${slug}:`, blocksError);
   }
 
   return {
@@ -121,6 +123,7 @@ export async function getMenuByLocation(
     .order("display_order", { ascending: true });
 
   if (itemsError) {
+    console.error(`Error fetching menu items for ${location}:`, itemsError);
     return null;
   }
 
@@ -128,12 +131,12 @@ export async function getMenuByLocation(
   const rootItems: CmsMenuItem[] = [];
   const itemMap = new Map<string, CmsMenuItem>();
 
-  items?.forEach((item: CmsMenuItem) => {
+  items?.forEach((item: any) => {
     item.subItems = [];
     itemMap.set(item.id, item);
   });
 
-  items?.forEach((item: CmsMenuItem) => {
+  items?.forEach((item: any) => {
     if (item.parent_id && itemMap.has(item.parent_id)) {
       itemMap.get(item.parent_id)!.subItems!.push(item);
     } else {

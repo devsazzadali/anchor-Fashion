@@ -53,15 +53,6 @@ export interface CodRiskEvaluation {
   };
 }
 
-interface PastOrderRow {
-  id: string;
-  status: string;
-  grand_total: number;
-  created_at: string;
-  cancelled_at: string | null;
-  delivered_at: string | null;
-}
-
 export class CodRiskService {
   /**
    * Resolve authoritative COD fraud configuration from DB settings with fallback to defaults.
@@ -143,7 +134,7 @@ export class CodRiskService {
     // identity columns via Prisma instead, and normalize statuses to the
     // lowercase vocabulary the scoring below compares against (orders
     // store UPPERCASE statuses).
-    let pastOrders: PastOrderRow[] = [];
+    let pastOrders: any[] = [];
 
     try {
       if (input.customerId) {
@@ -175,6 +166,7 @@ export class CodRiskService {
         }));
       }
     } catch (dbErr) {
+      console.warn("[CodRiskService] Could not retrieve order history, proceeding cautiously:", dbErr);
     }
 
     // -------------------------------------------------------------

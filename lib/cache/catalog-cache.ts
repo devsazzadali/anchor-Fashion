@@ -10,7 +10,7 @@ import {
   getFeaturedPromoBanner,
   type HeroSlide,
   type FeaturedPromoBannerData,
-} from "@/lib/actions/cms.actions";
+} from "@/actions/cms.actions";
 
 /**
  * Enterprise Cache Tag Constants
@@ -135,8 +135,6 @@ export function getCachedProducts(params: ProductListParams) {
     String(params.minPrice || ""),
     String(params.maxPrice || ""),
     params.search || "",
-    (params.sizes || []).join(","),
-    (params.colors || []).join(","),
   ];
 
   const fetcher = unstable_cache(
@@ -200,7 +198,7 @@ export const getCachedFeaturedPromoBanner = unstable_cache(
  */
 export const getCachedWhyChooseUs = unstable_cache(
   async () => {
-    const { getWhyChooseUsSettings } = await import("@/lib/actions/why-choose-us.actions");
+    const { getWhyChooseUsSettings } = await import("@/actions/why-choose-us.actions");
     return getWhyChooseUsSettings();
   },
   ["homepage-why-choose-us"],
@@ -216,7 +214,7 @@ export const getCachedWhyChooseUs = unstable_cache(
 export const getCachedCuratedCategoriesData = unstable_cache(
   async () => {
     const { getStorefrontCuratedCategories } = await import(
-      "@/lib/actions/curated-categories.actions"
+      "@/actions/curated-categories.actions"
     );
     return getStorefrontCuratedCategories();
   },

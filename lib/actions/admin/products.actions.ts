@@ -10,10 +10,6 @@ import { TagRepository } from "@/lib/repositories/catalog/tag.repository";
 import { CreateProductSchema } from "@/types/catalog.types";
 import { revalidatePath } from "next/cache";
 import { invalidateProductCache } from "@/lib/cache/invalidate-catalog";
-import {
-  recordAuditForSessionUser,
-  AUDIT_ACTIONS,
-} from "@/lib/security/audit";
 
 // ============================================================================
 // SCHEMAS
@@ -77,27 +73,12 @@ export const createAdminProductAction = createAdminAction(
       ...input,
       status: input.status || "DRAFT",
       isFeatured: input.isFeatured || false,
-      media: input.media?.map((m) => ({
+      media: input.media?.map((m: any) => ({
         ...m,
         displayOrder: m.displayOrder || 0,
       })),
     };
-    // REG-65 holdout: payload keeps its cast — the safe-action input
-    // type carries the schema's z.preprocess money fields (basePrice /
-    // costPrice / salePrice / vatPercent) as unknown, so the payload is
-    // not assignable to CreateProductInput (number) without reconciling
-    // the action input/output type universes.
     const newProduct = await ProductRepository.createProduct(payload as any);
-    // REG-27: audit the creation (actor = the acting user).
-    await recordAuditForSessionUser({
-      action: AUDIT_ACTIONS.PRODUCT_CREATED,
-      entity: "product",
-      entityId: newProduct?.id ?? null,
-      newValues: {
-        name: newProduct?.name ?? payload.name ?? null,
-        status: newProduct?.status ?? payload.status ?? null,
-      },
-    });
     revalidatePath("/admin/products");
     invalidateProductCache(newProduct?.slug);
     return newProduct;
@@ -112,29 +93,15 @@ export const updateAdminProductAction = createAdminAction(
   async ({ id, data }) => {
     const payload = {
       ...data,
-      media: data.media?.map((m) => ({
+      media: data.media?.map((m: any) => ({
         ...m,
         displayOrder: m.displayOrder || 0,
       })),
     };
-    // REG-65 holdout: same z.preprocess unknown-field conflict as
-    // createAdminProductAction above.
     const updatedProduct = await ProductRepository.updateProduct(
       id,
       payload as any
     );
-    // REG-27: audit the edit (actor = the acting user). The changed
-    // field NAMES are recorded (values may include pricing; names are
-    // enough for the audit trail without duplicating the payload).
-    await recordAuditForSessionUser({
-      action: AUDIT_ACTIONS.PRODUCT_UPDATED,
-      entity: "product",
-      entityId: id,
-      newValues: {
-        name: updatedProduct?.name ?? null,
-        changed_fields: Object.keys(data || {}),
-      },
-    });
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${id}/edit`);
     invalidateProductCache(updatedProduct?.slug);
@@ -178,11 +145,6 @@ export const duplicateAdminProductAction = createAdminAction(
       // ... we could copy SEO and Media too, but keeping it simple for now
     };
 
-    // REG-65 holdout: copyData keeps its cast — it omits fields the
-    // CreateProductInput (zod output) type requires because they carry
-    // schema defaults (stockQuantity / soldCount / totalSold /
-    // alertQuantity), so the literal is not assignable; widening the
-    // repository's input type is out of scope for a type-only batch.
     const newProduct = await ProductRepository.createProduct(copyData as any);
     revalidatePath("/admin/products");
     invalidateProductCache(newProduct?.slug);

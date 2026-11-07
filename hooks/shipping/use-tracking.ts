@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getTrackingTimelineAction,
   refreshTrackingAction,
-} from "@/lib/actions/shipment.actions";
+} from "@/actions/shipping.actions";
 
 export const trackingKeys = {
   timeline: (identifier: string) =>

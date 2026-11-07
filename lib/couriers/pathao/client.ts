@@ -68,7 +68,7 @@ export class PathaoClient {
         clearTimeout(timeoutId);
         const durationMs = Date.now() - startTime;
 
-        let responseData: unknown;
+        let responseData: any;
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
           responseData = await response.json();
@@ -119,19 +119,18 @@ export class PathaoClient {
         }
 
         // Client validation error
-        const responseBody = responseData as { message?: string; errors?: unknown };
         const msg =
-          responseBody?.message ||
-          (responseBody?.errors ? JSON.stringify(responseBody.errors) : `HTTP ${response.status}`);
+          responseData?.message ||
+          (responseData?.errors ? JSON.stringify(responseData.errors) : `HTTP ${response.status}`);
         throw new CourierValidationError("pathao", msg);
-      } catch (err) {
+      } catch (err: any) {
         clearTimeout(timeoutId);
         const durationMs = Date.now() - startTime;
 
-        if ((err as Error).name === "AbortError") {
+        if (err.name === "AbortError") {
           lastError = new CourierNetworkError("pathao", `Request timed out after ${this.timeoutMs}ms`);
         } else {
-          lastError = err as Error;
+          lastError = err;
         }
 
         // Log network failures

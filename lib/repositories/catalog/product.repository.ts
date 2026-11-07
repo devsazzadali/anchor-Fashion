@@ -1,170 +1,22 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { CreateProductInput, Product } from "@/types/catalog.types";
-import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { cache } from "react";
 import { generateUniqueProductCode } from "@/lib/utils/product-code";
-import { generateEAN13Sync } from "@/lib/utils/barcode";
 
-// The barcode helpers only ever use the variant delegate of the client
-// they are handed (always a transaction client at the call sites).
-type VariantBarcodeDb = Pick<Prisma.TransactionClient, "variant">;
-
-// Row shapes for mapToAdminProduct / getTrashedProducts, derived from the
-// Prisma schema fields and the relations the queries include. Relations
-// are optional because the mapper reads them defensively (`|| []` /
-// ternaries) and not every caller includes all of them.
-interface AdminProductCategoryRow {
-  id: string;
-  name: string;
-  slug: string;
-}
-
-interface AdminProductVariantRow {
-  id: string;
-  productId: string;
-  sku: string;
-  barcode: string | null;
-  priceOverride: Prisma.Decimal | null;
-  salePrice: Prisma.Decimal | null;
-  costPrice: Prisma.Decimal | null;
-  weight: Prisma.Decimal | null;
-  attributes: Prisma.JsonValue;
-  isActive: boolean;
-  inventoryLevels?: Array<{
-    id: string;
-    variantId: string;
-    warehouseId: string;
-    quantityAvailable: number;
-    quantityReserved: number;
-    reorderPoint: number;
-  }> | null;
-  orderItems?: Array<{ quantity: number }> | null;
-}
-
-interface AdminProductMediaRow {
-  id: string;
-  productId: string;
-  variantId: string | null;
-  url: string;
-  urlWebp: string | null;
-  altText: string | null;
-  displayOrder: number;
-  isPrimary: boolean;
-  mediaType: string;
-}
-
-interface AdminProductSeoRow {
-  id: string;
-  productId: string;
-  metaTitle: string | null;
-  metaDescription: string | null;
-  canonicalUrl: string | null;
-  ogTitle: string | null;
-  ogDescription: string | null;
-  ogImageUrl: string | null;
-  twitterCardType: string | null;
-  structuredData: Prisma.JsonValue | null;
-  keywords: string[];
-}
-
-interface AdminProductRow {
-  id: string;
-  name: string;
-  slug: string;
-  shortDescription: string | null;
-  description: string | null;
-  categoryId: string | null;
-  brandId: string | null;
-  basePrice: Prisma.Decimal;
-  costPrice: Prisma.Decimal | null;
-  salePrice: Prisma.Decimal | null;
-  vatPercent: Prisma.Decimal;
-  sku: string | null;
-  barcode: string | null;
-  status: string;
-  gender: string | null;
-  season: string | null;
-  careInstructions: string | null;
-  countryOfOrigin: string | null;
-  isFeatured: boolean;
-  isNewArrival: boolean;
-  rating: Prisma.Decimal;
-  reviewCount: number;
-  imageUrl: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  category?: AdminProductCategoryRow | null;
-  brand?: AdminProductCategoryRow | null;
-  productCategories?: Array<{
-    categoryId: string;
-    category: AdminProductCategoryRow | null;
-  }> | null;
-  variants?: AdminProductVariantRow[] | null;
-  media?: AdminProductMediaRow[] | null;
-  seo?: AdminProductSeoRow | null;
-  productTags?: Array<{ tag: Prisma.TagGetPayload<object> }> | null;
-}
-
-interface TrashedProductRow {
-  id: string;
-  name: string;
-  sku: string | null;
-  barcode: string | null;
-  // Read defensively by the mapper; the Product model has no `price`
-  // column today, so this is undefined at runtime (price falls back to 0).
-  price?: Prisma.Decimal | number | null;
-  preTrashStatus: string | null;
-  deletedAt: Date | null;
-  category: { name: string } | null;
-  media: Array<{ url: string }>;
-}
-
-/**
- * Barcode guarantee for variant writes: a variant must NEVER be persisted
- * without a barcode (REG-36 — 22 variants reached the DB barcode-less
- * because empty fields were stored as NULL). Resolution order: the
- * caller-supplied barcode wins; on update, an existing barcode is kept
- * (never overwritten/cleared); only a genuinely new, empty variant gets a
- * freshly generated EAN-13, collision-checked against the unique index.
- */
-async function generateUniqueVariantBarcode(db: VariantBarcodeDb): Promise<string> {
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const candidate = generateEAN13Sync();
-    const clash = await db.variant.findUnique({
-      where: { barcode: candidate },
-      select: { id: true },
-    });
-    if (!clash) return candidate;
-  }
-  return generateEAN13Sync();
-}
-
-async function resolveVariantBarcode(
-  db: VariantBarcodeDb,
-  incoming?: string | null,
-  existingBarcode?: string | null
-): Promise<string> {
-  const trimmed = incoming?.trim();
-  if (trimmed) return trimmed;
-  if (existingBarcode) return existingBarcode;
-  return generateUniqueVariantBarcode(db);
-}
-
-function mapToAdminProduct(p: AdminProductRow): Product {
+function mapToAdminProduct(p: any): Product {
   const variants = p.variants || [];
   let totalStock = 0;
   let totalSold = 0;
 
-  const mappedVariants = variants.map((v) => {
+  const mappedVariants = variants.map((v: any) => {
     const vStock = (v.inventoryLevels || []).reduce(
-      (sum: number, lvl) => sum + (lvl.quantityAvailable || 0),
+      (sum: number, lvl: any) => sum + (lvl.quantityAvailable || 0),
       0
     );
     totalStock += vStock;
 
     const vSold = (v.orderItems || []).reduce(
-      (sum: number, oi) => sum + (Number(oi.quantity) || 0),
+      (sum: number, oi: any) => sum + (Number(oi.quantity) || 0),
       0
     );
     totalSold += vSold;
@@ -182,7 +34,7 @@ function mapToAdminProduct(p: AdminProductRow): Product {
       isActive: v.isActive,
       stockQuantity: vStock,
       soldQuantity: vSold,
-      inventory_levels: (v.inventoryLevels || []).map((il) => ({
+      inventory_levels: (v.inventoryLevels || []).map((il: any) => ({
         id: il.id,
         variant_id: il.variantId,
         warehouse_id: il.warehouseId,
@@ -193,7 +45,7 @@ function mapToAdminProduct(p: AdminProductRow): Product {
     };
   });
 
-  const mediaList = (p.media || []).map((m) => ({
+  const mediaList = (p.media || []).map((m: any) => ({
     id: m.id,
     productId: m.productId,
     variantId: m.variantId,
@@ -205,7 +57,7 @@ function mapToAdminProduct(p: AdminProductRow): Product {
     mediaType: m.mediaType,
   }));
 
-  const primaryImage = mediaList.find((m) => m.isPrimary)?.url || mediaList[0]?.url || p.imageUrl || null;
+  const primaryImage = mediaList.find((m: any) => m.isPrimary)?.url || mediaList[0]?.url || p.imageUrl || null;
 
   return {
     id: p.id,
@@ -244,9 +96,9 @@ function mapToAdminProduct(p: AdminProductRow): Product {
     updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
     updated_at: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
     category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
-    categoryIds: (p.productCategories || []).map((pc) => pc.categoryId).filter(Boolean),
+    categoryIds: (p.productCategories || []).map((pc: any) => pc.categoryId).filter(Boolean),
     additionalCategories: (p.productCategories || [])
-      .map((pc) => (pc.category ? { id: pc.category.id, name: pc.category.name, slug: pc.category.slug } : null))
+      .map((pc: any) => (pc.category ? { id: pc.category.id, name: pc.category.name, slug: pc.category.slug } : null))
       .filter(Boolean),
     brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
     variants: mappedVariants,
@@ -266,7 +118,7 @@ function mapToAdminProduct(p: AdminProductRow): Product {
           keywords: p.seo.keywords,
         }
       : null,
-    tags: (p.productTags || []).map((pt) => pt.tag).filter(Boolean),
+    tags: (p.productTags || []).map((pt: any) => pt.tag).filter(Boolean),
     stockQuantity: totalStock,
     soldCount: totalSold,
     totalSold: totalSold,
@@ -323,12 +175,12 @@ export class ProductRepository {
       status?: string;
     }) => {
       const offset = (page - 1) * limit;
-      const where: Prisma.ProductWhereInput & { AND?: Prisma.ProductWhereInput[] } = {
+      const where: any = {
         deletedAt: null,
       };
 
       if (search && search.trim()) {
-        const term = escapeLikeWildcards(search.trim()); // REG-43: literal LIKE match
+        const term = search.trim();
         where.OR = [
           { name: { contains: term, mode: "insensitive" } },
           { sku: { contains: term, mode: "insensitive" } },
@@ -441,6 +293,7 @@ export class ProductRepository {
       if (!record) return null;
       return mapToAdminProduct(record);
     } catch (err) {
+      console.error("Error fetching product by ID via Prisma:", err);
       return null;
     }
   });
@@ -448,7 +301,7 @@ export class ProductRepository {
   /**
    * Creates a new product along with variants, media, SEO, and inventory.
    */
-  static async createProduct(input: CreateProductInput & { reorderPoint?: number | null }) {
+  static async createProduct(input: CreateProductInput) {
     const { seo, tags, media, variants, categoryIds, ...productData } = input;
 
     // 1. Auto-generate slug if missing
@@ -499,11 +352,11 @@ export class ProductRepository {
       }
     }
 
-    const defaultWarehouseId = productData.warehouseId || (await ProductRepository.getDefaultWarehouseId());
-    const reorderPoint = Number(productData.alertQuantity ?? productData.reorderPoint ?? 10);
+    const defaultWarehouseId = (productData as any).warehouseId || (await ProductRepository.getDefaultWarehouseId());
+    const reorderPoint = Number((productData as any).alertQuantity ?? (productData as any).reorderPoint ?? 10);
 
     // Primary image from media
-    const primaryMediaUrl = media?.find((m) => m.isPrimary)?.url || media?.[0]?.url || null;
+    const primaryMediaUrl = media?.find((m: any) => m.isPrimary)?.url || media?.[0]?.url || null;
 
     let productId = "";
 
@@ -534,7 +387,7 @@ export class ProductRepository {
           countryOfOrigin: productData.countryOfOrigin || null,
           isFeatured: productData.isFeatured || false,
           imageUrl: primaryMediaUrl,
-          galleryUrls: media?.map((m) => m.url) || [],
+          galleryUrls: media?.map((m: any) => m.url) || [],
         },
       });
 
@@ -586,7 +439,7 @@ export class ProductRepository {
       // Create Media
       if (media && media.length > 0) {
         await tx.productMedia.createMany({
-          data: media.map((m, idx: number) => ({
+          data: media.map((m: any, idx: number) => ({
             productId,
             url: m.url,
             urlWebp: m.urlWebp || null,
@@ -606,7 +459,7 @@ export class ProductRepository {
             data: {
               productId,
               sku,
-              barcode: await resolveVariantBarcode(tx, v.barcode),
+              barcode: v.barcode && v.barcode.trim() ? v.barcode.trim() : null,
               priceOverride: v.priceOverride ?? null,
               salePrice: v.salePrice ?? null,
               costPrice: v.costPrice ?? null,
@@ -651,7 +504,7 @@ export class ProductRepository {
           data: {
             productId,
             sku: defaultSku,
-            barcode: await resolveVariantBarcode(tx, productData.barcode),
+            barcode: productData.barcode && productData.barcode.trim() ? productData.barcode.trim() : null,
             priceOverride: productData.basePrice,
             salePrice: productData.salePrice ?? null,
             costPrice: productData.costPrice ?? null,
@@ -699,7 +552,7 @@ export class ProductRepository {
   static async updateProduct(id: string, input: Partial<CreateProductInput>) {
     const { seo, tags, media, variants, categoryIds, ...productData } = input;
 
-    const primaryMediaUrl = media?.find((m) => m.isPrimary)?.url || media?.[0]?.url || undefined;
+    const primaryMediaUrl = media?.find((m: any) => m.isPrimary)?.url || media?.[0]?.url || undefined;
 
     await prisma.$transaction(async (tx) => {
       // 1. Update core product fields
@@ -725,7 +578,7 @@ export class ProductRepository {
           ...(productData.countryOfOrigin !== undefined && { countryOfOrigin: productData.countryOfOrigin }),
           ...(productData.isFeatured !== undefined && { isFeatured: productData.isFeatured }),
           ...(primaryMediaUrl !== undefined && { imageUrl: primaryMediaUrl }),
-          ...(media !== undefined && { galleryUrls: media.map((m) => m.url) }),
+          ...(media !== undefined && { galleryUrls: media.map((m: any) => m.url) }),
         },
       });
 
@@ -800,7 +653,7 @@ export class ProductRepository {
         await tx.productMedia.deleteMany({ where: { productId: id } });
         if (media.length > 0) {
           await tx.productMedia.createMany({
-            data: media.map((m, idx: number) => ({
+            data: media.map((m: any, idx: number) => ({
               productId: id,
               url: m.url,
               urlWebp: m.urlWebp || null,
@@ -842,7 +695,7 @@ export class ProductRepository {
                 where: { id: existing.id },
                 data: {
                   sku,
-                  barcode: await resolveVariantBarcode(tx, v.barcode, existing.barcode),
+                  barcode: v.barcode && v.barcode.trim() ? v.barcode.trim() : null,
                   priceOverride: v.priceOverride ?? null,
                   salePrice: v.salePrice ?? null,
                   costPrice: v.costPrice ?? null,
@@ -856,7 +709,7 @@ export class ProductRepository {
                 data: {
                   productId: id,
                   sku,
-                  barcode: await resolveVariantBarcode(tx, v.barcode),
+                  barcode: v.barcode && v.barcode.trim() ? v.barcode.trim() : null,
                   priceOverride: v.priceOverride ?? null,
                   salePrice: v.salePrice ?? null,
                   costPrice: v.costPrice ?? null,
@@ -1011,9 +864,9 @@ export class ProductRepository {
   }) {
     const page = Math.max(1, params?.page || 1);
     const limit = Math.min(100, Math.max(1, params?.limit || 20));
-    const where: Prisma.ProductWhereInput = { deletedAt: { not: null } };
+    const where: any = { deletedAt: { not: null } };
     if (params?.search?.trim()) {
-      const term = escapeLikeWildcards(params.search.trim()); // REG-43
+      const term = params.search.trim();
       where.OR = [
         { name: { contains: term, mode: "insensitive" } },
         { sku: { contains: term, mode: "insensitive" } },
@@ -1038,7 +891,7 @@ export class ProductRepository {
       }),
     ]);
     const now = Date.now();
-    const data = rows.map((p: TrashedProductRow) => {
+    const data = rows.map((p: any) => {
       const deletedAt = p.deletedAt ? new Date(p.deletedAt) : null;
       const daysInTrash = deletedAt
         ? Math.floor((now - deletedAt.getTime()) / 86_400_000)
@@ -1072,7 +925,7 @@ export class ProductRepository {
       where: { id },
       data: {
         deletedAt: null,
-        status: current?.preTrashStatus || "DRAFT",
+        status: (current?.preTrashStatus as any) || "DRAFT",
         preTrashStatus: null,
       },
     });
@@ -1151,7 +1004,7 @@ export class ProductRepository {
         data: {
           deletedAt: new Date(),
           status: "ARCHIVED",
-          preTrashStatus: status,
+          preTrashStatus: status as any,
         },
       });
       count += result.count;
@@ -1163,13 +1016,13 @@ export class ProductRepository {
    * Bulk delete all products in Neon matching criteria.
    */
   static async deleteAllProducts(filters?: { status?: string; search?: string }): Promise<number> {
-    const where: Prisma.ProductWhereInput = { deletedAt: null };
+    const where: any = { deletedAt: null };
 
     if (filters?.status && filters.status !== "ALL") {
       where.status = filters.status;
     }
     if (filters?.search && filters.search.trim()) {
-      const term = escapeLikeWildcards(filters.search.trim()); // REG-43
+      const term = filters.search.trim();
       where.OR = [
         { name: { contains: term, mode: "insensitive" } },
         { sku: { contains: term, mode: "insensitive" } },

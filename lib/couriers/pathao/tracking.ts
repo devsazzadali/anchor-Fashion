@@ -1,5 +1,4 @@
 import { PathaoClient } from "./client";
-import { FALLBACK_DELIVERY_FEES } from "@/lib/constants/shipping";
 import { TrackingResult, TrackingEvent, DeliveryFeeInput, DeliveryFeeResult } from "../types";
 import { mapPathaoStatus } from "./mapper";
 
@@ -96,12 +95,8 @@ export async function calculatePathaoFee(
       totalFee: deliveryFee + codFee,
     };
   } catch {
-    // REG-63: price-estimate fallback = the canonical pair
-    // (lib/constants/shipping), not a private 60/120 schedule.
-    const fallbackFee =
-      (Number(input.recipientCity) || 1) === 1
-        ? FALLBACK_DELIVERY_FEES.insideDhaka
-        : FALLBACK_DELIVERY_FEES.outsideDhaka;
+    // Standard fallback in Bangladesh (Inside Dhaka 60tk, Outside Dhaka 120tk)
+    const fallbackFee = (Number(input.recipientCity) || 1) === 1 ? 60 : 120;
     return {
       deliveryFee: fallbackFee,
       codFee: input.isCOD ? 10 : 0,

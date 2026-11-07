@@ -4,9 +4,6 @@ import { createDbClient } from "@/lib/db/client";
 import { createAdminDbClient } from "@/lib/db/client";
 import { verifyAdmin, verifyManager, verifyStaff } from "../security/roles";
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { ensureOrderPaymentSuccess } from "@/lib/payments/order-payment-record";
-import { paymentRowToLegacyTransaction } from "@/lib/payments/order-payment-record";
 
 const SECRET_CONFIG_KEYS = ["store_id", "store_password", "store_pass", "store_passwd"] as const;
 
@@ -44,113 +41,6 @@ export type PaymentGatewayConfig = {
 
 export type AllPaymentConfigs = Record<PaymentGatewayType, PaymentGatewayConfig>;
 
-// REG-65 batch 2: row shapes for the untyped db shim, derived from the
-// select lists in this file (the shim returns snake_case rows).
-// Stored gateway configs may carry sandbox flags as strings ("true");
-// the loader below deliberately accepts both forms.
-type PaymentConfigSettingsValue = Omit<
-  Partial<PaymentGatewayConfig>,
-  "sandbox" | "is_sandbox"
-> & {
-  sandbox?: boolean | string;
-  is_sandbox?: boolean | string;
-};
-
-interface PaymentConfigSettingsRow {
-  key: string;
-  value: PaymentConfigSettingsValue | null;
-}
-
-interface ManualPaymentOrderRow {
-  id: string;
-  customer_id: string | null;
-  grand_total: number | null;
-  // Not in the select list; read defensively as a fallback total.
-  total_amount?: number | null;
-  payment_status: string | null;
-}
-
-interface PaymentLedgerRow {
-  id: string;
-  order_id: string;
-  amount: number;
-  method: string | null;
-  status: string | null;
-  transaction_id: string | null;
-  gateway_response: Record<string, any> | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-interface OrderShippingAddressJson {
-  phone?: string | null;
-  phone_number?: string | null;
-}
-
-interface PaymentProviderRow {
-  id: string;
-  code: string;
-  name: string;
-}
-
-interface ManualQueueOrderRow {
-  id: string;
-  order_number: string | null;
-  grand_total: number | null;
-  status: string | null;
-  payment_status: string | null;
-  payment_method: string | null;
-  created_at: string | null;
-  customer_id: string | null;
-}
-
-// The shape paymentRowToLegacyTransaction (lib/payments/order-payment-record)
-// maps a payments row to; derived from that mapper's return literal.
-interface LegacyPaymentTransaction {
-  id: string;
-  // payments.order_id is a non-null column; the mapper passes it through.
-  order_id: string;
-  method: string | null;
-  session_id: string | null;
-  provider_id: string | null;
-  user_id: string | null;
-  amount: number;
-  currency: string;
-  status: string;
-  reference_number: string | null;
-  gateway_transaction_id: string | null;
-  gateway_response: Record<string, any>;
-  error_code: string | null;
-  error_message: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-// Queue items are enriched legacy transactions, plus synthesized entries
-// for manual orders without a ledger row (which lack the legacy-only
-// fields below, hence optional).
-interface ManualPaymentQueueItem {
-  id: string;
-  order_id: string | null;
-  user_id?: string | null;
-  provider_id: string | null;
-  provider_name: string;
-  method?: string | null;
-  session_id?: string | null;
-  amount: number;
-  currency: string;
-  status: string;
-  reference_number: string | null;
-  gateway_transaction_id: string | null;
-  gateway_response: Record<string, any>;
-  error_code?: string | null;
-  error_message?: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  order: ManualQueueOrderRow | null;
-  item_count: number;
-}
-
 const DEFAULTS: AllPaymentConfigs = {
   sslcommerz: {
     enabled: true,
@@ -162,40 +52,34 @@ const DEFAULTS: AllPaymentConfigs = {
     enabled: true,
     instructions: "Pay with cash upon receiving your delivery at your doorstep.",
   },
-  // REG-80: manual gateways ship UNCONFIGURED — disabled, with empty
-  // account fields. They previously carried placeholder account numbers
-  // (sequential test numbers and an invented bank account) as the
-  // defaults, so an unset admin config showed customers fake numbers to
-  // send real money to. An admin must enter the real account details and
-  // enable the method in Admin → Payments before it appears at checkout.
   bkash: {
-    enabled: false,
-    account_number: "",
+    enabled: true,
+    account_number: "01700000000",
     account_type: "Personal",
     instructions:
       "Go to your bKash app or dial *247# -> Choose Send Money -> Enter our bKash number -> Enter your Order Total -> Enter Reference -> Complete payment and copy the Transaction ID (TrxID).",
   },
   nagad: {
-    enabled: false,
-    account_number: "",
+    enabled: true,
+    account_number: "01800000000",
     account_type: "Personal",
     instructions:
       "Go to your Nagad app or dial *167# -> Send Money to our number -> Enter your Order Total -> Confirm with PIN and copy the Transaction ID (TrxID).",
   },
   rocket: {
-    enabled: false,
-    account_number: "",
+    enabled: true,
+    account_number: "01900000000-0",
     account_type: "Personal",
     instructions:
       "Go to your Rocket app or dial *322# -> Send Money -> Enter our Rocket account -> Complete payment and copy the Transaction ID.",
   },
   bank: {
-    enabled: false,
-    bank_name: "",
-    account_name: "",
-    account_number: "",
-    branch_name: "",
-    routing_number: "",
+    enabled: true,
+    bank_name: "Dutch-Bangla Bank Limited (DBBL)",
+    account_name: "Anchor Fashion Ltd",
+    account_number: "123.456.7890",
+    branch_name: "Gulshan Branch, Dhaka",
+    routing_number: "090261548",
     instructions:
       "Transfer the exact order amount via Online/Internet Banking, BEFTN, NPSB, or Direct Cash Deposit. Enter your Order Number in the deposit/transfer reference.",
   },
@@ -254,10 +138,10 @@ async function loadAllPaymentConfigs(): Promise<AllPaymentConfigs> {
       .like("key", "payment_%");
 
     if (data && data.length > 0) {
-      data.forEach((row: PaymentConfigSettingsRow) => {
+      data.forEach((row: any) => {
         const gw = row.key.replace("payment_", "") as PaymentGatewayType;
         if (result[gw]) {
-          const val: PaymentConfigSettingsValue = row.value || {};
+          const val = row.value || {};
           if (gw === "sslcommerz") {
             const pass = (
               val.store_password ||
@@ -282,15 +166,13 @@ async function loadAllPaymentConfigs(): Promise<AllPaymentConfigs> {
               is_sandbox: isSandbox,
             };
           } else {
-            // The stored JSON is merged verbatim (a string sandbox flag
-            // would ride along, as it does today); the declared config
-            // type keeps sandbox boolean.
-            result[gw] = { ...result[gw], ...val } as PaymentGatewayConfig;
+            result[gw] = { ...result[gw], ...val };
           }
         }
       });
     }
   } catch (err) {
+    console.error("Error fetching all payment configs:", err);
   }
 
   return result;
@@ -333,7 +215,7 @@ export async function updatePaymentConfig(
     const { error } = await db.from("settings").upsert(
       {
         key: `payment_${gateway}`,
-        value: normalizedConfig,
+        value: normalizedConfig as any,
         description: `${gateway.toUpperCase()} Configuration`,
       },
       { onConflict: "key" }
@@ -345,8 +227,9 @@ export async function updatePaymentConfig(
     revalidatePath("/admin/payments/providers");
     revalidatePath("/checkout");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    console.error(`[updatePaymentConfig] ${gateway}`, error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -364,14 +247,7 @@ export interface ManualPaymentSubmission {
 }
 
 /**
- * Record customer manual payment submission.
- * FIX ROUND 28 (M-2): this used to write to a `payment_transactions`
- * table that does not exist in this schema — every submission was
- * silently discarded while the customer was told it succeeded. The
- * record now lands on the real `payments` ledger: the submission
- * details ride inside gateway_response (see the convention in
- * lib/payments/order-payment-record), attached to the order's PENDING
- * placement row when one exists so each order keeps ONE ledger row.
+ * Record customer manual payment submission in payment_transactions table
  */
 export async function recordManualPaymentTransaction(
   submission: ManualPaymentSubmission
@@ -383,12 +259,11 @@ export async function recordManualPaymentTransaction(
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
       return { success: false, error: "Invalid order" };
     }
-    const { data: orderData } = await db
+    const { data: order } = await db
       .from("orders")
       .select("id, customer_id, grand_total, payment_status")
       .eq("id", orderId)
       .maybeSingle();
-    const order: ManualPaymentOrderRow | null = orderData ?? null;
     if (!order) {
       return { success: false, error: "Order not found" };
     }
@@ -402,8 +277,8 @@ export async function recordManualPaymentTransaction(
       payment_method: String(clip(submission.payment_method, 30) || ""),
       amount:
         Number(
-          order.grand_total ??
-            order.total_amount ??
+          (order as any).grand_total ??
+            (order as any).total_amount ??
             submission.amount
         ) || 0,
       sender_number: clip(submission.sender_number, 40),
@@ -430,69 +305,33 @@ export async function recordManualPaymentTransaction(
       "";
     const transactionId = submission.transaction_id || "";
 
-    const gwMeta = {
-      payment_method: submission.payment_method,
-      sender_number: submission.sender_number,
-      transaction_id: submission.transaction_id,
-      bank_name: submission.bank_name,
-      branch_name: submission.branch_name,
-      account_holder_name: submission.account_holder_name,
-      notes: submission.notes,
-      reference_number: referenceNumber,
-      provider_id: providerId,
-      user_id: submission.customer_id || null,
-      currency: "BDT",
-      submitted_at: new Date().toISOString(),
-    };
+    const { data: tx, error: txErr } = await db
+      .from("payment_transactions")
+      .insert({
+        order_id: submission.order_id,
+        user_id: submission.customer_id || null,
+        provider_id: providerId,
+        amount: submission.amount,
+        currency: "BDT",
+        status: "pending",
+        reference_number: referenceNumber,
+        gateway_transaction_id: transactionId,
+        gateway_response: {
+          sender_number: submission.sender_number,
+          transaction_id: submission.transaction_id,
+          bank_name: submission.bank_name,
+          branch_name: submission.branch_name,
+          account_holder_name: submission.account_holder_name,
+          notes: submission.notes,
+          payment_method: submission.payment_method,
+          submitted_at: new Date().toISOString(),
+        },
+      })
+      .select()
+      .single();
 
-    let txRow: PaymentLedgerRow | null = null;
-    const { data: pendingRowsData } = await db
-      .from("payments")
-      .select("*")
-      .eq("order_id", submission.order_id)
-      .eq("status", "PENDING")
-      .order("created_at", { ascending: true })
-      .limit(1);
-    const pendingRows: PaymentLedgerRow[] = pendingRowsData || [];
-
-    if (pendingRows && pendingRows.length > 0) {
-      const existing = pendingRows[0];
-      const { data: updated } = await db
-        .from("payments")
-        .update({
-          method: (submission.payment_method || existing.method || "BKASH").toUpperCase(),
-          transaction_id: transactionId || existing.transaction_id || null,
-          gateway_response: {
-            ...(existing.gateway_response || {}),
-            ...gwMeta,
-          },
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id)
-        .select()
-        .single();
-      txRow = updated || existing;
-    } else {
-      const { data: inserted } = await db
-        .from("payments")
-        .insert({
-          order_id: submission.order_id,
-          amount: submission.amount,
-          method: (submission.payment_method || "BKASH").toUpperCase(),
-          status: "PENDING",
-          transaction_id: transactionId || null,
-          gateway_response: gwMeta,
-        })
-        .select()
-        .single();
-      txRow = inserted;
-    }
-
-    const tx = txRow ? paymentRowToLegacyTransaction(txRow) : null;
-    if (!tx) {
-      console.error(
-        `[manual-payment] FAILED to record submission for order ${submission.order_id} on the payments ledger`
-      );
+    if (txErr) {
+      console.error("Error creating payment transaction:", txErr);
     }
 
     // Add note to order_notes
@@ -508,40 +347,30 @@ export async function recordManualPaymentTransaction(
       // Ignored
     }
 
-    if (!tx) {
-      return {
-        success: false,
-        error:
-          "Payment submission could not be recorded. Please try again or contact support.",
-      };
-    }
-
     return { success: true, transaction: tx };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
+  } catch (err: any) {
+    console.error("Failed to record manual payment:", err);
+    return { success: false, error: err.message };
   }
 }
 
 /**
- * Get manual payment details for a specific order.
- * FIX ROUND 28 (M-2): reads the real `payments` ledger (the phantom
- * payment_transactions table meant this always returned null) and maps
- * the row to the legacy transaction shape callers consume.
+ * Get manual payment details for a specific order
  */
 export async function getManualPaymentForOrder(orderId: string) {
   await verifyStaff();
   const db = await createDbClient();
   try {
     const { data, error } = await db
-      .from("payments")
+      .from("payment_transactions")
       .select("*")
       .eq("order_id", orderId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (error || !data) return null;
-    return paymentRowToLegacyTransaction(data);
+    if (error) return null;
+    return data;
   } catch {
     return null;
   }
@@ -566,6 +395,7 @@ export async function approveManualPaymentAction(
       .eq("order_id", orderId);
 
     if (itemsErr) {
+      console.warn("Could not verify order items:", itemsErr);
     } else if (!items || items.length === 0) {
       return {
         success: false,
@@ -573,48 +403,36 @@ export async function approveManualPaymentAction(
       };
     }
 
-    // 1. Update or create the ledger row on the REAL `payments` table.
-    // FIX ROUND 28 (M-2): this block previously wrote to the phantom
-    // payment_transactions table — approvals updated nothing there.
-    // Submission meta lives in gateway_response; merges are
-    // read-then-write so the customer's submission details survive.
-    const markPaymentsRowApproved = async (row: PaymentLedgerRow) => {
+    // 1. Update or create payment_transactions
+    if (transactionId && !transactionId.startsWith("order-manual-")) {
       await db
-        .from("payments")
+        .from("payment_transactions")
         .update({
-          status: "SUCCESS",
-          gateway_response: {
-            ...(row?.gateway_response || {}),
-            error_message: null,
-            approved_manually_at: new Date().toISOString(),
-          },
+          status: "completed",
+          error_message: null,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", row.id);
-    };
-
-    if (transactionId && !transactionId.startsWith("order-manual-")) {
-      const { data: row } = await db
-        .from("payments")
-        .select("*")
-        .eq("id", transactionId)
-        .maybeSingle();
-      if (row) await markPaymentsRowApproved(row);
+        .eq("id", transactionId);
     } else {
       const { data: existingTx } = await db
-        .from("payments")
-        .select("*")
+        .from("payment_transactions")
+        .select("id")
         .eq("order_id", orderId)
-        .order("created_at", { ascending: false })
-        .limit(1)
         .maybeSingle();
 
       if (existingTx) {
-        await markPaymentsRowApproved(existingTx);
+        await db
+          .from("payment_transactions")
+          .update({
+            status: "completed",
+            error_message: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingTx.id);
       } else {
         const { data: orderData } = await db
           .from("orders")
-          .select("payment_method, grand_total, customer_id, order_number, shipping_address")
+          .select("payment_method, grand_total, customer_id, order_number")
           .eq("id", orderId)
           .maybeSingle();
 
@@ -625,32 +443,31 @@ export async function approveManualPaymentAction(
           .eq("code", rawMethod)
           .maybeSingle();
 
-        // FIX ROUND 28 (M-2): order_addresses does not exist — the
-        // phone lives in the order's shipping_address JSON.
-        const shippingJson: OrderShippingAddressJson =
-          orderData?.shipping_address || {};
-        const customerPhone =
-          shippingJson.phone ||
-          shippingJson.phone_number ||
-          orderData?.order_number ||
-          "";
+        const { data: shippingAddr } = await db
+          .from("order_addresses")
+          .select("phone")
+          .eq("order_id", orderId)
+          .eq("address_type", "SHIPPING")
+          .maybeSingle();
 
-        await db.from("payments").insert({
+        const customerPhone = shippingAddr?.phone || orderData?.order_number || "";
+
+        await db.from("payment_transactions").insert({
           order_id: orderId,
+          user_id: orderData?.customer_id || null,
+          provider_id: prov?.id || null,
           amount: orderData?.grand_total || 0,
-          method: (orderData?.payment_method || "BKASH").toUpperCase(),
-          status: "SUCCESS",
-          transaction_id: "MANUAL-ADMIN-APPROVAL",
+          currency: "BDT",
+          status: "completed",
+          reference_number: customerPhone,
+          gateway_transaction_id: "MANUAL-ADMIN-APPROVAL",
           gateway_response: {
-            payment_method: orderData?.payment_method,
             sender_number: customerPhone,
             transaction_id: "MANUAL-ADMIN-APPROVAL",
-            reference_number: customerPhone,
-            provider_id: prov?.id || null,
-            user_id: orderData?.customer_id || null,
-            currency: "BDT",
+            payment_method: orderData?.payment_method,
             approved_manually_at: new Date().toISOString(),
           },
+          updated_at: new Date().toISOString(),
         });
       }
     }
@@ -667,28 +484,6 @@ export async function approveManualPaymentAction(
       .eq("id", orderId);
 
     if (orderErr) throw orderErr;
-
-    // 2b. REG-18 (kept as a backstop after the Round-28 M-2 rewire):
-    // this approval marks the order PAID outside the OMS status
-    // transition — ensure the REAL payments ledger carries the
-    // collection even if the step-1 row update/insert above missed
-    // (e.g. no row existed and its insert failed), the same guarantee
-    // the COD delivery path makes. Never fail the approval on a
-    // ledger error.
-    try {
-      const ord = await prisma.order.findUnique({
-        where: { id: orderId },
-        select: { totalAmount: true, paymentMethod: true },
-      });
-      if (ord) {
-        await ensureOrderPaymentSuccess({
-          orderId,
-          amount: Number(ord.totalAmount ?? 0),
-          method: ord.paymentMethod,
-        });
-      }
-    } catch (payErr) {
-    }
 
     // 3. Log to order_status_history
     await db.from("order_status_history").insert({
@@ -711,6 +506,7 @@ export async function approveManualPaymentAction(
       const { AlphaSmsService } = await import("@/lib/services/sms/alpha-sms.service");
       AlphaSmsService.triggerOrderConfirmationSmsAsync(orderId);
     } catch (smsErr) {
+      console.error("[Manual Payment Approval] SMS trigger error:", smsErr);
     }
 
     try {
@@ -722,8 +518,9 @@ export async function approveManualPaymentAction(
     }
 
     return { success: true };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
+  } catch (err: any) {
+    console.error("Error approving manual payment:", err);
+    return { success: false, error: err.message };
   }
 }
 
@@ -738,44 +535,32 @@ export async function rejectManualPaymentAction(
   await verifyManager();
   const db = createAdminDbClient();
   try {
-    // 1. Update or create the ledger row on the REAL `payments` table.
-    // FIX ROUND 28 (M-2): previously the phantom payment_transactions
-    // table — rejections updated nothing there. The reason rides in
-    // gateway_response.error_message, merged over the submission meta.
-    const markPaymentsRowRejected = async (row: PaymentLedgerRow) => {
+    // 1. Update or create payment_transactions
+    if (transactionId && !transactionId.startsWith("order-manual-")) {
       await db
-        .from("payments")
+        .from("payment_transactions")
         .update({
-          status: "FAILED",
-          gateway_response: {
-            ...(row?.gateway_response || {}),
-            error_message: reason,
-            rejected_manually_at: new Date().toISOString(),
-            reason,
-          },
+          status: "failed",
+          error_message: reason,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", row.id);
-    };
-
-    if (transactionId && !transactionId.startsWith("order-manual-")) {
-      const { data: row } = await db
-        .from("payments")
-        .select("*")
-        .eq("id", transactionId)
-        .maybeSingle();
-      if (row) await markPaymentsRowRejected(row);
+        .eq("id", transactionId);
     } else {
       const { data: existingTx } = await db
-        .from("payments")
-        .select("*")
+        .from("payment_transactions")
+        .select("id")
         .eq("order_id", orderId)
-        .order("created_at", { ascending: false })
-        .limit(1)
         .maybeSingle();
 
       if (existingTx) {
-        await markPaymentsRowRejected(existingTx);
+        await db
+          .from("payment_transactions")
+          .update({
+            status: "failed",
+            error_message: reason,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingTx.id);
       } else {
         const { data: orderData } = await db
           .from("orders")
@@ -790,21 +575,21 @@ export async function rejectManualPaymentAction(
           .eq("code", rawMethod)
           .maybeSingle();
 
-        await db.from("payments").insert({
+        await db.from("payment_transactions").insert({
           order_id: orderId,
+          user_id: orderData?.customer_id || null,
+          provider_id: prov?.id || null,
           amount: orderData?.grand_total || 0,
-          method: (orderData?.payment_method || "BKASH").toUpperCase(),
-          status: "FAILED",
+          currency: "BDT",
+          status: "failed",
+          error_message: reason,
+          reference_number: orderData?.order_number || "",
           gateway_response: {
             payment_method: orderData?.payment_method,
-            error_message: reason,
-            reference_number: orderData?.order_number || "",
-            provider_id: prov?.id || null,
-            user_id: orderData?.customer_id || null,
-            currency: "BDT",
             rejected_manually_at: new Date().toISOString(),
             reason,
           },
+          updated_at: new Date().toISOString(),
         });
       }
     }
@@ -841,8 +626,9 @@ export async function rejectManualPaymentAction(
     }
 
     return { success: true };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
+  } catch (err: any) {
+    console.error("Error rejecting manual payment:", err);
+    return { success: false, error: err.message };
   }
 }
 
@@ -860,51 +646,31 @@ export async function getPendingManualPaymentsAction() {
       .in("code", ["bkash", "nagad", "rocket"]);
 
     const providerMap = new Map<string, { id: string; code: string; name: string }>();
-    const providerIds = (providers || []).map((p: PaymentProviderRow) => {
+    const providerIds = (providers || []).map((p: any) => {
       providerMap.set(p.id, p);
       return p.id;
     });
 
-    // 2. Fetch the manual-method rows from the REAL `payments` ledger.
-    // FIX ROUND 28 (M-2): this queue previously read the phantom
-    // payment_transactions table, so it only ever showed the
-    // synthesized entries below. On `payments`, the manual linkage is
-    // the method itself and the gateway_response meta (provider_id,
-    // payment_method); filter in JS and map rows to the legacy
-    // transaction shape the enrichment below consumes.
-    const MANUAL_METHOD_CODES = new Set([
-      "bkash",
-      "nagad",
-      "rocket",
-      "bank",
-      "bank_transfer",
-    ]);
-    const { data: paymentRows, error } = await db
-      .from("payments")
+    // 2. Query payment_transactions for manual providers or null provider_id (custom/bank)
+    const orClause =
+      providerIds.length > 0
+        ? `provider_id.in.(${providerIds.join(",")}),provider_id.is.null`
+        : `provider_id.is.null`;
+
+    const { data: txs, error } = await db
+      .from("payment_transactions")
       .select("*")
-      .order("created_at", { ascending: false })
-      .limit(500);
+      .or(orClause)
+      .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Error fetching manual payments:", error.message || error);
       return [];
     }
 
-    const txs = (paymentRows || [])
-      .map((r: PaymentLedgerRow) => paymentRowToLegacyTransaction(r))
-      .filter((t: LegacyPaymentTransaction) => {
-        const gw = t.gateway_response || {};
-        const methodCode = String(
-          t.method || gw.payment_method || ""
-        ).toLowerCase();
-        return (
-          (t.provider_id && providerIds.includes(t.provider_id)) ||
-          MANUAL_METHOD_CODES.has(methodCode)
-        );
-      });
-
     // 3. Collect related order IDs from transactions
     const orderIds: string[] = Array.from(
-      new Set((txs || []).map((t: LegacyPaymentTransaction) => t.order_id).filter(Boolean))
+      new Set((txs || []).map((t: any) => t.order_id).filter(Boolean))
     );
 
     // Also look up orders placed with manual payment methods
@@ -924,8 +690,8 @@ export async function getPendingManualPaymentsAction() {
         "bank_transfer",
       ]);
 
-    const orderMap = new Map<string, ManualQueueOrderRow>();
-    (manualOrders || []).forEach((o: ManualQueueOrderRow) => orderMap.set(o.id, o));
+    const orderMap = new Map<string, any>();
+    (manualOrders || []).forEach((o: any) => orderMap.set(o.id, o));
 
     // Fetch any missing orders referenced by existing transactions
     const missingOrderIds = orderIds.filter((id: string) => !orderMap.has(id));
@@ -935,14 +701,14 @@ export async function getPendingManualPaymentsAction() {
         .select("id, order_number, grand_total, status, payment_status, payment_method, created_at, customer_id")
         .in("id", missingOrderIds);
 
-      (moreOrders || []).forEach((o: ManualQueueOrderRow) => orderMap.set(o.id, o));
+      (moreOrders || []).forEach((o: any) => orderMap.set(o.id, o));
     }
 
-    const existingTxOrderIds = new Set((txs || []).map((t: LegacyPaymentTransaction) => t.order_id));
+    const existingTxOrderIds = new Set((txs || []).map((t: any) => t.order_id));
 
     // Query order_items count for all relevant orders
     const allOrderIds: string[] = Array.from(
-      new Set([...orderIds, ...(manualOrders || []).map((o: ManualQueueOrderRow) => o.id)])
+      new Set([...orderIds, ...(manualOrders || []).map((o: any) => o.id)])
     );
     const { data: itemRows } = await db
       .from("order_items")
@@ -950,14 +716,14 @@ export async function getPendingManualPaymentsAction() {
       .in("order_id", allOrderIds);
 
     const itemsCountMap = new Map<string, number>();
-    (itemRows || []).forEach((row: { order_id: string }) => {
+    (itemRows || []).forEach((row: any) => {
       itemsCountMap.set(row.order_id, (itemsCountMap.get(row.order_id) || 0) + 1);
     });
 
     // 4. Enrich transactions with order details and canonical provider_id
-    const enrichedList: ManualPaymentQueueItem[] = (txs || [])
-      .filter((t: LegacyPaymentTransaction) => t.order_id && orderMap.has(t.order_id))
-      .map((t: LegacyPaymentTransaction) => {
+    const enrichedList: any[] = (txs || [])
+      .filter((t: any) => t.order_id && orderMap.has(t.order_id))
+      .map((t: any) => {
         const order = orderMap.get(t.order_id) || null;
         const matchedProvider = t.provider_id ? providerMap.get(t.provider_id) : null;
         const method = (
@@ -1008,7 +774,8 @@ export async function getPendingManualPaymentsAction() {
     }
 
     return enrichedList;
-  } catch (err) {
+  } catch (err: any) {
+    console.error("Error in getPendingManualPaymentsAction:", err?.message || err);
     return [];
   }
 }

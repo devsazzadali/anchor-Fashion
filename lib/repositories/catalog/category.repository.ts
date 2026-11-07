@@ -1,16 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import {
   Category,
   CreateCategoryInput,
   UpdateCategoryInput,
 } from "@/types/catalog.types";
 
-function toCategory(
-  c: Prisma.CategoryGetPayload<{
-    include: { parent: { select: { id: true; name: true } } };
-  }>
-): Category {
+function toCategory(c: any): Category {
   return {
     id: c.id,
     name: c.name,
@@ -47,6 +42,7 @@ export class CategoryRepository {
 
       return records.map(toCategory);
     } catch (err) {
+      console.error("Error fetching categories via Prisma:", err);
       return [];
     }
   }
@@ -55,7 +51,7 @@ export class CategoryRepository {
    * Creates a new category in Neon PostgreSQL via Prisma.
    */
   static async createCategory(input: CreateCategoryInput): Promise<Category> {
-    const imageUrl = input.image_url || input.icon_url || null;
+    const imageUrl = input.image_url || (input as any).icon_url || null;
     const created = await prisma.category.create({
       data: {
         name: input.name,
@@ -83,7 +79,7 @@ export class CategoryRepository {
     id: string,
     input: UpdateCategoryInput
   ): Promise<Category> {
-    const rawImage = input.image_url !== undefined ? input.image_url : input.icon_url;
+    const rawImage = input.image_url !== undefined ? input.image_url : (input as any).icon_url;
     const updated = await prisma.category.update({
       where: { id },
       data: {
@@ -132,6 +128,7 @@ export class CategoryRepository {
       if (!record) return null;
       return toCategory(record);
     } catch (err) {
+      console.error("Error fetching category by ID:", err);
       return null;
     }
   }

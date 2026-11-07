@@ -28,16 +28,20 @@ import { prisma } from "@/lib/prisma";
 
 export const ObservabilityService = {
   async log(entry: LogEntry) {
+    console.warn("[Observability Log]", entry);
   },
 
   async recordMetric(entry: MetricEntry) {
+    console.warn("[Observability Metric]", entry);
   },
 
   async createIncident(entry: IncidentEntry) {
+    console.error("[Observability Incident]", entry);
     return null;
   },
 
-  async recordAITelemetry(telemetry: unknown) {
+  async recordAITelemetry(telemetry: any) {
+    console.warn("[Observability AI Telemetry]", telemetry);
   },
 
   async runHealthChecks() {
@@ -46,6 +50,7 @@ export const ObservabilityService = {
       await prisma.$queryRaw`SELECT 1`;
       dbStatus = "UP";
     } catch (e) {
+      console.error("[ObservabilityService] Database ping failed:", e);
     }
 
     return {

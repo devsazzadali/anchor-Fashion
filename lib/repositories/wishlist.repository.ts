@@ -19,7 +19,6 @@ export class WishlistRepository {
                   slug: true,
                   basePrice: true,
                   salePrice: true,
-                  vatPercent: true,
                   imageUrl: true,
                   media: {
                     select: {
@@ -77,7 +76,6 @@ export class WishlistRepository {
             price: Number(prod.basePrice),
             base_price: Number(prod.basePrice),
             sale_price: prod.salePrice ? Number(prod.salePrice) : null,
-            vat_percent: Number(prod.vatPercent || 0),
             main_image_url: mainImageUrl,
             stock_quantity: stockQuantity,
           },
@@ -92,7 +90,8 @@ export class WishlistRepository {
         updated_at: data.updatedAt.toISOString(),
         items,
       } as Wishlist;
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`Failed to fetch wishlist for ${userId}:`, error.message);
       return null;
     }
   }
@@ -119,10 +118,10 @@ export class WishlistRepository {
         updated_at: data.updatedAt.toISOString(),
         items: [],
       } as Wishlist;
-    } catch (err) {
+    } catch (err: any) {
       const existing = await this.getWishlist(userId);
       if (existing) return existing;
-      throw new Error(`Failed to create wishlist: ${(err as Error).message}`);
+      throw new Error(`Failed to create wishlist: ${err.message}`);
     }
   }
 

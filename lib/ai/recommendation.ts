@@ -1,17 +1,6 @@
 import { db } from "@/lib/db/client";
 import { RecommendationStrategy } from "./types";
 
-/**
- * Row shape getActiveStrategies reads off ai_recommendation_models rows.
- */
-interface AiRecommendationModelRow {
-  id?: string;
-  name: string;
-  strategy: string;
-  weight: number;
-  config: Record<string, unknown>;
-}
-
 export class AIRecommendationEngine {
   /**
    * Fetches active recommendation strategies and their weights.
@@ -24,10 +13,11 @@ export class AIRecommendationEngine {
       .order("weight", { ascending: false });
 
     if (error || !data) {
+      console.error("Failed to fetch recommendation models:", error);
       return [];
     }
 
-    return data.map((d: AiRecommendationModelRow) => ({
+    return data.map((d: any) => ({
       id: d.id,
       name: d.name,
       strategy: d.strategy,
@@ -62,6 +52,7 @@ export class AIRecommendationEngine {
     });
 
     if (error) {
+      console.error("Similarity search failed:", error);
       return [];
     }
 

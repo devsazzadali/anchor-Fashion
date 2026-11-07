@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 
-export function authErrorResponse(error: unknown, fallbackStatus = 500) {
-  const message =
-    (error as { message?: unknown } | null | undefined)?.message ||
-    "Internal Server Error";
+export function authErrorResponse(error: any, fallbackStatus = 500) {
+  const message = error?.message || "Internal Server Error";
   const status =
     typeof message === "string" && message.startsWith("Unauthorized")
       ? 401

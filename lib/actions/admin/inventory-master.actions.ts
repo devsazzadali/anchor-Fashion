@@ -2,19 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { invalidateProductCache } from "@/lib/cache/invalidate-catalog";
 
 import { generateEAN13Sync } from "@/lib/utils/barcode";
 import { verifyStaff } from "@/lib/security/roles";
-import { escapeLikeWildcards } from "@/lib/utils/like-escape";
 import { generateUniqueProductCode, formatVariantSku } from "@/lib/utils/product-code";
-
-/** variants.attributes JSON — the Color/Size keys the intake writes. */
-interface VariantColorSizeAttributes {
-  Color?: string | null;
-  Size?: string | null;
-}
 
 export async function generateEAN13BarcodeAction(prefix = "89420"): Promise<string> {
   return generateEAN13Sync(prefix);
@@ -235,8 +227,8 @@ export async function createInventoryMasterIntakeAction(input: InventoryMasterIn
       .filter((v) => (v.inventoryLevels[0]?.quantityAvailable || 0) > 0)
       .map((v) => {
         const qty = v.inventoryLevels[0].quantityAvailable;
-        const color = (v.attributes as VariantColorSizeAttributes | null)?.Color || "";
-        const size = (v.attributes as VariantColorSizeAttributes | null)?.Size || "";
+        const color = (v.attributes as any)?.Color || "";
+        const size = (v.attributes as any)?.Size || "";
         return {
           variantId: v.id,
           warehouseId: warehouse,
@@ -260,8 +252,8 @@ export async function createInventoryMasterIntakeAction(input: InventoryMasterIn
       id: v.id,
       sku: v.sku,
       barcode: v.barcode,
-      color: (v.attributes as VariantColorSizeAttributes | null)?.Color || "",
-      size: (v.attributes as VariantColorSizeAttributes | null)?.Size || "",
+      color: (v.attributes as any)?.Color || "",
+      size: (v.attributes as any)?.Size || "",
       quantity: v.inventoryLevels[0]?.quantityAvailable || 0,
     }));
 
@@ -289,10 +281,11 @@ export async function createInventoryMasterIntakeAction(input: InventoryMasterIn
       data: result,
       message: `Successfully created master product "${name}" with ${result.totalCreatedVariants} variants and ${result.totalStockUnits} stock units in Inventory.`,
     };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Error creating inventory master intake:", error);
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to create master product intake.",
+      error: error?.message || "Failed to create master product intake.",
     };
   }
 }
@@ -308,7 +301,7 @@ export async function getInventoryMasterListAction(params?: {
   page?: number;
 }) {
   try {
-    const search = escapeLikeWildcards(params?.search?.trim() || ""); // REG-43: literal LIKE match ("" stays "")  // SECURITY: server actions are public endpoints; authorize every call.
+    const search = params?.search?.trim() || "";  // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
 
     const status = params?.status || "ALL";
@@ -317,7 +310,7 @@ export async function getInventoryMasterListAction(params?: {
     const page = params?.page || 1;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ProductWhereInput & { AND?: Prisma.ProductWhereInput[] } = {
+    const where: any = {
       deletedAt: null,
     };
 
@@ -461,7 +454,7 @@ export async function getInventoryMasterListAction(params?: {
             totalDispatched += bt.quantity || 0;
           }
         }
-        for (const oi of v.orderItems || []) {
+        for (const oi of (v as any).orderItems || []) {
           const qty = Number(oi.quantity || 0);
           totalSold += qty;
           totalSoldRevenue += Number(oi.totalPrice || (oi.unitPrice ? Number(oi.unitPrice) * qty : 0));
@@ -494,13 +487,13 @@ export async function getInventoryMasterListAction(params?: {
         categoryId: p.categoryId,
         categoryPath,
         parentCategory: p.category?.parent ? p.category.parent.name : null,
-        categoryIds: p.productCategories?.length
-          ? p.productCategories.map((pc) => pc.categoryId).filter(Boolean)
+        categoryIds: (p as any).productCategories?.length
+          ? (p as any).productCategories.map((pc: any) => pc.categoryId).filter(Boolean)
           : p.categoryId
           ? [p.categoryId]
           : [],
-        categories: p.productCategories?.length
-          ? p.productCategories.map((pc) => pc.category?.name).filter(Boolean)
+        categories: (p as any).productCategories?.length
+          ? (p as any).productCategories.map((pc: any) => pc.category?.name).filter(Boolean)
           : p.category?.name
           ? [p.category.name]
           : [],
@@ -523,7 +516,7 @@ export async function getInventoryMasterListAction(params?: {
         variants: p.variants.map((v) => {
           const avail = v.inventoryLevels.reduce((s, l) => s + (l.quantityAvailable || 0), 0);
           const res = v.inventoryLevels.reduce((s, l) => s + (l.quantityReserved || 0), 0);
-          const sold = (v.orderItems || []).reduce((s: number, oi) => s + (Number(oi.quantity) || 0), 0);
+          const sold = ((v as any).orderItems || []).reduce((s: number, oi: any) => s + (Number(oi.quantity) || 0), 0);
           return {
             id: v.id,
             sku: v.sku,
@@ -550,10 +543,11 @@ export async function getInventoryMasterListAction(params?: {
         categoryCounts,
       },
     };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Error in getInventoryMasterListAction:", error);
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to load master inventory list.",
+      error: error?.message || "Failed to load master inventory list.",
     };
   }
 }
@@ -684,6 +678,7 @@ export async function dispatchToBranchAction(input: {
       result = await executeTransfer();
     } catch (txErr: any) {
       if (txErr?.code === "P2028" || txErr?.message?.includes("Transaction not found")) {
+        console.warn("[dispatchToBranchAction] Pooler transaction timed out, retrying once...");
         result = await executeTransfer();
       } else {
         throw txErr;
@@ -701,10 +696,11 @@ export async function dispatchToBranchAction(input: {
       data: result,
       message: `Successfully transferred ${quantity} units to ${branch.name} (Transfer #${transferNumber}).`,
     };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Error dispatching branch transfer:", error);
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to dispatch branch transfer.",
+      error: error?.message || "Failed to dispatch branch transfer.",
     };
   }
 }
@@ -824,10 +820,11 @@ export async function getBranchTransfersReportAction(params?: {
         branches: allBranches,
       },
     };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Error in getBranchTransfersReportAction:", error);
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to load branch transfers report.",
+      error: error?.message || "Failed to load branch transfers report.",
     };
   }
 }
@@ -1020,10 +1017,11 @@ export async function getInventoryFinancialReportAction() {
         products: productBreakdown.sort((a, b) => b.retailValuation - a.retailValuation),
       },
     };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Error in getInventoryFinancialReportAction:", error);
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to generate financial report.",
+      error: error?.message || "Failed to generate financial report.",
     };
   }
 }
@@ -1063,10 +1061,10 @@ export async function toggleProductPublishStatusAction(productId: string) {
       status: newStatus,
       message: `Product "${product.name}" is now ${newStatus === "ACTIVE" ? "PUBLISHED (Live on Website)" : "DRAFT (Saved in Inventory)"}.`,
     };
-  } catch (error) {
+  } catch (error: any) {
     return {
       success: false,
-      error: (error as Error)?.message || "Failed to update publish status.",
+      error: error?.message || "Failed to update publish status.",
     };
   }
 }

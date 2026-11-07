@@ -57,7 +57,7 @@ export class PhoneOtpService {
     const db = createAdminDbClient();
     await db
       .from("cod_verifications")
-      .upsert(row, { onConflict: "session_id" });
+      .upsert(row as any, { onConflict: "session_id" });
   }
 
   /**
@@ -134,6 +134,7 @@ export class PhoneOtpService {
       message: `Anchor Fashion: Your account verification code is ${rawOtp}. Valid for 5 mins. Do not share this code with anyone.`,
       type: "ACCOUNT_CLAIM",
     }).catch((err) => {
+      console.warn("[PhoneOtpService] SMS dispatch error:", err);
     });
 
     return { success: true, maskedTarget };

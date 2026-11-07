@@ -53,6 +53,7 @@ export class StockMovementRepository {
         };
       });
     } catch (err) {
+      console.error("Unexpected error in getMovements:", err);
       return [];
     }
   }

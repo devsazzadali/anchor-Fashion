@@ -18,49 +18,6 @@ function assertIdent(name: string, kind = "identifier"): string {
   return name;
 }
 
-/**
- * REG-65 batch 1: the argument bag for RPC calls. The named keys are
- * the ones the fallback implementations below actually read (both the
- * `p_`-prefixed stored-function spellings and the bare spellings);
- * any other argument a caller passes rides the index signature.
- */
-export interface RpcArgs {
-  p_order_id?: string | null;
-  order_id?: string | null;
-  id?: string | null;
-  p_variant_id?: string | null;
-  variant_id?: string | null;
-  p_quantity?: number | null;
-  quantity?: number | null;
-  p_coupon_code?: string | null;
-  coupon_code?: string | null;
-  code?: string | null;
-  p_coupon_id?: string | null;
-  coupon_id?: string | null;
-  p_customer_id?: string | null;
-  customer_id?: string | null;
-  p_discount_applied?: number | null;
-  discount_applied?: number | null;
-  p_account_id?: string | null;
-  account_id?: string | null;
-  p_points?: number | null;
-  points?: number | null;
-  label_id?: string | null;
-  [key: string]: unknown;
-}
-
-/** Result contract of a fallback / stored-function call. */
-export interface RpcCallResult {
-  data: unknown;
-  error: { message: string; code?: string } | null;
-}
-
-/** Row shape of the order_items lookups in the inventory fallbacks. */
-interface OrderItemQuantityRow {
-  variant_id: string | null;
-  quantity: number;
-}
-
 const KNOWN_FALLBACK_RPCS = [
   "consume_coupon_atomic",
   "release_coupon_atomic",
@@ -77,17 +34,14 @@ const KNOWN_FALLBACK_RPCS = [
   "increment_label_print_count",
 ];
 
-async function runFallback(
-  fnName: string,
-  args: RpcArgs
-): Promise<RpcCallResult> {
+async function runFallback(fnName: string, args: any): Promise<any> {
   if (fnName === "release_order_inventory") {
     const orderId = args.p_order_id || args.order_id || args.id;
     if (orderId) {
       const items = (await prisma.$queryRawUnsafe(
         `SELECT variant_id, quantity FROM order_items WHERE order_id = $1::uuid`,
         orderId
-      )) as OrderItemQuantityRow[];
+      )) as any[];
       for (const item of items) {
         if (item.variant_id) {
           await prisma.$executeRawUnsafe(
@@ -109,7 +63,7 @@ async function runFallback(
       const items = (await prisma.$queryRawUnsafe(
         `SELECT variant_id, quantity FROM order_items WHERE order_id = $1::uuid`,
         orderId
-      )) as OrderItemQuantityRow[];
+      )) as any[];
       for (const item of items) {
         if (item.variant_id) {
           await prisma.$executeRawUnsafe(
@@ -153,24 +107,24 @@ async function runFallback(
     );
 
     if (!couponId && couponCode) {
-      const found = (await prisma.$queryRawUnsafe(
+      const found: any = await prisma.$queryRawUnsafe(
         `SELECT id FROM coupons WHERE UPPER(code) = UPPER($1) LIMIT 1`,
         couponCode.trim()
-      )) as Array<{ id: string }>;
+      );
       if (found && found.length > 0) {
         couponId = found[0].id;
       }
     }
 
     if (couponId) {
-      // A3-B3: the usage row and the used_count increment are ONE
-      // redemption record — both must land or neither does. Previously
-      // the increment ran first and the usage insert was wrapped in a
-      // swallow-everything try/catch, so any insert failure left
-      // used_count bumped with no coupon_usages row (and other flows
-      // skipped recording entirely), under-recording real redemptions.
-      // Now the insert is mandatory: on failure the caller gets an
-      // error and order placement rolls back.
+      await prisma.$executeRawUnsafe(
+        `UPDATE coupons
+         SET used_count = COALESCE(used_count, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1::uuid`,
+        couponId
+      );
+
       try {
         await prisma.$executeRawUnsafe(
           `INSERT INTO coupon_usages (id, coupon_id, order_id, customer_id, discount_amount, created_at)
@@ -180,40 +134,21 @@ async function runFallback(
           customerId || null,
           discountApplied
         );
-      } catch (usageErr: any) {
-        return {
-          data: null,
-          error: {
-            message: `Failed to record coupon usage: ${usageErr?.message || usageErr}`,
-          },
-        };
+      } catch (usageErr) {
+        console.warn("Coupon usage record warning:", usageErr);
       }
-
-      await prisma.$executeRawUnsafe(
-        `UPDATE coupons
-         SET used_count = COALESCE(used_count, 0) + 1,
-             updated_at = NOW()
-         WHERE id = $1::uuid`,
-        couponId
-      );
 
       return { data: true, error: null };
     }
-    // Coupon not found: that is a failed redemption, not a silent
-    // success — surface it so the order can roll back instead of
-    // granting a discount the ledger never recorded.
-    return {
-      data: null,
-      error: { message: `Coupon not found for code: ${couponCode || "(none)"}` },
-    };
+    return { data: true, error: null };
   } else if (fnName === "release_coupon_atomic") {
     const orderId = args.p_order_id || args.order_id;
     if (orderId) {
       try {
-        const usages = (await prisma.$queryRawUnsafe(
+        const usages: any = await prisma.$queryRawUnsafe(
           `SELECT coupon_id FROM coupon_usages WHERE order_id = $1::uuid`,
           orderId
-        )) as Array<{ coupon_id: string }>;
+        );
         if (usages && usages.length > 0) {
           const couponId = usages[0].coupon_id;
           await prisma.$executeRawUnsafe(
@@ -229,6 +164,7 @@ async function runFallback(
           );
         }
       } catch (releaseErr) {
+        console.warn("Coupon release notice:", releaseErr);
       }
       return { data: true, error: null };
     }
@@ -294,7 +230,7 @@ async function runFallback(
   return { data: true, error: null };
 }
 
-export function callRpc(fnName: string, args?: RpcArgs) {
+export function callRpc(fnName: string, args?: any) {
   const p = (async () => {
     try {
       assertIdent(fnName, "function name");
@@ -302,12 +238,12 @@ export function callRpc(fnName: string, args?: RpcArgs) {
       if (!args || Object.keys(args).length === 0) {
         const res = (await prisma.$queryRawUnsafe(
           `SELECT * FROM "${fnName}"()`
-        )) as unknown[];
+        )) as any[];
         return { data: serializePlain(res), error: null };
       }
 
       const keys = Object.keys(args);
-      const params: unknown[] = [];
+      const params: any[] = [];
       const placeholders: string[] = [];
       for (const k of keys) {
         const val = args[k];
@@ -337,9 +273,9 @@ export function callRpc(fnName: string, args?: RpcArgs) {
           const res = (await prisma.$queryRawUnsafe(
             `SELECT * FROM "${fnName}"(${placeholders.join(", ")})`,
             ...params
-          )) as unknown[];
+          )) as any[];
           return { data: serializePlain(res), error: null };
-        } catch (dbErr) {
+        } catch (dbErr: any) {
           // If stored function execution failed, evaluate the fallback below.
         }
       }
@@ -348,9 +284,9 @@ export function callRpc(fnName: string, args?: RpcArgs) {
     } catch (e: any) {
       return { data: null, error: { message: e.message, code: e.code } };
     }
-  })() as Promise<RpcCallResult> & {
-    maybeSingle: () => Promise<RpcCallResult>;
-    single: () => Promise<RpcCallResult>;
+  })() as Promise<any> & {
+    maybeSingle: () => Promise<any>;
+    single: () => Promise<any>;
   };
   p.maybeSingle = () => p;
   p.single = () => p;

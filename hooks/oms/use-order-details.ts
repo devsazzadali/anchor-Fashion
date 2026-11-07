@@ -3,7 +3,7 @@ import {
   getOrderDetailsAction,
   updateOrderStatusAction,
 } from "@/app/actions/oms/order.actions";
-import { UpdateOrderStatusInput } from "@/schemas/oms.schema";
+import { UpdateOrderStatusInput } from "@/lib/validations/oms";
 
 export function useOrderDetails(orderId: string) {
   const queryClient = useQueryClient();
@@ -15,10 +15,6 @@ export function useOrderDetails(orderId: string) {
       if (!response.success) throw new Error(response.error);
       return response.data;
     },
-    // A missing order must settle immediately: with the default 3 retries
-    // (plus backoff) the page sat on "Loading order details…" long enough
-    // to look like an infinite spinner.
-    retry: false,
   });
 
   const updateStatusMutation = useMutation({
@@ -30,10 +26,6 @@ export function useOrderDetails(orderId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      // S5-4: force an immediate refetch of the detail query as well —
-      // invalidation alone left the page on the pre-transition state for
-      // several transitions until a manual reload.
-      queryClient.refetchQueries({ queryKey: ["order", orderId] });
     },
   });
 

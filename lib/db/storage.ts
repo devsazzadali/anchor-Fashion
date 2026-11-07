@@ -26,23 +26,9 @@ const ALLOWED_UPLOAD_EXT = new Set([
   ".pdf",
 ]);
 
-/**
- * Payload shapes upload() actually branches on: a Buffer, a Blob/File,
- * a base64 string, or an object exposing arrayBuffer(). The optional
- * arrayBuffer member is what lets the body's `typeof file?.arrayBuffer`
- * check type-check without claiming every payload carries one.
- */
-type StorageUploadFile = (Buffer | Blob | string) & {
-  arrayBuffer?: () => Promise<ArrayBufferLike>;
-};
-
 export const dbStorage = {
   from: (bucket: string) => ({
-    upload: async (
-      path: string,
-      file: StorageUploadFile,
-      opts?: { contentType?: string; [key: string]: unknown }
-    ) => {
+    upload: async (path: string, file: any, opts?: any) => {
       try {
         if (typeof window !== "undefined" || !file) {
           return { data: { path }, error: null };
@@ -55,9 +41,7 @@ export const dbStorage = {
           file instanceof Blob ||
           typeof file?.arrayBuffer === "function"
         ) {
-          // Non-null assertion only: the branch condition above has just
-          // established that arrayBuffer is a function here.
-          const ab = await file.arrayBuffer!();
+          const ab = await file.arrayBuffer();
           buffer = Buffer.from(ab);
         } else if (typeof file === "string") {
           buffer = Buffer.from(file, "base64");
@@ -108,8 +92,9 @@ export const dbStorage = {
           await fs.writeFile(dest, buffer);
         }
         return { data: { path }, error: null };
-      } catch (err) {
-        return { data: null, error: err as Error };
+      } catch (err: any) {
+        console.error("[polyfill storage.upload error]:", err);
+        return { data: null, error: err };
       }
     },
     getPublicUrl: (path: string) => ({
@@ -157,7 +142,7 @@ export const dbStorage = {
       } catch {}
       return { data: paths, error: null };
     },
-    list: async (folder?: string, opts?: Record<string, unknown>) => ({
+    list: async (folder?: string, opts?: any) => ({
       data: [],
       error: null,
     }),
@@ -175,7 +160,7 @@ export const dbStorage = {
     error: null,
   }),
   getBucket: async (name: string) => ({ data: { name }, error: null }),
-  createBucket: async (name: string, opts?: Record<string, unknown>) => ({
+  createBucket: async (name: string, opts?: any) => ({
     data: { name },
     error: null,
   }),

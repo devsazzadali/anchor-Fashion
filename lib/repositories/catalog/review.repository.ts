@@ -1,14 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { Review } from "@/types/catalog.types";
 import { revalidatePath } from "next/cache";
-
-/** Aggregate shape getReviewStatsByProductId returns (or null on error). */
-export interface ReviewStats {
-  product_id: string;
-  total_reviews: number;
-  average_rating: number;
-}
 
 export class ReviewRepository {
   static async getReviews(): Promise<Review[]> {
@@ -26,6 +18,7 @@ export class ReviewRepository {
       });
       return reviews.map(mapPrismaReview) as unknown as Review[];
     } catch (err) {
+      console.error("Unexpected error in getReviews:", err);
       return [];
     }
   }
@@ -46,11 +39,12 @@ export class ReviewRepository {
       });
       return reviews.map(mapPrismaReview) as unknown as Review[];
     } catch (err) {
+      console.error("Unexpected error in getReviewsByProductId:", err);
       return [];
     }
   }
 
-  static async getReviewStatsByProductId(productId: string): Promise<ReviewStats | null> {
+  static async getReviewStatsByProductId(productId: string): Promise<any> {
     try {
       const agg = await prisma.review.aggregate({
         where: { productId, isApproved: true },
@@ -64,6 +58,7 @@ export class ReviewRepository {
         average_rating: agg._avg.rating || 0,
       };
     } catch (err) {
+      console.error("Unexpected error in getReviewStatsByProductId:", err);
       return null;
     }
   }
@@ -111,6 +106,7 @@ export class ReviewRepository {
       revalidatePath("/products");
       revalidatePath("/admin/products/reviews");
     } catch (e) {
+      console.error("Failed to recalculate product rating:", e);
     }
   }
 
@@ -135,20 +131,14 @@ export class ReviewRepository {
         select: { helpfulVotes: true },
       });
       return { success: true, helpful_votes: updated.helpfulVotes };
-    } catch (err) {
-      return { success: false, helpful_votes: 0, error: (err as Error).message };
+    } catch (err: any) {
+      console.error("Unexpected error in voteHelpful:", err);
+      return { success: false, helpful_votes: 0, error: err.message };
     }
   }
 }
 
-function mapPrismaReview(
-  r: Prisma.ReviewGetPayload<{
-    include: {
-      user: { select: { firstName: true; lastName: true; email: true } };
-      product: { select: { name: true; slug: true } };
-    };
-  }>
-) {
+function mapPrismaReview(r: any) {
   return {
     ...r,
     product_id: r.productId,

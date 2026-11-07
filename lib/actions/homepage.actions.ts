@@ -40,7 +40,7 @@ async function readSetting<T>(key: string, fallback: T): Promise<T> {
     const db = createDbClient();
     const { data } = await db.from("settings").select("value").eq("key", key).single();
     if (data?.value && typeof data.value === "object") {
-      return { ...fallback, ...data.value };
+      return { ...fallback, ...(data.value as any) };
     }
     return fallback;
   } catch {
@@ -48,7 +48,7 @@ async function readSetting<T>(key: string, fallback: T): Promise<T> {
   }
 }
 
-async function writeSetting(key: string, value: unknown, description: string) {
+async function writeSetting(key: string, value: any, description: string) {
   const db = createAdminDbClient();
   const { error } = await db
     .from("settings")
@@ -93,8 +93,9 @@ export async function updateHomepageLayout(layout: HomepageLayout) {
       "Homepage section visibility and ordering"
     );
     return { success: true };
-  } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to save layout" };
+  } catch (err: any) {
+    console.error("[updateHomepageLayout]", err);
+    return { success: false, error: err.message || "Failed to save layout" };
   }
 }
 
@@ -133,7 +134,8 @@ export async function updateFeaturesBarConfig(config: FeaturesBarConfig) {
       "Homepage features bar items (icon, title, description)"
     );
     return { success: true };
-  } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to save features bar" };
+  } catch (err: any) {
+    console.error("[updateFeaturesBarConfig]", err);
+    return { success: false, error: err.message || "Failed to save features bar" };
   }
 }

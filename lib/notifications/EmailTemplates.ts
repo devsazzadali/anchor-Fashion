@@ -1,34 +1,3 @@
-/**
- * Item shape the order templates render (the fields the item rows
- * below actually read).
- */
-interface EmailOrderItem {
-  product_name?: string | null;
-  variant_sku?: string | null;
-  sku?: string | null;
-  quantity: number;
-  unit_price: number;
-}
-
-/**
- * The delivered-invoice order shape, as built by toTemplateOrder in
- * lib/notifications/order-notifications.ts (the template's only caller).
- */
-interface DeliveredInvoiceOrder {
-  id?: string | null;
-  invoice_token?: string | null;
-  order_number?: string | null;
-  customer_name?: string | null;
-  payment_method?: string | null;
-  payment_status?: string | null;
-  subtotal: number;
-  discount_amount?: number | null;
-  shipping_cost: number;
-  vat_amount?: number | null;
-  total_amount: number;
-  order_items?: EmailOrderItem[];
-}
-
 export const EmailTemplates = {
   welcomeAdmin: (name: string, role: string, loginUrl: string, password?: string) => `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 10px; background-color: #ffffff;">
@@ -60,41 +29,23 @@ export const EmailTemplates = {
     </div>
   `,
 
-  // REG-65 holdout: this parameter stays `any`. The only caller passes
-  // the OMS detail shape (types/oms Order + items), which declares
-  // subtotal / tax_total but NOT the total_amount / shipping_fee /
-  // vat_amount / discount_amount fields this template passes straight
-  // to formatPrice(number) — an honest interface either fails the
-  // caller's assignability or the template's own arithmetic.
-  // Reconciling types/oms Order with the repository-mapped shape is
-  // out of scope for a type-only batch.
   orderConfirmed: (order: any, storeUrl: string) => {
-    const formatPrice = (amount: number) =>
-      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount).replace('BDT', '৳');
+    const formatPrice = (amount: number) => 
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT' }).format(amount).replace('BDT', '৳');
 
-    // A3-A5: the OMS caller hands over the repository-mapped order shape
-    // — items under `items`, shipping under `shipping_fee`, VAT under
-    // `vat_amount`. This template used to read `order_items` /
-    // `shipping_cost` (the delivered-invoice shape), so the item table
-    // rendered EMPTY, shipping always showed ৳0, and with no VAT row the
-    // visible numbers never summed to the total. Accept both shapes.
-    const items = order.items || order.order_items || [];
-    const shippingFee = Number(order.shipping_fee ?? order.shipping_cost ?? 0);
-    const vatAmount = Number(order.vat_amount ?? order.tax_total ?? 0);
-
-    const itemsHtml = items.map((item: EmailOrderItem) => `
+    const itemsHtml = (order.order_items || []).map((item: any) => `
       <tr>
         <td style="padding: 15px 0; border-bottom: 1px solid #eaeaea;">
           <p style="margin: 0; font-weight: bold; color: #1a1a1a;">${item.product_name}</p>
-          ${(item.variant_sku || item.sku) ? `<p style="margin: 4px 0 0; font-size: 12px; color: #888;">SKU: ${item.variant_sku || item.sku}</p>` : ""}
+          ${item.variant_sku ? `<p style="margin: 4px 0 0; font-size: 12px; color: #888;">SKU: ${item.variant_sku}</p>` : ""}
         </td>
         <td style="padding: 15px 0; border-bottom: 1px solid #eaeaea; text-align: center; color: #555;">${item.quantity}</td>
         <td style="padding: 15px 0; border-bottom: 1px solid #eaeaea; text-align: right; color: #1a1a1a; font-weight: bold;">${formatPrice(item.unit_price * item.quantity)}</td>
       </tr>
     `).join("");
 
-    const invoiceUrl = order.invoice_token
-      ? `${storeUrl}/invoice/${order.invoice_token}`
+    const invoiceUrl = (order as any).invoice_token
+      ? `${storeUrl}/invoice/${(order as any).invoice_token}`
       : `${storeUrl}/account/orders/${order.id || order.order_id}/invoice`;
 
     return `
@@ -131,15 +82,11 @@ export const EmailTemplates = {
             </tr>
             <tr>
               <td colspan="2" style="padding: 5px 0; text-align: right; color: #555;">Shipping:</td>
-              <td style="padding: 5px 0; text-align: right; color: #1a1a1a;">${formatPrice(shippingFee)}</td>
+              <td style="padding: 5px 0; text-align: right; color: #1a1a1a;">${formatPrice(order.shipping_cost || 0)}</td>
             </tr>
             ${order.discount_amount ? `<tr>
               <td colspan="2" style="padding: 5px 0; text-align: right; color: #e50000;">Discount:</td>
               <td style="padding: 5px 0; text-align: right; color: #e50000;">-${formatPrice(order.discount_amount)}</td>
-            </tr>` : ''}
-            ${vatAmount ? `<tr>
-              <td colspan="2" style="padding: 5px 0; text-align: right; color: #555;">VAT:</td>
-              <td style="padding: 5px 0; text-align: right; color: #1a1a1a;">${formatPrice(vatAmount)}</td>
             </tr>` : ''}
             <tr>
               <td colspan="2" style="padding: 15px 0 0; text-align: right; font-weight: bold; color: #1a1a1a; border-top: 2px solid #eaeaea;">Total:</td>
@@ -150,7 +97,7 @@ export const EmailTemplates = {
       </div>
 
       <div style="text-align: center; margin: 40px 0;">
-        <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View Invoice</a>
+        <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View / Download Invoice PDF</a>
       </div>
 
       <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eaeaea;">
@@ -177,7 +124,7 @@ export const EmailTemplates = {
     </div>
   `,
 
-  orderDeliveredInvoice: (order: DeliveredInvoiceOrder, storeUrl: string, company?: {
+  orderDeliveredInvoice: (order: any, storeUrl: string, company?: {
     company_name?: string;
     central_bin?: string;
     central_address?: string;
@@ -185,9 +132,9 @@ export const EmailTemplates = {
     customer_care?: string;
   }) => {
     const formatPrice = (amount: number) =>
-      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount || 0).replace('BDT', '৳');
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT' }).format(amount || 0).replace('BDT', '৳');
 
-    const itemsHtml = (order.order_items || []).map((item) => `
+    const itemsHtml = (order.order_items || []).map((item: any) => `
       <tr>
         <td style="padding: 12px 0; border-bottom: 1px solid #eaeaea;">
           <p style="margin: 0; font-weight: bold; color: #1a1a1a;">${item.product_name}</p>
@@ -198,8 +145,8 @@ export const EmailTemplates = {
       </tr>
     `).join("");
 
-    const invoiceUrl = order.invoice_token
-      ? `${storeUrl}/invoice/${order.invoice_token}`
+    const invoiceUrl = (order as any).invoice_token
+      ? `${storeUrl}/invoice/${(order as any).invoice_token}`
       : `${storeUrl}/account/orders/${order.id}/invoice`;
     const isCod = String(order.payment_method || "COD").toUpperCase() === "COD";
     const alreadyPaid = String(order.payment_status || "").toUpperCase() === "PAID";
@@ -259,7 +206,7 @@ export const EmailTemplates = {
       </div>
 
       <div style="text-align: center; margin: 40px 0;">
-        <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View Invoice</a>
+        <a href="${invoiceUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">View / Download Full Invoice</a>
       </div>
 
       ${company ? `<div style="text-align: center; margin-top: 10px; padding: 14px; background-color: #f9f9f9; border-radius: 8px;">
@@ -291,7 +238,7 @@ export const EmailTemplates = {
     adminUrl: string;
   }) => {
     const formatPrice = (amount: number) =>
-      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(amount || 0).replace('BDT', '৳');
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BDT' }).format(amount || 0).replace('BDT', '৳');
     const isNew = event.kind === "new_order";
     const heading = isNew ? "New order received" : "Order status changed";
     const detail = isNew

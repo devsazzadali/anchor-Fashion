@@ -1,11 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { LoyaltyTier } from "@/features/crm/components/LoyaltyTiers";
 import { CustomerLifecycleStage } from "@/features/crm/components/CustomersList";
-import {
-  LOYALTY_TIERS,
-  tierForLifetimePoints,
-  tierTitleCase,
-} from "@/lib/loyalty/tiers";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -33,20 +28,12 @@ export class CustomerRepository {
    * while real customers existed.
    */
   private async loadMergedCustomers(): Promise<MergedCustomer[]> {
-    // REG-84: bound the directory load. The cap sits far above the
-    // current customer counts, so merged results are unchanged today;
-    // it only stops unbounded growth of this in-memory merge.
-    const DIRECTORY_LOAD_CAP = 2000;
     const [profiles, customers] = await Promise.all([
       prisma.profile.findMany({
         where: { role: { name: { equals: "CUSTOMER", mode: "insensitive" } } },
         orderBy: { createdAt: "desc" },
-        take: DIRECTORY_LOAD_CAP,
       }),
-      prisma.customer.findMany({
-        orderBy: { createdAt: "desc" },
-        take: DIRECTORY_LOAD_CAP,
-      }),
+      prisma.customer.findMany({ orderBy: { createdAt: "desc" } }),
     ]);
 
     const byKey = new Map<string, MergedCustomer>();
@@ -101,99 +88,35 @@ export class CustomerRepository {
     );
   }
 
-  /**
-   * Real per-customer aggregates from orders + support tickets.
-   *
-   * REG-84 (Round 19): this used to run 2 queries PER customer
-   * (an orders findMany + a ticket count), and getCustomerSegments /
-   * getCRMSummary call it for every merged customer — a classic N+1
-   * whose query count grew linearly with the directory. It now
-   * delegates to the batched loader below: 2 queries TOTAL for any
-   * number of customers, with the per-customer attribution done in
-   * memory under the exact predicate the per-customer queries used,
-   * so every figure is identical to the old implementation's.
-   */
+  /** Real per-customer aggregates from orders + support tickets. */
   private async aggregatesFor(c: MergedCustomer) {
-    const map = await this.aggregatesForMany([c]);
-    return map.get(c)!;
-  }
-
-  /** Batched aggregates for a whole set of merged customers (2 queries). */
-  private async aggregatesForMany(customers: MergedCustomer[]) {
-    const result = new Map<
-      MergedCustomer,
-      {
-        ordersCount: number;
-        totalSpent: number;
-        tickets: number;
-        lastOrderAt: Date | null;
-      }
-    >();
-    if (customers.length === 0) return result;
-
-    const allIds = [
-      ...new Set(
-        customers.flatMap((c) => [c.id, c.altId].filter(Boolean) as string[])
-      ),
-    ];
-
-    const [orders, ticketGroups] = await Promise.all([
+    const ids = [c.id, c.altId].filter(Boolean) as string[];
+    const [orders, tickets] = await Promise.all([
       prisma.order.findMany({
         where: {
-          OR: [{ profileId: { in: allIds } }, { customerId: { in: allIds } }],
+          OR: [{ profileId: { in: ids } }, { customerId: { in: ids } }],
         },
-        select: {
-          profileId: true,
-          customerId: true,
-          totalAmount: true,
-          status: true,
-          createdAt: true,
-        },
+        select: { totalAmount: true, status: true, createdAt: true },
       }),
-      prisma.supportTicket.groupBy({
-        by: ["customerId"],
-        where: { customerId: { in: allIds } },
-        _count: { _all: true },
+      prisma.supportTicket.count({
+        where: { customerId: { in: ids } },
       }),
     ]);
 
-    const ticketsByCustomerId = new Map<string, number>();
-    for (const g of ticketGroups) {
-      if (g.customerId != null) {
-        ticketsByCustomerId.set(g.customerId, g._count._all);
-      }
-    }
+    const live = orders.filter(
+      (o) => String(o.status).toUpperCase() !== "CANCELLED"
+    );
+    const ordersCount = live.length;
+    const orderSpent = live.reduce(
+      (sum, o) => sum + (Number(o.totalAmount) || 0),
+      0
+    );
+    const totalSpent = Math.max(orderSpent, c.storedTotalSpent);
+    const lastOrderAt = live.length
+      ? new Date(Math.max(...live.map((o) => o.createdAt.getTime())))
+      : null;
 
-    for (const c of customers) {
-      const ids = new Set(
-        [c.id, c.altId].filter(Boolean) as string[]
-      );
-      // Same attribution predicate as the old per-customer WHERE:
-      // an order belongs to this customer when either of its id
-      // columns names one of the customer's ids.
-      const mine = orders.filter(
-        (o) =>
-          (o.profileId != null && ids.has(o.profileId)) ||
-          (o.customerId != null && ids.has(o.customerId))
-      );
-      const live = mine.filter(
-        (o) => String(o.status).toUpperCase() !== "CANCELLED"
-      );
-      const ordersCount = live.length;
-      const orderSpent = live.reduce(
-        (sum, o) => sum + (Number(o.totalAmount) || 0),
-        0
-      );
-      const totalSpent = Math.max(orderSpent, c.storedTotalSpent);
-      const lastOrderAt = live.length
-        ? new Date(Math.max(...live.map((o) => o.createdAt.getTime())))
-        : null;
-      let tickets = 0;
-      for (const id of ids) tickets += ticketsByCustomerId.get(id) || 0;
-
-      result.set(c, { ordersCount, totalSpent, tickets, lastOrderAt });
-    }
-    return result;
+    return { ordersCount, totalSpent, tickets, lastOrderAt };
   }
 
   /** Lifecycle stage derived from the customer's real order history. */
@@ -243,45 +166,9 @@ export class CustomerRepository {
       );
     }
 
-    // S6-2: the directory's tier badge is the customer's REAL loyalty
-    // tier, derived from their loyalty account's lifetime earned points
-    // via the canonical ladder (lib/loyalty/tiers). Previously the list
-    // labelled anyone with lifetime spend > ৳5,000 "Platinum" and used a
-    // health-score guess for everyone else — a 57-point customer showed
-    // as PLATINUM here while his detail page said Silver.
-    const pageRows = merged.slice(0, limit);
-    const allIds = pageRows.flatMap((c) =>
-      [c.id, c.altId].filter(Boolean) as string[]
-    );
-    const loyaltyAccounts = allIds.length
-      ? await prisma.loyalty_accounts.findMany({
-          where: { customer_id: { in: allIds } },
-          select: {
-            customer_id: true,
-            points_balance: true,
-            total_points_earned: true,
-          },
-        })
-      : [];
-    const loyaltyByCustomerId = new Map(
-      loyaltyAccounts.map((a) => [a.customer_id, a])
-    );
-    const loyaltyFor = (c: MergedCustomer) => {
-      const account =
-        loyaltyByCustomerId.get(c.id) ||
-        (c.altId ? loyaltyByCustomerId.get(c.altId) : undefined);
-      if (!account) return { loyalty_tier: "SILVER", loyalty_points: 0 };
-      return {
-        loyalty_tier: tierForLifetimePoints(account.total_points_earned || 0),
-        loyalty_points: account.points_balance || 0,
-      };
-    };
-
-    // REG-84 (Round 19): one batched aggregate load for the whole page
-    // (was 2 queries per row via aggregatesFor).
-    const aggMap = await this.aggregatesForMany(pageRows);
-    const rows = pageRows.map((c) => {
-        const agg = aggMap.get(c)!;
+    const rows = await Promise.all(
+      merged.slice(0, limit).map(async (c) => {
+        const agg = await this.aggregatesFor(c);
         const lastInteraction = new Date(
           Math.max(
             c.updatedAt.getTime(),
@@ -296,7 +183,6 @@ export class CustomerRepository {
           phone: c.phone || "",
           assigned_password: null,
           is_vip: agg.totalSpent > 5000,
-          ...loyaltyFor(c),
           customer_lifecycle_stage: this.deriveStage(
             agg.ordersCount,
             agg.totalSpent,
@@ -311,7 +197,8 @@ export class CustomerRepository {
           total_support_tickets: agg.tickets,
           last_interaction_at: lastInteraction.toISOString(),
         };
-    });
+      })
+    );
     return rows;
   }
 
@@ -331,15 +218,14 @@ export class CustomerRepository {
     const counts: Record<string, number> = Object.fromEntries(
       stages.map((s) => [s, 0])
     );
-    // REG-84 (Round 19): batched — 2 queries total for all customers
-    // (was 2 per customer).
-    const aggMap = await this.aggregatesForMany(merged);
-    for (const c of merged) {
-      const agg = aggMap.get(c)!;
-      counts[
-        this.deriveStage(agg.ordersCount, agg.totalSpent, agg.lastOrderAt)
-      ] += 1;
-    }
+    await Promise.all(
+      merged.map(async (c) => {
+        const agg = await this.aggregatesFor(c);
+        counts[
+          this.deriveStage(agg.ordersCount, agg.totalSpent, agg.lastOrderAt)
+        ] += 1;
+      })
+    );
 
     const totalCustomers = merged.length;
     return stages.map((stage) => {
@@ -364,17 +250,36 @@ export class CustomerRepository {
         (a) => String(a.tier || "SILVER").toUpperCase() === tier
       ).length;
 
-    // S6-2: this tiers tab is the merchant-facing definition of the
-    // program, so it renders the canonical ladder from
-    // lib/loyalty/tiers — the same module the list badge, the detail
-    // header, the earn service and the storefront page now derive from.
-    return LOYALTY_TIERS.map((def) => ({
-      tier: def.tier as LoyaltyTier,
-      benefits: def.benefits,
-      customerCount: countFor(def.tier),
-      minPoints: def.minPoints,
-      color: def.color,
-    }));
+    return [
+      {
+        tier: "SILVER" as LoyaltyTier,
+        benefits: ["Basic support", "5% discount on birthdays"],
+        customerCount: countFor("SILVER"),
+        minPoints: 0,
+        color: "bg-slate-300",
+      },
+      {
+        tier: "GOLD" as LoyaltyTier,
+        benefits: ["Priority support", "Free shipping", "10% discount on birthdays"],
+        customerCount: countFor("GOLD"),
+        minPoints: 1000,
+        color: "bg-yellow-400",
+      },
+      {
+        tier: "PLATINUM" as LoyaltyTier,
+        benefits: ["Dedicated manager", "Free express shipping", "Early access to sales"],
+        customerCount: countFor("PLATINUM"),
+        minPoints: 5000,
+        color: "bg-slate-800 text-white",
+      },
+      {
+        tier: "VIP" as LoyaltyTier,
+        benefits: ["All Platinum benefits", "Exclusive event invites", "Personal stylist"],
+        customerCount: countFor("VIP"),
+        minPoints: 20000,
+        color: "bg-purple-900 text-white",
+      },
+    ];
   }
 
   async getCRMSummary() {
@@ -390,12 +295,12 @@ export class CustomerRepository {
     // customers (previously: all orders incl. cancelled/guests, and a
     // fabricated 30% loyalty-membership figure).
     let linkedRevenue = 0;
-    // REG-84 (Round 19): batched — 2 queries total for all customers
-    // (was 2 per customer).
-    const aggMap = await this.aggregatesForMany(merged);
-    for (const c of merged) {
-      linkedRevenue += aggMap.get(c)!.totalSpent;
-    }
+    await Promise.all(
+      merged.map(async (c) => {
+        const agg = await this.aggregatesFor(c);
+        linkedRevenue += agg.totalSpent;
+      })
+    );
     const loyaltyMembers = await prisma.loyalty_accounts.count();
 
     return {
@@ -470,23 +375,13 @@ export class CustomerRepository {
     const orders = await prisma.order.findMany({
       where: {
         OR: [{ customerId: { in: ids } }, { profileId: { in: ids } }],
+        NOT: { status: { equals: "CANCELLED", mode: "insensitive" } },
       },
-      select: { totalAmount: true, status: true },
+      select: { totalAmount: true },
     });
 
-    // REG-20: the header's "Total Orders" excluded cancelled orders
-    // (the CANCELLED filter belonged to the LTV definition, not the
-    // count), so the header said 5 while the same page's Purchase
-    // History listed all 7. Total Orders now counts every real order
-    // — identical to getCustomerOrders below — while LTV keeps
-    // excluding cancelled orders (money never collected is not
-    // lifetime value).
     const totalOrders = orders.length;
-    const ltv = orders
-      .filter(
-        (order) => String(order.status || "").toUpperCase() !== "CANCELLED"
-      )
-      .reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+    const ltv = orders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
     return { totalOrders, ltv };
   }
 
@@ -496,44 +391,10 @@ export class CustomerRepository {
       where: { customer_id: { in: ids } },
     });
     if (!account) return { points: 0, tier: "Silver" };
-    // S6-2: derive the tier from lifetime earned points via the
-    // canonical ladder instead of echoing the stored column, so the
-    // detail header can never disagree with the tiers tab again.
+    const rawTier = String(account.tier || "SILVER").toLowerCase();
     return {
       points: account.points_balance || 0,
-      tier: tierTitleCase(
-        tierForLifetimePoints(account.total_points_earned || 0)
-      ),
+      tier: rawTier.charAt(0).toUpperCase() + rawTier.slice(1),
     };
-  }
-
-  /**
-   * S6-4(a): the customer's real orders for the admin detail Purchase
-   * History tab (previously a literal "Order history table
-   * placeholder." string). Newest first; items counted from the real
-   * order_items rows.
-   */
-  async getCustomerOrders(id: string) {
-    const ids = await this.linkedIds(id);
-    const orders = await prisma.order.findMany({
-      where: {
-        OR: [{ customerId: { in: ids } }, { profileId: { in: ids } }],
-      },
-      orderBy: { createdAt: "desc" },
-      select: {
-        orderNumber: true,
-        createdAt: true,
-        status: true,
-        totalAmount: true,
-        _count: { select: { items: true } },
-      },
-    });
-    return orders.map((o) => ({
-      order_number: o.orderNumber,
-      date: o.createdAt.toISOString(),
-      items_count: o._count.items,
-      total: Number(o.totalAmount) || 0,
-      status: String(o.status || "").toUpperCase(),
-    }));
   }
 }

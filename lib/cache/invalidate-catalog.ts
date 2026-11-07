@@ -36,6 +36,7 @@ export function invalidateCategoryCache() {
     revalidatePath("/(shop)", "page");
     revalidatePath("/categories");
   } catch (error) {
+    console.warn("Failed to invalidate category cache tags:", error);
   }
 }
 
@@ -45,6 +46,7 @@ export function invalidateBrandCache() {
     revalidateTag(CACHE_TAGS.CATALOG, "max");
     revalidatePath("/(shop)", "layout");
   } catch (error) {
+    console.warn("Failed to invalidate brand cache tags:", error);
   }
 }
 
@@ -61,6 +63,7 @@ export function invalidateCollectionCache(slug?: string) {
     revalidatePath("/(shop)", "layout");
     revalidatePath("/admin/products/collections");
   } catch (error) {
+    console.warn("Failed to invalidate collection cache tags:", error);
   }
 }
 
@@ -74,6 +77,7 @@ export function invalidateHomepageCache() {
     revalidatePath("/(shop)", "page");
     revalidatePath("/admin/cms/banners");
   } catch (error) {
+    console.warn("Failed to invalidate homepage cache tags:", error);
   }
 }
 
@@ -86,5 +90,6 @@ export function invalidateAllCatalogCache() {
     revalidateTag(CACHE_TAGS.HOMEPAGE, "max");
     revalidatePath("/(shop)", "layout");
   } catch (error) {
+    console.warn("Failed to invalidate all catalog cache tags:", error);
   }
 }

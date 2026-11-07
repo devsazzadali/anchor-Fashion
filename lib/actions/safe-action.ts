@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getServerSession, resolveUserRole, type NeonAuthSessionUser } from "@/lib/auth/server";
+import { getServerSession, resolveUserRole } from "@/lib/auth/server";
 import { STAFF_ROLES } from "@/lib/constants/auth";
 
 export type ActionState<T> = {
@@ -10,7 +10,7 @@ export type ActionState<T> = {
 };
 
 type ProtectedActionContext = {
-  user: NeonAuthSessionUser;
+  user: any; // Better Auth user type
 };
 
 class DatabaseError extends Error {
@@ -32,7 +32,7 @@ export function createSafeAction<Input, Output>(
       const parsedInput = schema.parse(input);
       const data = await handler(parsedInput);
       return { success: true, data };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof z.ZodError) {
         return {
           success: false,
@@ -43,6 +43,7 @@ export function createSafeAction<Input, Output>(
       if (error instanceof DatabaseError) {
         return { success: false, error: error.message };
       }
+      console.error("[Action Error]:", error);
       return { success: false, error: "An unexpected error occurred." };
     }
   };
@@ -67,7 +68,7 @@ export function createProtectedAction<Input, Output>(
       const parsedInput = schema.parse(input);
       const data = await handler(parsedInput, { user });
       return { success: true, data };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof z.ZodError) {
         return {
           success: false,
@@ -78,6 +79,7 @@ export function createProtectedAction<Input, Output>(
       if (error instanceof DatabaseError) {
         return { success: false, error: error.message };
       }
+      console.error("[Protected Action Error]:", error);
       return { success: false, error: "An unexpected error occurred." };
     }
   };
@@ -103,13 +105,14 @@ export function createAdminAction<Input, Output>(
       const isAllowed = STAFF_ROLES.includes(role) || ["OPERATIONS"].includes(role);
 
       if (!isAllowed) {
+        console.warn(`[Admin Action] Access denied for user ${user.id} with role: ${role}`);
         return { success: false, error: "Forbidden. Insufficient permissions." };
       }
 
       const parsedInput = schema.parse(input);
       const data = await handler(parsedInput, { user });
       return { success: true, data };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof z.ZodError) {
         const fieldErrors = error.flatten().fieldErrors;
         const firstError = Object.values(fieldErrors)[0]?.[0];
@@ -122,18 +125,12 @@ export function createAdminAction<Input, Output>(
       if (error instanceof DatabaseError) {
         return { success: false, error: error.message };
       }
+      console.error("[Admin Action Error]:", error);
       const isProd = process.env.NODE_ENV === "production";
-      // The operational flag is an optional ad-hoc property some thrown
-      // errors carry; it is read, never set, here.
-      const isOperational =
-        error instanceof Error &&
-        (error as Error & { isOperational?: boolean }).isOperational === true;
       const message =
-        isProd && !isOperational
+        isProd && !error?.isOperational
           ? "An unexpected system error occurred. Please try again or contact support."
-          : error instanceof Error
-            ? error.message || "An unexpected error occurred."
-            : "An unexpected error occurred.";
+          : error?.message || "An unexpected error occurred.";
       return { success: false, error: message };
     }
   };

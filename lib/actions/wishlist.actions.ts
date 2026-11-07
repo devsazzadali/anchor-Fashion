@@ -15,8 +15,8 @@ export async function fetchWishlistAction() {
     const userId = await getUserId();
     const wishlist = await WishlistService.getOrCreateWishlist(userId);
     return { success: true, wishlist };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -29,8 +29,8 @@ export async function addToWishlistAction(
     await WishlistService.addItem(userId, productId, variantId);
     revalidatePath("/account/wishlist");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -42,8 +42,8 @@ export async function removeFromWishlistAction(itemId: string) {
     await WishlistService.removeItem(userId, itemId);
     revalidatePath("/account/wishlist");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -53,8 +53,8 @@ export async function removeWishlistItemByProductIdAction(productId: string) {
     await WishlistService.removeItemByProductId(userId, productId);
     revalidatePath("/account/wishlist");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -69,7 +69,7 @@ export async function moveWishlistItemToCartAction(
     revalidatePath("/account/wishlist");
     revalidatePath("/cart");
     return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }

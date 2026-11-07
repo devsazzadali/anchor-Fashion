@@ -71,6 +71,7 @@ export async function getPublicZonesAction(): Promise<{
   try {
     return { success: true, data: await listActiveZones() };
   } catch (err) {
+    console.error("[getPublicZonesAction]", err);
     return { success: false, data: [] };
   }
 }
@@ -97,8 +98,9 @@ export async function getAdminZonesAction(): Promise<
         sort_order: z.sort_order,
       })),
     };
-  } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to load zones" };
+  } catch (err: any) {
+    console.error("[getAdminZonesAction]", err);
+    return { success: false, error: err.message || "Failed to load zones" };
   }
 }
 
@@ -129,11 +131,12 @@ export async function createZoneAction(
 
     revalidateZoneConsumers();
     return { success: true, data: { id: zone.id } };
-  } catch (err) {
-    if (String((err as { code?: unknown })?.code) === "P2002") {
+  } catch (err: any) {
+    console.error("[createZoneAction]", err);
+    if (String(err?.code) === "P2002") {
       return { success: false, error: "A zone with this code already exists." };
     }
-    return { success: false, error: (err as Error).message || "Failed to create zone" };
+    return { success: false, error: err.message || "Failed to create zone" };
   }
 }
 
@@ -170,11 +173,12 @@ export async function updateZoneAction(
 
     revalidateZoneConsumers();
     return { success: true };
-  } catch (err) {
-    if (String((err as { code?: unknown })?.code) === "P2002") {
+  } catch (err: any) {
+    console.error("[updateZoneAction]", err);
+    if (String(err?.code) === "P2002") {
       return { success: false, error: "A zone with this code already exists." };
     }
-    return { success: false, error: (err as Error).message || "Failed to update zone" };
+    return { success: false, error: err.message || "Failed to update zone" };
   }
 }
 
@@ -197,7 +201,8 @@ export async function deleteZoneAction(id: string): Promise<ActionResult> {
     await prisma.delivery_zones.delete({ where: { id } });
     revalidateZoneConsumers();
     return { success: true };
-  } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to delete zone" };
+  } catch (err: any) {
+    console.error("[deleteZoneAction]", err);
+    return { success: false, error: err.message || "Failed to delete zone" };
   }
 }

@@ -73,18 +73,19 @@ export class NotificationService {
             undefined,
             "DELIVERED"
           );
-        } catch (inAppErr) {
+        } catch (inAppErr: any) {
           await this.logDelivery(
             userId,
             template.id,
             "in_app",
             undefined,
             "FAILED",
-            (inAppErr as Error)?.message
+            inAppErr?.message
           );
         }
       }
     } catch (error) {
+      console.error("Error in NotificationService.dispatch:", error);
     }
   }
 
@@ -96,5 +97,6 @@ export class NotificationService {
     status: string = "PENDING",
     errorMessage?: string
   ) {
+    console.warn(`[Notification Log] User: ${userId}, Template: ${templateId}, Channel: ${channel}, Status: ${status}, Error: ${errorMessage}`);
   }
 }

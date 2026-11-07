@@ -13,7 +13,7 @@ import {
 import {
   addTicketMessageAction,
   getKnowledgeBaseAction,
-} from "@/lib/actions/support.actions";
+} from "@/actions/support.actions";
 
 export function useTickets() {
   return useQuery({

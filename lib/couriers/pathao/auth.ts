@@ -101,9 +101,9 @@ export class PathaoAuthManager {
         refreshToken: data.refresh_token || "",
         expiresAt: Date.now() + (Number(data.expires_in) || 3600) * 1000,
       };
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof CourierAuthError) throw err;
-      throw new CourierAuthError("pathao", `Network error during token issue: ${(err as Error).message}`);
+      throw new CourierAuthError("pathao", `Network error during token issue: ${err.message}`);
     }
   }
 

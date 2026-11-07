@@ -30,13 +30,13 @@ export async function subscribeNewsletterAction(email: string): Promise<{
       .maybeSingle();
 
     if (existing) {
-      if (existing.is_active) {
+      if ((existing as any).is_active) {
         return { success: true, alreadySubscribed: true };
       }
       const { error } = await db
         .from("newsletter_subscribers")
         .update({ is_active: true })
-        .eq("id", existing.id);
+        .eq("id", (existing as any).id);
       if (error) throw error;
       return { success: true };
     }
@@ -47,7 +47,8 @@ export async function subscribeNewsletterAction(email: string): Promise<{
     if (error) throw error;
 
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[subscribeNewsletterAction]", error);
     return {
       success: false,
       error: "Could not complete your subscription. Please try again.",

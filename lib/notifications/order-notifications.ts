@@ -14,7 +14,6 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { EmailProvider } from "./EmailProvider";
 import { EmailTemplates } from "./EmailTemplates";
 import { getInvoiceInfo } from "@/lib/actions/settings.actions";
@@ -25,24 +24,8 @@ function storeUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || "https://anchor.com.bd";
 }
 
-/** The loadOrder payload — every order read in this file goes through it. */
-type OrderForNotification = Prisma.OrderGetPayload<{
-  include: {
-    items: true;
-    profile: { select: { email: true; firstName: true; lastName: true } };
-    customer: { select: { email: true; name: true } };
-  };
-}>;
-
-/** orders.shipping_address JSON — the keys read in this file. */
-interface OrderAddressJson {
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-}
-
-function customerNameFrom(order: OrderForNotification): string | null {
-  const addr = (order.shippingAddress || {}) as OrderAddressJson;
+function customerNameFrom(order: any): string | null {
+  const addr = (order.shippingAddress || {}) as Record<string, any>;
   const fromAddr = [addr.first_name, addr.last_name]
     .filter(Boolean)
     .join(" ")
@@ -59,66 +42,16 @@ function customerNameFrom(order: OrderForNotification): string | null {
 }
 
 /** Resolve the best customer email for an order (profile → shipping JSON → customer record). */
-function resolveCustomerEmail(order: OrderForNotification): string | null {
+function resolveCustomerEmail(order: any): string | null {
   const candidates = [
     order.profile?.email,
-    (order.shippingAddress as OrderAddressJson | null)?.email,
+    (order.shippingAddress as any)?.email,
     order.customer?.email,
   ];
   for (const c of candidates) {
     if (typeof c === "string" && c.includes("@")) return c.trim();
   }
   return null;
-}
-
-/**
- * S3-4: order emails previously reported only via console.log — no DB
- * evidence a send was attempted, accepted or rejected. Mirror the SMS
- * audit trail (AlphaSmsService.recordSmsLog): one communication_logs row
- * per order-email outcome, including pre-send skips. Fail-safe by design —
- * a logging failure must never break the order flow, so this never throws.
- */
-async function recordOrderEmailLog(entry: {
-  event: string;
-  orderId: string;
-  orderNumber?: string | null;
-  profileId?: string | null;
-  recipients: string[];
-  subject: string;
-  status: "SENT" | "FAILED" | "SKIPPED";
-  providerId?: string | null;
-  reason?: string | null;
-  // Callers pass provider strings AND raw caught values (err?.message || err).
-  error?: unknown;
-}): Promise<void> {
-  try {
-    await prisma.communicationLog.create({
-      data: {
-        profileId: entry.profileId ?? null,
-        type: "EMAIL",
-        direction: "OUTBOUND",
-        subject: entry.subject,
-        content: `${entry.event} for order #${entry.orderNumber ?? entry.orderId} → ${
-          entry.recipients.length > 0 ? entry.recipients.join(", ") : "(no recipient)"
-        }`,
-        status: entry.status,
-        metadata: {
-          channel: "email",
-          provider: "RESEND",
-          event: entry.event,
-          order_id: entry.orderId,
-          order_number: entry.orderNumber ?? null,
-          recipients: entry.recipients,
-          provider_id: entry.providerId ?? null,
-          reason: entry.reason ?? null,
-          error: entry.error
-            ? String((entry.error as { message?: unknown })?.message || entry.error)
-            : null,
-        },
-      },
-    });
-  } catch (err) {
-  }
 }
 
 async function loadOrder(orderId: string) {
@@ -132,7 +65,7 @@ async function loadOrder(orderId: string) {
   });
 }
 
-function toTemplateOrder(order: OrderForNotification) {
+function toTemplateOrder(order: any) {
   return {
     id: order.id,
     invoice_token: order.invoiceToken || null,
@@ -145,7 +78,7 @@ function toTemplateOrder(order: OrderForNotification) {
     shipping_cost: Number(order.shippingFee || 0),
     vat_amount: Number(order.vatAmount || 0),
     total_amount: Number(order.totalAmount || 0),
-    order_items: (order.items || []).map((i) => ({
+    order_items: (order.items || []).map((i: any) => ({
       product_name: i.productName,
       variant_sku: i.sku,
       quantity: i.quantity,
@@ -159,43 +92,21 @@ function toTemplateOrder(order: OrderForNotification) {
  * Returns a small result object for logging/tests; never throws.
  */
 export async function sendOrderCompletionInvoiceEmail(orderId: string) {
-  const event = "order_completion_invoice";
-  let order: OrderForNotification | null = null;
-  let to: string | null = null;
-  let subject = "";
   try {
-    order = await loadOrder(orderId);
-    if (!order) {
-      await recordOrderEmailLog({
-        event,
-        orderId,
-        recipients: [],
-        subject: "(order not found)",
-        status: "SKIPPED",
-        reason: "order_not_found",
-      });
-      return { sent: false, reason: "order_not_found" };
-    }
+    const order = await loadOrder(orderId);
+    if (!order) return { sent: false, reason: "order_not_found" };
 
-    subject = `Your Anchor Fashion invoice — order #${order.orderNumber} delivered`;
-    to = resolveCustomerEmail(order);
+    const to = resolveCustomerEmail(order);
     if (!to) {
-      await recordOrderEmailLog({
-        event,
-        orderId,
-        orderNumber: order.orderNumber,
-        profileId: order.profileId ?? null,
-        recipients: [],
-        subject,
-        status: "SKIPPED",
-        reason: "no_customer_email",
-      });
+      console.warn(
+        `[OrderNotifications] completion invoice skipped for ${order.orderNumber}: no customer email on order`
+      );
       return { sent: false, reason: "no_customer_email" };
     }
 
     const res = await EmailProvider.send({
       to,
-      subject,
+      subject: `Your Anchor Fashion invoice — order #${order.orderNumber} delivered`,
       html: EmailTemplates.orderDeliveredInvoice(
         toTemplateOrder(order),
         storeUrl(),
@@ -204,44 +115,23 @@ export async function sendOrderCompletionInvoiceEmail(orderId: string) {
     });
 
     if (res.error) {
-      await recordOrderEmailLog({
-        event,
-        orderId,
-        orderNumber: order.orderNumber,
-        profileId: order.profileId ?? null,
-        recipients: [to],
-        subject,
-        status: "FAILED",
-        reason: "provider_error",
-        error: res.error,
-      });
+      console.error(
+        `[OrderNotifications] completion invoice FAILED for ${order.orderNumber}:`,
+        res.error
+      );
       return { sent: false, reason: "provider_error", error: res.error };
     }
 
-    await recordOrderEmailLog({
-      event,
-      orderId,
-      orderNumber: order.orderNumber,
-      profileId: order.profileId ?? null,
-      recipients: [to],
-      subject,
-      status: "SENT",
-      providerId: res.id ?? null,
-    });
+    console.log(
+      `[OrderNotifications] completion invoice sent order=${order.orderNumber} to=${to} id=${res.id}`
+    );
     return { sent: true, id: res.id, to };
-  } catch (err) {
-    await recordOrderEmailLog({
-      event,
-      orderId,
-      orderNumber: order?.orderNumber ?? null,
-      profileId: order?.profileId ?? null,
-      recipients: to ? [to] : [],
-      subject: subject || "(not composed)",
-      status: "FAILED",
-      reason: "exception",
-      error: (err as Error)?.message || err,
-    });
-    return { sent: false, reason: "exception", error: (err as Error)?.message };
+  } catch (err: any) {
+    console.error(
+      "[OrderNotifications] completion invoice unexpected error:",
+      err?.message || err
+    );
+    return { sent: false, reason: "exception", error: err?.message };
   }
 }
 
@@ -255,23 +145,9 @@ export async function notifyStaffOrderEvent(opts: {
   status?: string;
   previousStatus?: string | null;
 }) {
-  const event = `staff_order_event:${opts.kind}`;
-  let order: OrderForNotification | null = null;
-  let recipients: string[] = [];
-  let subject = "";
   try {
-    order = await loadOrder(opts.orderId);
-    if (!order) {
-      await recordOrderEmailLog({
-        event,
-        orderId: opts.orderId,
-        recipients: [],
-        subject: "(order not found)",
-        status: "SKIPPED",
-        reason: "order_not_found",
-      });
-      return { sent: false, reason: "order_not_found" };
-    }
+    const order = await loadOrder(opts.orderId);
+    if (!order) return { sent: false, reason: "order_not_found" };
 
     const staff = await prisma.profile.findMany({
       where: {
@@ -281,7 +157,7 @@ export async function notifyStaffOrderEvent(opts: {
       },
       select: { email: true },
     });
-    recipients = Array.from(
+    const recipients = Array.from(
       new Set(
         staff
           .map((s) => s.email?.trim())
@@ -289,27 +165,19 @@ export async function notifyStaffOrderEvent(opts: {
       )
     );
 
-    subject =
-      opts.kind === "new_order"
-        ? `New order #${order.orderNumber} — ৳${Number(order.totalAmount || 0).toLocaleString("en-IN")}`
-        : `Order #${order.orderNumber} is now ${opts.status || order.status}`;
-
     if (recipients.length === 0) {
-      await recordOrderEmailLog({
-        event,
-        orderId: opts.orderId,
-        orderNumber: order.orderNumber,
-        recipients: [],
-        subject,
-        status: "SKIPPED",
-        reason: "no_staff_recipients",
-      });
+      console.warn(
+        `[OrderNotifications] staff ${opts.kind} email skipped for ${order.orderNumber}: no staff recipients`
+      );
       return { sent: false, reason: "no_staff_recipients" };
     }
 
     const res = await EmailProvider.send({
       to: recipients,
-      subject,
+      subject:
+        opts.kind === "new_order"
+          ? `New order #${order.orderNumber} — ৳${Number(order.totalAmount || 0).toLocaleString("en-IN")}`
+          : `Order #${order.orderNumber} is now ${opts.status || order.status}`,
       html: EmailTemplates.staffOrderEvent({
         kind: opts.kind,
         orderNumber: order.orderNumber,
@@ -324,40 +192,22 @@ export async function notifyStaffOrderEvent(opts: {
     });
 
     if (res.error) {
-      await recordOrderEmailLog({
-        event,
-        orderId: opts.orderId,
-        orderNumber: order.orderNumber,
-        recipients,
-        subject,
-        status: "FAILED",
-        reason: "provider_error",
-        error: res.error,
-      });
+      console.error(
+        `[OrderNotifications] staff ${opts.kind} email FAILED for ${order.orderNumber}:`,
+        res.error
+      );
       return { sent: false, reason: "provider_error", error: res.error };
     }
 
-    await recordOrderEmailLog({
-      event,
-      orderId: opts.orderId,
-      orderNumber: order.orderNumber,
-      recipients,
-      subject,
-      status: "SENT",
-      providerId: res.id ?? null,
-    });
+    console.log(
+      `[OrderNotifications] staff ${opts.kind} email sent order=${order.orderNumber} recipients=${recipients.length} id=${res.id}`
+    );
     return { sent: true, id: res.id, recipients: recipients.length };
-  } catch (err) {
-    await recordOrderEmailLog({
-      event,
-      orderId: opts.orderId,
-      orderNumber: order?.orderNumber ?? null,
-      recipients,
-      subject: subject || "(not composed)",
-      status: "FAILED",
-      reason: "exception",
-      error: (err as Error)?.message || err,
-    });
-    return { sent: false, reason: "exception", error: (err as Error)?.message };
+  } catch (err: any) {
+    console.error(
+      "[OrderNotifications] staff event unexpected error:",
+      err?.message || err
+    );
+    return { sent: false, reason: "exception", error: err?.message };
   }
 }

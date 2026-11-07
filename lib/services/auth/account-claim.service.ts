@@ -184,7 +184,7 @@ export class AccountClaimService {
         },
         body: JSON.stringify({ email, password, name: fullName }),
       });
-      const json = await res.json().catch(() => ({}));
+      const json: any = await res.json().catch(() => ({}));
       if (!res.ok) {
         const code = String(json?.code || "");
         if (
@@ -204,10 +204,10 @@ export class AccountClaimService {
         };
       }
       authUserId = json?.user?.id || json?.data?.user?.id || null;
-    } catch (err) {
+    } catch (err: any) {
       return {
         success: false,
-        error: (err as Error)?.message || "Could not reach the authentication service.",
+        error: err?.message || "Could not reach the authentication service.",
       };
     }
 

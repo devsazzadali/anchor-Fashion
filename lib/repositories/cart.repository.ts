@@ -168,8 +168,9 @@ export class CartRepository {
         updated_at: cart.updatedAt.toISOString(),
         items,
       } as Cart;
-    } catch (error) {
-      throw new Error(`Failed to fetch cart: ${(error as Error).message}`);
+    } catch (error: any) {
+      console.error("CartRepository.getCart error:", error);
+      throw new Error(`Failed to fetch cart: ${error.message}`);
     }
   }
 
@@ -211,12 +212,12 @@ export class CartRepository {
         updated_at: newCart.updatedAt.toISOString(),
         items: [],
       } as Cart;
-    } catch (err) {
+    } catch (err: any) {
       if (userId) {
         const existing = await this.getCart(userId);
         if (existing) return existing;
       }
-      throw new Error(`Failed to create cart: ${(err as Error).message}`);
+      throw new Error(`Failed to create cart: ${err.message}`);
     }
   }
 
@@ -307,6 +308,7 @@ export class CartRepository {
 
       await prisma.cart.delete({ where: { id: guestCart.id } }).catch(() => {});
     } catch (err) {
+      console.error("CartRepository.mergeCart error:", err);
     }
   }
 

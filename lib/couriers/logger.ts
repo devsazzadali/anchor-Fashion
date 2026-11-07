@@ -46,32 +46,32 @@ export async function logCourierApiCall(entry: CourierApiLogEntry): Promise<void
     const sanitizedPayload = sanitizeLogData(entry.payload);
     const sanitizedResponse = sanitizeLogData(entry.responseData);
 
-    // FIX ROUND 28 (sweep): courier_api_logs real columns are
-    // (courier, endpoint, request, response, status_code) — the old
-    // payload's courier_code / method / success / response_time_ms /
-    // request_id / error_message / payload / response_data keys do
-    // not exist, so every log row landed nearly empty. The detail now
-    // rides inside the request/response JSON columns.
     const { error } = await db.from("courier_api_logs").insert({
-      courier: entry.courierCode,
+      courier_code: entry.courierCode,
+      method: entry.method,
       endpoint: entry.endpoint,
       status_code: entry.statusCode,
-      request: {
-        method: entry.method,
-        request_id: entry.requestId || null,
-        response_time_ms: entry.responseTimeMs,
-        success: entry.success,
-        payload: sanitizedPayload,
-      },
-      response: {
-        data: sanitizedResponse,
-        error_message: entry.errorMessage || null,
-      },
+      success: entry.success,
+      response_time_ms: entry.responseTimeMs,
+      request_id: entry.requestId || null,
+      error_message: entry.errorMessage || null,
+      payload: sanitizedPayload as any,
+      response_data: sanitizedResponse as any,
     });
 
     if (error) {
       // Table may not have been migrated yet; log locally to stdout and fail open
+      console.warn(
+        `[CourierLogger] Warning: Could not persist API log to DB (${error.message}). Log details:`,
+        {
+          courier: entry.courierCode,
+          endpoint: entry.endpoint,
+          statusCode: entry.statusCode,
+          success: entry.success,
+        }
+      );
     }
-  } catch (err) {
+  } catch (err: any) {
+    console.warn(`[CourierLogger] Exception logging API call: ${err.message}`);
   }
 }

@@ -1,106 +1,49 @@
 import { prisma } from "@/lib/prisma";
 
-interface RecentCustomerRow {
-  user_id: string;
-  full_name: string;
-  email: string | null;
-  avatar_url: string | null;
-  latest_order_id: string;
-  latest_order_status: string;
-  last_order_date: string;
-}
-
 export class DashboardRepository {
   async getDailyRevenue(days = 7) {
     const dateLimit = new Date();
     dateLimit.setDate(dateLimit.getDate() - days);
 
-    // REG-84 (Round 22): day bucketing and first-seen attribution now
-    // happen in the database (one $queryRaw) instead of fetching every
-    // in-window order and grouping in JS. Prisma groupBy cannot do
-    // this — groupBy(by: ["createdAt"]) buckets by exact timestamp
-    // (Round 20 measured 35 distinct timestamps for 35 production
-    // orders). The semantics of the old loop are preserved exactly:
-    //  - Days are UTC days, bucketed explicitly with
-    //    (created_at AT TIME ZONE 'UTC')::date — never the DB session
-    //    timezone — matching the old toISOString().slice(0, 10).
-    //  - total_orders counts ALL orders that day (any status);
-    //    revenue excludes statuses whose lowercase is cancelled /
-    //    failed / refunded / returned, as the old loop did.
-    //  - Revenue is SUM(total_amount::double precision ORDER BY
-    //    created_at): the old code accumulated Number(totalAmount) in
-    //    float64, in created_at order, and Postgres double-precision
-    //    SUM reproduces that accumulation bit-for-bit. A numeric SUM
-    //    converted once would NOT be identical (e.g. 0.10 + 0.20 is
-    //    0.30000000000000004 in the old output, 0.3 as a numeric sum —
-    //    measured diverging on 22/30 random 2dp trials, Round 22).
-    //  - new_customers per day = profiles whose MIN(created_at)
-    //    inside the window falls on that day: the old first-seen Set,
-    //    in created_at-asc iteration, counted a profile on the day of
-    //    its first in-window order regardless of that order's status.
-    //    Window-scoped, not all-time; null profile_id never counts.
-    //  - The window limit is computed in JS exactly as before and
-    //    passed as a parameter, so boundary semantics (>= limit) are
-    //    preserved by construction; an empty window yields no rows,
-    //    which maps to [] just like the old early return.
-    // Equivalence against the old implementation was proven
-    // byte-identical over the full production dataset (35 orders)
-    // plus synthetic and 400-row randomised fixtures — 22 window
-    // comparisons (7d / 365d / 1d / 0d, single-day, empty and
-    // boundary-exact windows) in the Round-22 PGlite harness
-    // (PG 18.6, the production major version; session TZ forced to
-    // Asia/Dhaka) and the repo-execution stub harness.
-    const rows = await prisma.$queryRaw<
-      { date: string; total_revenue: number; total_orders: bigint; new_customers: bigint }[]
-    >`
-      WITH daily AS (
-        SELECT
-          (created_at AT TIME ZONE 'UTC')::date AS day,
-          COUNT(*) AS total_orders,
-          COALESCE(
-            SUM(total_amount::double precision ORDER BY created_at)
-              FILTER (WHERE lower(status) NOT IN ('cancelled', 'failed', 'refunded', 'returned')),
-            0
-          ) AS total_revenue
-        FROM orders
-        WHERE created_at >= ${dateLimit}
-        GROUP BY day
-      ),
-      first_seen AS (
-        SELECT
-          profile_id,
-          (MIN(created_at) AT TIME ZONE 'UTC')::date AS day
-        FROM orders
-        WHERE created_at >= ${dateLimit} AND profile_id IS NOT NULL
-        GROUP BY profile_id
-      ),
-      new_customers AS (
-        SELECT day, COUNT(*) AS new_customers
-        FROM first_seen
-        GROUP BY day
-      )
-      SELECT
-        daily.day::text AS date,
-        daily.total_revenue AS total_revenue,
-        daily.total_orders AS total_orders,
-        COALESCE(new_customers.new_customers, 0) AS new_customers
-      FROM daily
-      LEFT JOIN new_customers ON new_customers.day = daily.day
-      ORDER BY daily.day ASC
-    `;
-
-    return rows.map((r) => {
-      const revenue = Number(r.total_revenue) || 0;
-      const orders = Number(r.total_orders) || 0;
-      return {
-        date: r.date,
-        total_revenue: revenue,
-        total_orders: orders,
-        aov: orders > 0 ? Math.round(revenue / orders) : 0,
-        new_customers: Number(r.new_customers) || 0,
-        returning_customers: 0,
-      };
+    const rawOrders = await prisma.order.findMany({
+      select: { totalAmount: true, status: true, createdAt: true, profileId: true },
+      where: { createdAt: { gte: dateLimit } },
+      orderBy: { createdAt: "asc" },
     });
+
+    if (rawOrders.length === 0) return [];
+
+    const grouped: Record<
+      string,
+      { date: string; revenue: number; orders: number; aov: number; newCustomers: number }
+    > = {};
+    const seenCustomers = new Set<string>();
+
+    for (const ord of rawOrders) {
+      const dateStr = ord.createdAt.toISOString().split("T")[0];
+      if (!grouped[dateStr]) {
+        grouped[dateStr] = { date: dateStr, revenue: 0, orders: 0, aov: 0, newCustomers: 0 };
+      }
+      grouped[dateStr].orders += 1;
+      
+      const statusLower = ord.status.toLowerCase();
+      if (!["cancelled", "failed", "refunded", "returned"].includes(statusLower)) {
+        grouped[dateStr].revenue += Number(ord.totalAmount) || 0;
+      }
+      if (ord.profileId && !seenCustomers.has(ord.profileId)) {
+        seenCustomers.add(ord.profileId);
+        grouped[dateStr].newCustomers += 1;
+      }
+    }
+
+    return Object.values(grouped).map((g) => ({
+      date: g.date,
+      total_revenue: g.revenue,
+      total_orders: g.orders,
+      aov: g.orders > 0 ? Math.round(g.revenue / g.orders) : 0,
+      new_customers: g.newCustomers,
+      returning_customers: 0,
+    }));
   }
 
   async getDashboardKPIs() {
@@ -125,16 +68,8 @@ export class DashboardRepository {
       0
     );
     const totalOrdersCount = allOrders.length;
-    // FIX ROUND 29 (D3): AOV definition — displayed Total Revenue ÷
-    // displayed Total Orders. Revenue excludes cancelled / failed /
-    // refunded / returned orders (money never collected), while the
-    // Orders card counts every order placed. AOV previously divided
-    // revenue by the valid-orders count only (99,251.75 ÷ 27 ≈ ৳3,676),
-    // which contradicted the two cards beside it (99,251.75 ÷ 39 ≈
-    // ৳2,545). Numerator and divisor now match the displayed cards
-    // exactly, the same definition getDailyRevenue already used.
     const avgOrderVal =
-      totalOrdersCount > 0 ? Math.round(totalRev / totalOrdersCount) : 0;
+      validOrders.length > 0 ? Math.round(totalRev / validOrders.length) : 0;
 
     // Real period-over-period trends (last 30 days vs the 30 before).
     // These were previously hardcoded (+12.5%, +8.2%, ...) and
@@ -157,11 +92,10 @@ export class DashboardRepository {
     const revPrev = validOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom)).reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
     const ordCur = allOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1)).length;
     const ordPrev = allOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom)).length;
-    // FIX ROUND 29 (D3): trend AOV uses the same definition as the
-    // headline figure — window revenue (valid orders) ÷ ALL orders in
-    // the window — so the trend compares like with like.
-    const aovCur = ordCur > 0 ? revCur / ordCur : 0;
-    const aovPrev = ordPrev > 0 ? revPrev / ordPrev : 0;
+    const validCur = validOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1));
+    const aovCur = validCur.length > 0 ? revCur / validCur.length : 0;
+    const validPrev = validOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom));
+    const aovPrev = validPrev.length > 0 ? revPrev / validPrev.length : 0;
     const custCur = profiles.filter((p) => inWindow(p.createdAt, curFrom, now + 1)).length;
     const custPrev = profiles.filter((p) => inWindow(p.createdAt, prevFrom, curFrom)).length;
 
@@ -173,37 +107,8 @@ export class DashboardRepository {
     const returningCount = [...ordersPerBuyer.values()].filter((n) => n >= 2).length;
     const buyersCur = new Set(validOrders.filter((o) => inWindow(o.createdAt, curFrom, now + 1)).map((o) => o.profileId).filter(Boolean));
     const repeatBuyersCur = [...buyersCur].filter((id) => (ordersPerBuyer.get(id as string) || 0) >= 2).length;
-    const validPrev = validOrders.filter((o) => inWindow(o.createdAt, prevFrom, curFrom));
     const buyersPrev = new Set(validPrev.map((o) => o.profileId).filter(Boolean));
     const repeatBuyersPrev = [...buyersPrev].filter((id) => (ordersPerBuyer.get(id as string) || 0) >= 2).length;
-
-    // REG-35: "Today's Orders" must mean orders placed TODAY in the
-    // store's timezone (Asia/Dhaka, fixed UTC+6, no DST) — the manager
-    // dashboard previously displayed the ALL-TIME order count under
-    // that label. Trend is today vs yesterday (Dhaka), matching the
-    // card's meaning.
-    const dhakaDateStr = (d: Date) =>
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Dhaka",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(d);
-    const todayStartUtc = Date.parse(`${dhakaDateStr(new Date())}T00:00:00+06:00`);
-    const tomorrowStartUtc = todayStartUtc + DAY;
-    const yesterdayStartUtc = todayStartUtc - DAY;
-    const todaysOrdersCount = allOrders.filter((o) =>
-      inWindow(o.createdAt, todayStartUtc, tomorrowStartUtc)
-    ).length;
-    const yesterdaysOrdersCount = allOrders.filter((o) =>
-      inWindow(o.createdAt, yesterdayStartUtc, todayStartUtc)
-    ).length;
-
-    // REG-35: delivered ("completed") = DELIVERED + COMPLETED, the
-    // same bucket the admin surfaces label "Delivered" (REG-22).
-    const deliveredOrdersCount = allOrders.filter((o) =>
-      ["DELIVERED", "COMPLETED"].includes(o.status.toUpperCase())
-    ).length;
 
     return {
       revenue: {
@@ -214,12 +119,6 @@ export class DashboardRepository {
         value: totalOrdersCount,
         trend: trendOf(ordCur, ordPrev),
       },
-      todaysOrders: {
-        value: todaysOrdersCount,
-        trend: trendOf(todaysOrdersCount, yesterdaysOrdersCount),
-      },
-      validOrdersCount: validOrders.length,
-      deliveredOrdersCount,
       aov: {
         value: avgOrderVal,
         trend: trendOf(aovCur, aovPrev),
@@ -259,29 +158,9 @@ export class DashboardRepository {
       (i) => i.quantityAvailable > 0 && i.quantityAvailable <= (i.reorderPoint || 0)
     ).length;
 
-    // REG-35: "Processing" = orders currently in a processing state
-    // (confirmed → ready for shipment). It previously counted only
-    // PENDING_PAYMENT + PREPARING (showing 1 while 14 orders were in
-    // processing states). "Completed" previously added SHIPPED —
-    // in-transit is not completed; completed = DELIVERED + COMPLETED.
-    const PROCESSING_STATES = [
-      "CONFIRMED",
-      "PREPARING",
-      "PROCESSING",
-      "PICKING",
-      "PACKING",
-      "READY_FOR_SHIPMENT",
-    ];
-    const processingOrders = PROCESSING_STATES.reduce(
-      (sum, s) => sum + (statusCounts[s] || 0),
-      0
-    );
-
     return {
       pendingOrders: (statusCounts["PENDING_PAYMENT"] || 0) + (statusCounts["PREPARING"] || 0),
-      processingOrders,
-      completedOrders:
-        (statusCounts["DELIVERED"] || 0) + (statusCounts["COMPLETED"] || 0),
+      completedOrders: (statusCounts["DELIVERED"] || 0) + (statusCounts["SHIPPED"] || 0),
       cancelledOrders: statusCounts["CANCELLED"] || 0,
       refundRequests: statusCounts["REFUNDED"] || 0,
       lowStock,
@@ -291,92 +170,29 @@ export class DashboardRepository {
   }
 
   async getTopSellers() {
-    // REG-84 (Round 20): sold/earnings now come from the database
-    // (three groupBy passes) instead of fetching every order item and
-    // summing in JS. Two semantics of the old loop are preserved
-    // structurally:
-    //  - "sold": the JS counted a 0-quantity item as 1 sold
-    //    (Number(q) || 1) where a plain SUM counts 0 — so sold =
-    //    SUM(quantity WHERE quantity > 0) + COUNT(quantity = 0).
-    //    (quantity is Int NOT NULL in the schema/DB, so the JS
-    //    null-quantity → 1 case is unreachable through Prisma.)
-    //  - product_name/price are FIRST-SEEN snapshots from the items
-    //    iteration: a distinct findMany returns exactly one row per
-    //    product — the first in result order, the same unordered
-    //    first-seen semantics the old full scan had.
-    // Equivalence against the old implementation was proven
-    // byte-identical over the full production dataset (40 items,
-    // including a product whose items carry divergent name/price
-    // snapshots) plus synthetic quantity-0 / divergent-snapshot
-    // fixtures — Round-20 equivalence + repo-execution harnesses.
-    const [soldGroups, zeroQtyGroups, earningGroups, firstSeenItems, pricedItems] =
-      await Promise.all([
-        prisma.orderItem.groupBy({
-          by: ["productId"],
-          where: { productId: { not: null }, quantity: { gt: 0 } },
-          _sum: { quantity: true },
-        }),
-        prisma.orderItem.groupBy({
-          by: ["productId"],
-          where: { productId: { not: null }, quantity: { equals: 0 } },
-          _count: { _all: true },
-        }),
-        prisma.orderItem.groupBy({
-          by: ["productId"],
-          where: { productId: { not: null } },
-          _sum: { totalPrice: true },
-        }),
-        prisma.orderItem.findMany({
-          where: { productId: { not: null } },
-          distinct: ["productId"],
-          select: { productId: true, productName: true, unitPrice: true },
-        }),
-        // FIX ROUND 29 (D4): a product's first-seen snapshot can be a
-        // corrupt row — production carries a POS test item whose
-        // product_name is literally "Unknown Product" with unit_price 0
-        // (order AF-POS-20261029-2793, itself a ৳0 order). A priced
-        // snapshot is the representative price source before falling
-        // back to the product's current base price.
-        prisma.orderItem.findMany({
-          where: { productId: { not: null }, unitPrice: { gt: 0 } },
-          distinct: ["productId"],
-          select: { productId: true, unitPrice: true },
-        }),
-      ]);
-
-    const soldByProduct = new Map<string, number>();
-    for (const g of soldGroups) {
-      if (g.productId) soldByProduct.set(g.productId, g._sum.quantity || 0);
-    }
-    for (const g of zeroQtyGroups) {
-      if (g.productId) {
-        soldByProduct.set(g.productId, (soldByProduct.get(g.productId) || 0) + g._count._all);
-      }
-    }
-    const earningsByProduct = new Map<string, number>();
-    for (const g of earningGroups) {
-      if (g.productId) earningsByProduct.set(g.productId, Number(g._sum.totalPrice) || 0);
-    }
-    const pricedByProduct = new Map<string, number>();
-    for (const it of pricedItems) {
-      if (it.productId) pricedByProduct.set(it.productId, Number(it.unitPrice) || 0);
-    }
+    const orderItems = await prisma.orderItem.findMany({
+      select: { productId: true, productName: true, unitPrice: true, quantity: true, totalPrice: true },
+    });
 
     const statsByProduct: Record<
       string,
       { product_id: string; product_name: string; sold: number; earnings: number; price: number }
     > = {};
 
-    for (const item of firstSeenItems) {
+    for (const item of orderItems) {
       if (!item.productId) continue;
       const pid = item.productId;
-      statsByProduct[pid] = {
-        product_id: pid,
-        product_name: item.productName || "Unknown Product",
-        sold: soldByProduct.get(pid) || 0,
-        earnings: earningsByProduct.get(pid) || 0,
-        price: Number(item.unitPrice) || 0,
-      };
+      if (!statsByProduct[pid]) {
+        statsByProduct[pid] = {
+          product_id: pid,
+          product_name: item.productName || "Unknown Product",
+          sold: 0,
+          earnings: 0,
+          price: Number(item.unitPrice) || 0,
+        };
+      }
+      statsByProduct[pid].sold += Number(item.quantity) || 1;
+      statsByProduct[pid].earnings += Number(item.totalPrice) || 0;
     }
 
     const sortedSales = Object.values(statsByProduct)
@@ -413,18 +229,9 @@ export class DashboardRepository {
       const prod = pMap.get(sale.product_id);
       return {
         product_id: sale.product_id,
-        // FIX ROUND 29 (D4): the product row's own name is authoritative.
-        // The first-seen item snapshot can be a corrupt literal
-        // ("Unknown Product" on a ৳0 POS test item) even though the
-        // product exists — the snapshot is only the fallback for
-        // products that no longer exist.
-        product_name: prod?.name || sale.product_name,
+        product_name: sale.product_name,
         category_name: prod?.category?.name || "Apparel",
-        price:
-          pricedByProduct.get(sale.product_id) ||
-          sale.price ||
-          Number(prod?.basePrice) ||
-          0,
+        price: sale.price || Number(prod?.basePrice) || 0,
         sold: sale.sold,
         earnings: sale.earnings,
         image_url: prod?.imageUrl || null,
@@ -439,29 +246,21 @@ export class DashboardRepository {
       categoryRev[cat] = 0;
     }
 
-    // REG-84 (Round 19): per-product revenue sums now come from the
-    // database (one groupBy) instead of fetching every order item and
-    // summing in JS. The presentation — seeded default categories, the
-    // "Apparel" fallback for missing/deleted products and null
-    // productIds, sort + top-5 — is unchanged. Equivalence against the
-    // old implementation was proven byte-identical over the full
-    // production dataset (40 items; Round-19 equivalence harness).
-    const grouped = await prisma.orderItem.groupBy({
-      by: ["productId"],
-      _sum: { totalPrice: true },
+    const orderItems = await prisma.orderItem.findMany({
+      select: { productId: true, totalPrice: true },
     });
 
-    if (grouped.length > 0) {
-      const pIds = [...new Set(grouped.map(g => g.productId).filter((id): id is string => Boolean(id)))];
+    if (orderItems.length > 0) {
+      const pIds = [...new Set(orderItems.map(oi => oi.productId).filter((id): id is string => Boolean(id)))];
       const products = await prisma.product.findMany({
         where: { id: { in: pIds } },
         select: { id: true, category: { select: { name: true } } }
       });
       const pMap = new Map(products.map(p => [p.id, p.category?.name || "Apparel"]));
 
-      for (const g of grouped) {
-        const catName = (g.productId ? pMap.get(g.productId) : null) || "Apparel";
-        categoryRev[catName] = (categoryRev[catName] || 0) + Number(g._sum.totalPrice || 0);
+      for (const it of orderItems) {
+        const catName = (it.productId ? pMap.get(it.productId) : null) || "Apparel";
+        categoryRev[catName] = (categoryRev[catName] || 0) + (Number(it.totalPrice) || 0);
       }
     }
 
@@ -475,55 +274,27 @@ export class DashboardRepository {
   }
 
   async getRecentCustomers() {
-    // FIX ROUND 29 (D5): the widget is "Recent Customers" — show each
-    // customer once (their latest order), and resolve the display name
-    // from every source that can carry it: profile name → shipping
-    // address name (guest/auto-created profiles) → email prefix →
-    // "Guest customer". Previously the rows were the latest ORDERS (one
-    // customer could fill the whole list) and any row whose profile
-    // name was missing rendered as a bare truncated UUID in the UI.
     const latestOrders = await prisma.order.findMany({
-      take: 25,
+      take: 5,
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        profileId: true,
-        status: true,
-        createdAt: true,
-        shippingAddress: true,
-        profile: { select: { firstName: true, lastName: true, email: true, avatarUrl: true } },
-      },
+      select: { id: true, profileId: true, status: true, createdAt: true, profile: { select: { firstName: true, lastName: true, email: true, avatarUrl: true } } }
     });
 
-    const seen = new Set<string>();
-    const rows: RecentCustomerRow[] = [];
-    for (const ord of latestOrders) {
-      const key = ord.profileId || ord.id;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
+    return latestOrders.map((ord: any) => {
       const prof = ord.profile;
-      const addr = (ord.shippingAddress || {}) as Record<string, any>;
-      const profileName = [prof?.firstName, prof?.lastName].filter(Boolean).join(" ").trim();
-      const addressName = [addr.first_name || addr.firstName, addr.last_name || addr.lastName]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-      const fullName =
-        profileName || addressName || prof?.email?.split("@")[0] || "Guest customer";
+      const fullName = prof?.firstName || prof?.lastName
+        ? `${prof.firstName || ""} ${prof.lastName || ""}`.trim()
+        : prof?.email?.split("@")[0] || "Customer";
 
-      rows.push({
-        user_id: key,
+      return {
+        user_id: ord.profileId || ord.id,
         full_name: fullName,
-        email: prof?.email || null,
         avatar_url: prof?.avatarUrl || null,
         latest_order_id: ord.id,
         latest_order_status: ord.status,
         last_order_date: ord.createdAt.toISOString(),
-      });
-      if (rows.length >= 5) break;
-    }
-    return rows;
+      };
+    });
   }
 
   async getUserLocations() {

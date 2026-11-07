@@ -24,7 +24,7 @@ import {
 import { ArrowDownRight, Loader2, PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { Warehouse, WarehouseZone, WarehouseBin } from "@/types/inventory.types";
-import { stockInAction, getWarehouseZones, getZoneBins } from "@/lib/actions/warehouse.actions";
+import { stockInAction, getWarehouseZones, getZoneBins } from "@/actions/warehouse.actions";
 import { getVariants, getSupplierProfiles } from "@/app/actions/admin/procurement.actions";
 
 interface StockInDialogProps {
@@ -102,7 +102,7 @@ export function StockInDialog({
         ]);
 
         if (varsRes.success && varsRes.data && varsRes.data.length > 0) {
-          const loadedVariants = varsRes.data.map((v) => ({
+          const loadedVariants = varsRes.data.map((v: any) => ({
             id: v.id,
             sku: v.sku,
             name: v.name || v.title || `${v.product_name || "Product"} (${v.sku})`,
@@ -119,6 +119,7 @@ export function StockInDialog({
           setSuppliers(suppRes.data);
         }
       } catch (e) {
+        console.error("Failed to load catalog for stock in:", e);
       }
     }
     loadCatalog();

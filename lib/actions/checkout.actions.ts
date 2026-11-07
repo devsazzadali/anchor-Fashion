@@ -8,14 +8,10 @@ import {
   CheckoutFormValues,
   checkoutFormSchema,
 } from "@/schemas/checkout.schema";
-import { CheckoutSession, CheckoutStep, RiskLevel } from "@/types/checkout.types";
+import { CheckoutStep } from "@/types/checkout.types";
 import { CodRiskService } from "../services/fraud/cod-risk.service";
 import { CodOtpService } from "../services/fraud/cod-otp.service";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
-import { CheckoutService as SessionCheckoutService } from "@/services/checkout.service";
-import { CouponService } from "@/services/coupon.service";
-import { createDbClient } from "@/lib/db/client";
 
 async function getSessionIdentifiers() {
   const { user } = await getServerSession();
@@ -40,21 +36,21 @@ export async function fetchCheckoutSessionAction(cartId: string) {
       guestEmail
     );
     return { success: true, session };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
 export async function updateCheckoutStepAction(
   sessionId: string,
   step: CheckoutStep,
-  data: Partial<CheckoutSession>
+  data: any
 ) {
   try {
     const session = await CheckoutService.updateSession(sessionId, step, data);
     return { success: true, session };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -63,8 +59,8 @@ export async function calculateOrderSummaryAction(cartId: string) {
     const { userId } = await getSessionIdentifiers();
     const summary = await OrderService.calculateSummary(cartId, userId);
     return { success: true, summary };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -95,8 +91,8 @@ export async function evaluateCodRiskAction(
     });
 
     return { success: true, evaluation };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -106,15 +102,7 @@ export async function evaluateCodRiskAction(
 export async function sendCodOtpAction(
   checkoutSessionId: string,
   formData: CheckoutFormValues
-): Promise<{
-  success: boolean;
-  sessionId?: string;
-  maskedTarget?: string;
-  targetType?: "email" | "phone";
-  remainingCooldownSeconds?: number;
-  expirySeconds?: number;
-  error?: string;
-}> {
+) {
   try {
     const parsedData = checkoutFormSchema.parse(formData);
     const { userId } = await getSessionIdentifiers();
@@ -146,8 +134,8 @@ export async function sendCodOtpAction(
     });
 
     return result;
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -165,8 +153,8 @@ export async function verifyCodOtpAction(
 
     const result = await CodOtpService.verifyOtp(checkoutSessionId, otpCode.trim());
     return result;
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
@@ -191,7 +179,7 @@ export async function processCheckoutAction(
     if (userId) {
       try {
         const { user: currentUser } = await getServerSession();
-        let roleName = currentUser?.role || currentUser?.user_metadata?.role;
+        let roleName = (currentUser as any)?.role || currentUser?.user_metadata?.role;
         if (!roleName) {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
           const profile = await prisma.profile.findFirst({
@@ -211,32 +199,23 @@ export async function processCheckoutAction(
         if (upperRole && (ADMIN_ROLES as readonly string[]).includes(upperRole)) {
           throw new Error("Admin accounts cannot place customer orders. Please use a customer account.");
         }
-      } catch (err) {
-        if ((err as Error).message?.includes("Admin accounts")) throw err;
+      } catch (err: any) {
+        if (err.message?.includes("Admin accounts")) throw err;
+        console.warn("[processCheckoutAction] Role verification notice:", err);
       }
     }
 
     const guestEmail = parsedData.information.email;
 
-    // 2. Compute authoritative server-side order summary.
-    // S5-2: the shipping address (and session) MUST be passed here —
-    // without them the delivery fee resolves from the bare shipping
-    // method / flat fallback instead of the address's delivery zone,
-    // so the fraud evaluation below priced the order at a total the
-    // customer was never charged (persisted signal quoted ৳3,542.5 on
-    // an order whose charged total was ৳3,572.50). placeOrder computes
-    // its own summary WITH the address; evaluating on the same inputs
-    // makes the evaluated total the charged total.
+    // 2. Compute authoritative server-side order summary
     const summary = await OrderService.calculateSummary(
       cartId,
       userId,
-      parsedData.shipping.shipping_method,
-      checkoutSessionId,
-      parsedData.information.shipping_address
+      parsedData.shipping.shipping_method
     );
 
     let riskMetadata: {
-      risk_level?: RiskLevel;
+      risk_level?: string;
       risk_score?: number;
       risk_reasons?: string[];
       verification_status?: string;
@@ -274,18 +253,7 @@ export async function processCheckoutAction(
 
       // Check if verification is required by risk policy
       if (riskEvaluation.requiresVerification) {
-        // A3-A3: "verified" is not enough — the verified session must be
-        // bound to THIS order's phone AND email. A code verified against
-        // the customer's own email must not validate an order submitted
-        // under a different phone/email; when the binding fails we fall
-        // through to re-dispatch against the order's own identity below.
-        const isVerified = await CodOtpService.isSessionBoundToOrder(
-          checkoutSessionId,
-          {
-            phone: parsedData.information.shipping_address.phone,
-            email: parsedData.information.email,
-          }
-        );
+        const isVerified = await CodOtpService.isSessionVerified(checkoutSessionId);
 
         if (!isVerified) {
           // Trigger OTP dispatch if not already active
@@ -304,7 +272,6 @@ export async function processCheckoutAction(
             maskedTarget: otpInit.maskedTarget || CodOtpService.maskTarget(parsedData.information.email, "email"),
             targetType: otpInit.targetType || "email",
             remainingCooldownSeconds: otpInit.remainingCooldownSeconds,
-            expirySeconds: otpInit.expirySeconds,
             error: otpInit.error,
           };
         }
@@ -336,12 +303,12 @@ export async function processCheckoutAction(
       guestEmail || null,
       parsedData,
       checkoutSessionId,
-      riskMetadata
+      riskMetadata as any
     );
 
     // Trigger Real-time Admin Notification
     try {
-      const { createOrderNotificationAction } = await import("@/lib/actions/admin/notification.actions");
+      const { createOrderNotificationAction } = await import("@/actions/admin/notification.actions");
       const customerFullName = [
         parsedData.information.shipping_address.first_name,
         parsedData.information.shipping_address.last_name,
@@ -361,6 +328,7 @@ export async function processCheckoutAction(
         status: order.status,
       });
     } catch (notifErr) {
+      console.warn("[Checkout] Error triggering order notification:", notifErr);
     }
 
     // Phase 8: staff notification EMAIL on the new-order event (the in-app
@@ -373,6 +341,10 @@ export async function processCheckoutAction(
         );
         await notifyStaffOrderEvent({ kind: "new_order", orderId: order.id });
       } catch (staffMailErr) {
+        console.warn(
+          "[Checkout] Staff new-order email failed:",
+          staffMailErr
+        );
       }
     })();
 
@@ -423,59 +395,7 @@ export async function processCheckoutAction(
       orderNumber: order.order_number,
       paymentPayload,
     };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
-}
-
-/**
- * Coupon actions — moved verbatim (logic identical) from
- * actions/checkout.actions.ts in Round-20 Item C Step 5, where they were
- * the last live exports of that module. They operate on the checkout
- * SESSION via the root (instance-style) CheckoutService and validate via
- * CouponService, exactly as before; the lib CheckoutService imported at
- * the top of this file is the static-style namesake, hence the alias.
- */
-async function getCouponUserId(): Promise<string | undefined> {
-  try {
-    const { getServerSession } = await import("@/lib/auth/server");
-    const { user } = await getServerSession();
-    if (user?.id) return user.id;
-  } catch (_) {}
-  try {
-    const db = await createDbClient();
-    const {
-      data: { user },
-    } = await db.auth.getUser();
-    return user?.id ?? undefined;
-  } catch (_) {
-    return undefined;
-  }
-}
-
-export async function applyCouponAction(sessionId: string, code: string, subtotal: number) {
-  const checkoutService = new SessionCheckoutService();
-  const session = await checkoutService.getSession(sessionId);
-  if (!session) throw new Error("Session not found");
-
-  const userId = await getCouponUserId();
-  const validation = await CouponService.validateAndCalculateDiscount(code, subtotal, userId);
-
-  if (!validation.isValid) {
-    return { success: false, error: validation.error };
-  }
-
-  await checkoutService.updateCouponStep(sessionId, validation.coupon?.code || code);
-  revalidatePath("/checkout");
-  return { success: true, discount: validation.discount, code: validation.coupon?.code };
-}
-
-export async function removeCouponAction(sessionId: string) {
-  const checkoutService = new SessionCheckoutService();
-  const session = await checkoutService.getSession(sessionId);
-  if (!session) throw new Error("Session not found");
-
-  await checkoutService.updateCouponStep(sessionId, null);
-  revalidatePath("/checkout");
-  return { success: true };
 }

@@ -23,13 +23,10 @@ export function getOptimisticUpdateHelpers<T>(
       // Return a context object with the snapshotted value
       return { previousData };
     },
-    onError: (_err: unknown, _variables: unknown, context: unknown) => {
+    onError: (_err: unknown, _variables: unknown, context: any) => {
       // Rollback on error
-      const previousData = (
-        context as { previousData?: T } | null | undefined
-      )?.previousData;
-      if (previousData) {
-        queryClient.setQueryData(queryKey, previousData);
+      if (context?.previousData) {
+        queryClient.setQueryData(queryKey, context.previousData);
       }
     },
     onSettled: () => {

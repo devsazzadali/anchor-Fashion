@@ -13,11 +13,7 @@ export interface ExportPdfOptions {
   companyName?: string;
 }
 
-// REG-65: the scalar cell vocabulary exportToCsv stringifies (Date cells
-// take the locale branch; everything else goes through toString()).
-export type CsvRow = Record<string, string | number | boolean | Date | null | undefined>;
-
-export function exportToCsv(data: CsvRow[], filename: string) {
+export function exportToCsv(data: any[], filename: string) {
   if (!data || !data.length) {
     return;
   }
@@ -48,12 +44,9 @@ export function exportToCsv(data: CsvRow[], filename: string) {
 
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
 
-  const legacyNavigator = navigator as Navigator & {
-    msSaveBlob?: (blob: Blob, filename: string) => void;
-  };
-  if (legacyNavigator.msSaveBlob) {
+  if ((navigator as any).msSaveBlob) {
     // IE 10+
-    legacyNavigator.msSaveBlob(blob, filename);
+    (navigator as any).msSaveBlob(blob, filename);
   } else {
     const link = document.createElement("a");
     if (link.download !== undefined) {

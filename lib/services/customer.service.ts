@@ -5,14 +5,6 @@ import {
   CustomerNotification,
 } from "@/types/customer.types";
 
-interface CreateTicketData {
-  subject: string;
-  description: string;
-  status?: string;
-  priority?: string;
-  customer_id?: string | null;
-}
-
 export class CustomerService {
   private repository: CustomerRepository;
 
@@ -106,7 +98,7 @@ export class CustomerService {
     return this.repository.getTickets(userId);
   }
 
-  async createTicket(userId: string, ticketData: CreateTicketData) {
+  async createTicket(userId: string, ticketData: any) {
     return this.repository.createTicket({
       ...ticketData,
       user_id: userId,

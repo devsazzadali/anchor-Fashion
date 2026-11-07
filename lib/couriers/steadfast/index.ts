@@ -67,13 +67,13 @@ export class SteadfastCourierProvider implements CourierProvider {
             ? `Steadfast API reachable with high latency (${responseTime}ms)`
             : "Steadfast API is reachable and authenticated",
       };
-    } catch (err) {
+    } catch (err: any) {
       const responseTime = Date.now() - start;
       return {
         status: "unhealthy",
         responseTime,
         lastCheckedAt: new Date().toISOString(),
-        message: `Steadfast health check failed: ${(err as Error).message}`,
+        message: `Steadfast health check failed: ${err.message}`,
       };
     }
   }
