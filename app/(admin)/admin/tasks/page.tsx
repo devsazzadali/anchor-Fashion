@@ -15,6 +15,7 @@ export default async function AdminTasksPage() {
     const res = await fetchTasksAction();
     safeTasks = Array.isArray(res?.data) ? res.data : [];
   } catch (err) {
+    console.error("AdminTasksPage fetchTasksAction failed:", err);
     safeTasks = [];
   }
 

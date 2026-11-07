@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Save, Globe } from "lucide-react";
 import { toast } from "sonner";
-import { updateSeoSettings } from "@/lib/actions/cms.actions";
+import { updateSeoSettings } from "@/actions/cms.actions";
 
 export default function SeoManager() {
   const [loading, setLoading] = useState(false);
@@ -23,11 +23,11 @@ export default function SeoManager() {
     metaTitle: "Anchor Fashion | Premium Clothing",
     metaDescription:
       "Discover the latest trends in premium fashion at Anchor Fashion.",
-    ogImage: "https://www.anchorfashion.com.bd/og-image.jpg",
+    ogImage: "https://anchorfashion.com/og-image.jpg",
     twitterHandle: "@anchorfashion",
     enableIndex: true,
     jsonLd:
-      '{\n  "@context": "https://schema.org",\n  "@type": "Organization",\n  "name": "Anchor Fashion",\n  "url": "https://www.anchorfashion.com.bd"\n}',
+      '{\n  "@context": "https://schema.org",\n  "@type": "Organization",\n  "name": "Anchor Fashion",\n  "url": "https://anchorfashion.com"\n}',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {

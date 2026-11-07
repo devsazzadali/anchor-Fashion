@@ -63,6 +63,7 @@ export default async function CategoryDetailsPage({ params }: { params: Promise<
       />
     );
   } catch (err) {
+    console.error("Error loading category details:", err);
     return notFound();
   }
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { use, useState } from "react";
 import {
   useShipmentDetail,
   useAssignCourier,
@@ -9,9 +8,7 @@ import {
   useGenerateLabel,
   useSyncTracking,
 } from "@/hooks/shipping/use-shipments";
-import { getCourierProvidersAction } from "@/lib/actions/logistics.actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -27,16 +24,18 @@ import {
 import { ShipmentStatus, CourierProviderCode } from "@/types/shipping.types";
 import { toast } from "sonner";
 
-// FIX ROUND 25: there is deliberately NO hardcoded courier list here
-// anymore. The assign dropdown is built from the ACTIVE
-// courier_providers rows (see courierOptions in the component) — the
-// same set CourierRegistry can actually assign. The old static list
-// offered every provider TYPE including the Sandbox test provider, so
-// choosing an unregistered one persisted the assignment and then died
-// at submit with "[CourierRegistry] Provider '…' is not registered or
-// inactive." Sandbox now appears only when an operator has added it
-// under Shipping → Couriers, exactly as the registry's Phase-8 rule
-// intends — and then it works, as a clearly-labelled test provider.
+const COURIERS: { label: string; value: CourierProviderCode }[] = [
+  { label: "Steadfast", value: "steadfast" },
+  { label: "Pathao", value: "pathao" },
+  { label: "RedX", value: "redx" },
+  { label: "Paperfly", value: "paperfly" },
+  { label: "Sundarban", value: "sundarban" },
+  { label: "eCourier", value: "ecourier" },
+  { label: "DHL", value: "dhl" },
+  { label: "FedEx", value: "fedex" },
+  { label: "UPS", value: "ups" },
+  { label: "Sandbox (Test)", value: "sandbox" },
+];
 
 const STATUS_BADGE: Record<ShipmentStatus, { label: string; color: string }> = {
   created: { label: "Created", color: "secondary" },
@@ -59,60 +58,13 @@ export default function ShipmentDetailPage({
 }) {
   const { id } = use(params);
   const { data: shipment, isLoading, error } = useShipmentDetail(id);
-  const [selectedCourier, setSelectedCourier] = useState<
-    CourierProviderCode | ""
-  >("");
+  const [selectedCourier, setSelectedCourier] =
+    useState<CourierProviderCode>("steadfast");
 
   const assignCourier = useAssignCourier();
   const cancelShipment = useCancelShipment();
   const generateLabel = useGenerateLabel();
   const syncTracking = useSyncTracking();
-
-  // FIX ROUND 25: assignable couriers = ACTIVE courier_providers rows
-  // (sanitized by getCourierProvidersAction — the same records
-  // CourierRegistry registers from). Inactive or never-added providers
-  // are not offered, so every option in the dropdown can really be
-  // assigned. Sandbox rows carry is_sandbox and are labelled "(Test)".
-  const { data: providersRes } = useQuery({
-    queryKey: ["courier-providers", "assignable"],
-    queryFn: () => getCourierProvidersAction(),
-  });
-  const courierOptions: { label: string; value: CourierProviderCode }[] = (
-    providersRes?.success ? (providersRes.data ?? []) : []
-  )
-    .filter((p) => p.is_active)
-    .map((p) => ({
-      value: p.code as CourierProviderCode,
-      label: p.is_sandbox
-        ? `${p.display_name || p.name} (Test)`
-        : p.display_name || p.name,
-    }));
-
-  // Keep the selection on an assignable courier: the shipment's current
-  // courier when it is still active, otherwise the first option.
-  useEffect(() => {
-    if (courierOptions.length === 0) return;
-    if (courierOptions.some((o) => o.value === selectedCourier)) return;
-    const current = shipment?.courier_provider_code as
-      | CourierProviderCode
-      | undefined;
-    setSelectedCourier(
-      current && courierOptions.some((o) => o.value === current)
-        ? current
-        : courierOptions[0].value
-    );
-    // courierOptions is rebuilt each render; its length + the two
-    // selection inputs are the meaningful dependencies.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courierOptions.length, shipment?.courier_provider_code, selectedCourier]);
-  // FIX ROUND 23: this useState previously sat BELOW the isLoading /
-  // error early returns, so the first data-loaded render called one
-  // more hook than the loading render — React threw "Rendered more
-  // hooks than during the previous render" and the page crashed with
-  // "Something went wrong!" on first open (a retry worked because the
-  // query cache made isLoading false from the start). All hooks must
-  // stay above every early return.
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   if (isLoading)
     return <div className="p-8 text-muted-foreground">Loading shipment…</div>;
@@ -128,12 +80,6 @@ export default function ShipmentDetailPage({
   );
 
   const handleAssign = async () => {
-    if (!selectedCourier) {
-      toast.error(
-        "No active courier available — add one under Shipping → Couriers first."
-      );
-      return;
-    }
     try {
       await assignCourier.mutateAsync({
         shipmentId: id,
@@ -141,20 +87,21 @@ export default function ShipmentDetailPage({
         autoSubmit: true,
       });
       toast.success("Courier assigned and consignment submitted");
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
   const handleCancel = async () => {
+    if (!confirm("Cancel this shipment?")) return;
     try {
       await cancelShipment.mutateAsync({
         shipmentId: id,
         reason: "Cancelled by admin",
       });
       toast.success("Shipment cancelled");
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
@@ -163,8 +110,8 @@ export default function ShipmentDetailPage({
       const result = await generateLabel.mutateAsync(id);
       if (result?.labelUrl) window.open(result.labelUrl, "_blank");
       toast.success("Label generated");
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
@@ -172,8 +119,8 @@ export default function ShipmentDetailPage({
     try {
       await syncTracking.mutateAsync(id);
       toast.success("Tracking synced");
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
@@ -242,10 +189,7 @@ export default function ShipmentDetailPage({
             <div>
               <span className="text-muted-foreground">Courier:</span>{" "}
               <span className="font-medium">
-                {shipment.courier_name ||
-                  shipment.courier_provider_code ||
-                  shipment.courier ||
-                  "—"}
+                {shipment.courier_provider_code ?? "—"}
               </span>
             </div>
             <div>
@@ -270,9 +214,7 @@ export default function ShipmentDetailPage({
             </div>
             <div>
               <span className="text-muted-foreground">Est. Delivery:</span>{" "}
-              {shipment.estimated_delivery
-                ? new Date(shipment.estimated_delivery).toLocaleDateString()
-                : "—"}
+              {shipment.estimated_delivery_date ?? "—"}
             </div>
           </CardContent>
         </Card>
@@ -294,22 +236,17 @@ export default function ShipmentDetailPage({
                   onChange={(e) =>
                     setSelectedCourier(e.target.value as CourierProviderCode)
                   }
-                  disabled={courierOptions.length === 0}
                 >
-                  {courierOptions.length === 0 ? (
-                    <option value="">No active couriers</option>
-                  ) : (
-                    courierOptions.map((c) => (
-                      <option key={c.value} value={c.value}>
-                        {c.label}
-                      </option>
-                    ))
-                  )}
+                  {COURIERS.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
                 </select>
                 <Button
                   size="sm"
                   onClick={handleAssign}
-                  disabled={assignCourier.isPending || !selectedCourier}
+                  disabled={assignCourier.isPending}
                   className="flex items-center gap-1"
                 >
                   <Truck className="h-4 w-4" />
@@ -325,7 +262,7 @@ export default function ShipmentDetailPage({
                 size="sm"
                 variant="outline"
                 onClick={handleGenerateLabel}
-                disabled={!shipment.tracking_number || generateLabel.isPending}
+                disabled={!shipment.consignment_id || generateLabel.isPending}
                 className="flex items-center gap-1"
               >
                 <Printer className="h-4 w-4" /> Print Label
@@ -344,7 +281,7 @@ export default function ShipmentDetailPage({
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={() => setShowCancelConfirm(true)}
+                onClick={handleCancel}
                 disabled={cancelShipment.isPending}
                 className="flex items-center gap-1"
               >
@@ -420,22 +357,6 @@ export default function ShipmentDetailPage({
           </CardContent>
         </Card>
       )}
-
-      {/* Cancel gate — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={showCancelConfirm}
-        title="Cancel shipment?"
-        description="Cancel this shipment?"
-        confirmLabel="Cancel shipment"
-        cancelLabel="Keep shipment"
-        variant="destructive"
-        isLoading={cancelShipment.isPending}
-        onConfirm={() => {
-          setShowCancelConfirm(false);
-          handleCancel();
-        }}
-        onCancel={() => setShowCancelConfirm(false)}
-      />
     </div>
   );
 }

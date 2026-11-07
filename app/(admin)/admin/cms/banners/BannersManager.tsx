@@ -22,7 +22,7 @@ import {
   deleteHeroSlide,
   deleteAllHeroSlides,
   HeroSlide,
-} from "@/lib/actions/cms.actions";
+} from "@/actions/cms.actions";
 import {
   Plus,
   Trash2,

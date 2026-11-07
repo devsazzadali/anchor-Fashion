@@ -61,8 +61,8 @@ export function PaymentClient({
       } else {
         toast.error(res.error || `Failed to save ${gateway} settings`);
       }
-    } catch (e) {
-      toast.error((e as Error).message || "An error occurred while saving");
+    } catch (e: any) {
+      toast.error(e.message || "An error occurred while saving");
     } finally {
       setSavingGateway(null);
     }
@@ -112,7 +112,7 @@ export function PaymentClient({
                       id="bkash-account-number"
                       value={configs.bkash?.account_number || ""}
                       onChange={(e) => updateField("bkash", "account_number", e.target.value)}
-                      placeholder="e.g. 01700000000"
+                      placeholder="01700000000"
                       className="font-mono"
                     />
                   </div>
@@ -203,7 +203,7 @@ export function PaymentClient({
                       id="nagad-account-number"
                       value={configs.nagad?.account_number || ""}
                       onChange={(e) => updateField("nagad", "account_number", e.target.value)}
-                      placeholder="e.g. 01800000000"
+                      placeholder="01800000000"
                       className="font-mono"
                     />
                   </div>
@@ -290,7 +290,7 @@ export function PaymentClient({
                       id="rocket-account-number"
                       value={configs.rocket?.account_number || ""}
                       onChange={(e) => updateField("rocket", "account_number", e.target.value)}
-                      placeholder="e.g. 01900000000-0"
+                      placeholder="01900000000-0"
                       className="font-mono"
                     />
                   </div>

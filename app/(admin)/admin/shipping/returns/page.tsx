@@ -73,8 +73,8 @@ export default function AdminReturnsPage() {
     try {
       await approveReturn.mutateAsync(returnId);
       toast.success("Return approved");
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
@@ -84,8 +84,8 @@ export default function AdminReturnsPage() {
     try {
       await rejectReturn.mutateAsync({ returnId, reason });
       toast.success("Return rejected");
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
@@ -93,8 +93,8 @@ export default function AdminReturnsPage() {
     try {
       await markReceived.mutateAsync(returnId);
       toast.success("Marked as received");
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
@@ -102,8 +102,8 @@ export default function AdminReturnsPage() {
     try {
       await completeReturn.mutateAsync(returnId);
       toast.success("Return completed");
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 

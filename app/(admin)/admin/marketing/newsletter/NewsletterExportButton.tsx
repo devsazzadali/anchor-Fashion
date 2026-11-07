@@ -41,6 +41,7 @@ export function NewsletterExportButton({ subscribers }: { subscribers: any[] }) 
       
       toast.success("Exported successfully!");
     } catch (error) {
+      console.error("Export failed:", error);
       toast.error("Failed to export CSV.");
     }
   };

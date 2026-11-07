@@ -2,8 +2,6 @@ import { redirect } from "next/navigation";
 import { fetchCheckoutSessionAction } from "@/lib/actions/checkout.actions";
 import { fetchCartAction as getCart } from "@/lib/actions/cart.actions";
 import { getPublicPaymentConfigs } from "@/lib/actions/payment.actions";
-import { getPublicZonesAction } from "@/lib/actions/shipping.actions";
-import { getStoreInfo } from "@/lib/actions/settings.actions";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import { OrderSummary } from "@/components/checkout/order-summary";
 import { CheckoutStoreInitializer } from "./initializer";
@@ -43,11 +41,9 @@ export default async function CheckoutPage() {
     redirect("/cart");
   }
 
-  const [sessionRes, paymentConfigs, zonesRes, storeInfo] = await Promise.all([
+  const [sessionRes, paymentConfigs] = await Promise.all([
     fetchCheckoutSessionAction(cartRes.cart.id),
     getPublicPaymentConfigs(),
-    getPublicZonesAction().catch(() => null),
-    getStoreInfo().catch(() => null),
   ]);
 
   if (!sessionRes.success || !sessionRes.session) {
@@ -63,7 +59,6 @@ export default async function CheckoutPage() {
       <CheckoutStoreInitializer
         cartId={cartRes.cart.id}
         initialSession={sessionRes.session}
-        initialCart={cartRes.cart}
       />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-16">
@@ -77,12 +72,7 @@ export default async function CheckoutPage() {
 
         <div className="order-first mb-8 lg:order-last lg:col-span-5 lg:mb-0">
           <div className="sticky top-8">
-            <OrderSummary
-              initialZones={zonesRes?.success ? zonesRes.data : []}
-              initialFreeThreshold={
-                parseFloat(storeInfo?.free_shipping_threshold ?? "") || 0
-              }
-            />
+            <OrderSummary />
           </div>
         </div>
       </div>

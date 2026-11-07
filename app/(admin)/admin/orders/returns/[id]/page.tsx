@@ -20,7 +20,6 @@ import Image from "next/image";
 
 import Link from "next/link";
 import { ArrowLeft, RefreshCw, AlertCircle, CheckCircle2, Wallet } from "lucide-react";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 export default function AdminReturnDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -35,13 +34,6 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
   const resolveRefund = useResolveReturnRefund();
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [refundGate, setRefundGate] = useState<null | {
-    method: "GATEWAY_CONFIRMED" | "WALLET";
-    title: string;
-    description: string;
-    confirmLabel: string;
-    toastMsg: string;
-  }>(null);
 
   if (isLoading) {
     return (
@@ -87,8 +79,8 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
       await actionFn.mutateAsync(payload ?? id);
       toast.success(successMessage);
       refetch();
-    } catch (err) {
-      toast.error((err as Error).message || "Action failed");
+    } catch (err: any) {
+      toast.error(err.message || "Action failed");
     } finally {
       setIsProcessing(false);
     }
@@ -250,13 +242,9 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" 
                         disabled={isProcessing}
                         onClick={() => {
-                          setRefundGate({
-                            method: "GATEWAY_CONFIRMED",
-                            title: "Settle refund?",
-                            description: `Confirm settling refund of ৳${returnReq.refund_amount} and marking this return as Completed & Resolved?`,
-                            confirmLabel: "Settle refund",
-                            toastMsg: "Refund marked as settled and return resolved!",
-                          });
+                          if (window.confirm(`Confirm settling refund of ৳${returnReq.refund_amount} and marking this return as Completed & Resolved?`)) {
+                            handleAction(resolveRefund, { returnId: id, refundMethod: "GATEWAY_CONFIRMED" }, "Refund marked as settled and return resolved!");
+                          }
                         }}
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4" />
@@ -268,13 +256,9 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
                         variant="secondary"
                         disabled={isProcessing}
                         onClick={() => {
-                          setRefundGate({
-                            method: "WALLET",
-                            title: "Credit customer wallet?",
-                            description: `Refund ৳${returnReq.refund_amount} as store credit directly to customer's Anchor Wallet and resolve return?`,
-                            confirmLabel: "Credit wallet",
-                            toastMsg: "Store credit credited to customer wallet and return resolved!",
-                          });
+                          if (window.confirm(`Refund ৳${returnReq.refund_amount} as store credit directly to customer's Anchor Wallet and resolve return?`)) {
+                            handleAction(resolveRefund, { returnId: id, refundMethod: "WALLET" }, "Store credit credited to customer wallet and return resolved!");
+                          }
                         }}
                       >
                         <Wallet className="mr-2 h-4 w-4" />
@@ -359,28 +343,6 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
           </Card>
         </div>
       </div>
-
-      {/* Refund settlement gates — shared in-app dialog (replaces window.confirm) */}
-      <ConfirmDialog
-        open={!!refundGate}
-        title={refundGate?.title ?? ""}
-        description={refundGate?.description ?? ""}
-        confirmLabel={refundGate?.confirmLabel ?? "Confirm"}
-        cancelLabel="Cancel"
-        variant="default"
-        isLoading={isProcessing}
-        onConfirm={() => {
-          if (!refundGate) return;
-          const gate = refundGate;
-          setRefundGate(null);
-          handleAction(
-            resolveRefund,
-            { returnId: id, refundMethod: gate.method },
-            gate.toastMsg
-          );
-        }}
-        onCancel={() => setRefundGate(null)}
-      />
     </div>
   );
 }

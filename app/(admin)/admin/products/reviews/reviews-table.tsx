@@ -45,7 +45,6 @@ import {
   revokeReviewAction,
 } from "@/lib/actions/admin/catalog.actions";
 import { ReviewDetailDialog } from "./review-detail-dialog";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { toast } from "sonner";
 
 interface ReviewsTableProps {
@@ -55,24 +54,20 @@ interface ReviewsTableProps {
 export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
   const [reviews, setReviews] = useState<Review[]>(initialReviews);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "pending">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "cancelled">("all");
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [activeReview, setActiveReview] = useState<Review | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [hideTarget, setHideTarget] = useState<Review | null>(null);
   const [loadingRowId, setLoadingRowId] = useState<string | null>(null);
 
-  // Summary Metrics. REG-39: unapproved reviews are the moderation queue —
-  // new storefront submissions land here as Pending (plus any review an
-  // admin has hidden), so the bucket is labelled "Pending / Hidden",
-  // not "Cancelled".
+  // Summary Metrics
   const metrics = useMemo(() => {
     const total = reviews.length;
     const approved = reviews.filter((r) => r.is_approved).length;
-    const pending = total - approved;
+    const cancelled = total - approved;
     const totalRating = reviews.reduce((sum, r) => sum + (r.rating || 0), 0);
     const avgRating = total > 0 ? (totalRating / total).toFixed(1) : "0.0";
-    return { total, approved, pending, avgRating };
+    return { total, approved, cancelled, avgRating };
   }, [reviews]);
 
   // Filtered reviews
@@ -80,7 +75,7 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
     return reviews.filter((review) => {
       // Status Filter
       if (statusFilter === "approved" && !review.is_approved) return false;
-      if (statusFilter === "pending" && review.is_approved) return false;
+      if (statusFilter === "cancelled" && review.is_approved) return false;
 
       // Rating Filter
       if (ratingFilter !== "all") {
@@ -138,8 +133,8 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
           toast.error(res.error || "Failed to approve review");
         }
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to update review status");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update review status");
     } finally {
       setLoadingRowId(null);
     }
@@ -206,16 +201,16 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
         <Card className="bg-card shadow-sm border">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Pending / Hidden
+              Cancelled / Hidden
             </CardTitle>
-            <XCircle className="h-4 w-4 text-amber-500" />
+            <XCircle className="h-4 w-4 text-rose-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {metrics.pending}
+            <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+              {metrics.cancelled}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">
-              Awaiting moderation or hidden from store
+              Hidden from public product pages
             </p>
           </CardContent>
         </Card>
@@ -267,8 +262,8 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
               <SelectItem value="approved" className="text-xs">
                 Approved Only ({metrics.approved})
               </SelectItem>
-              <SelectItem value="pending" className="text-xs">
-                Pending / Hidden Only ({metrics.pending})
+              <SelectItem value="cancelled" className="text-xs">
+                Cancelled Only ({metrics.cancelled})
               </SelectItem>
             </SelectContent>
           </Select>
@@ -467,11 +462,11 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
                         </Badge>
                       ) : (
                         <Badge
-                          variant="outline"
-                          className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-300 hover:bg-amber-500/25 font-medium text-[11px] gap-1 px-2 py-0.5"
+                          variant="destructive"
+                          className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-300 hover:bg-rose-500/25 font-medium text-[11px] gap-1 px-2 py-0.5"
                         >
-                          <XCircle className="w-3 h-3 text-amber-600" />
-                          Pending / Hidden
+                          <XCircle className="w-3 h-3 text-rose-600" />
+                          Cancelled (Hidden)
                         </Badge>
                       )}
                     </TableCell>
@@ -495,7 +490,7 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setHideTarget(review)}
+                            onClick={() => handleToggleApproval(review)}
                             disabled={isRowLoading}
                             title="Cancel Approval (Hide from store)"
                             className="h-8 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
@@ -539,21 +534,6 @@ export function ReviewsTable({ initialReviews }: ReviewsTableProps) {
         onOpenChange={setIsDialogOpen}
         onStatusChange={updateReviewStatus}
         onDelete={handleDeleteReview}
-      />
-
-      {/* Hide Review (Cancel Approval) Confirmation */}
-      <ConfirmDialog
-        open={!!hideTarget}
-        title="Hide this review from the store?"
-        description="The review's approval will be cancelled and it will no longer be shown on the storefront. You can approve it again at any time."
-        confirmLabel="Hide Review"
-        isLoading={!!hideTarget && loadingRowId === hideTarget.id}
-        onConfirm={async () => {
-          if (!hideTarget) return;
-          await handleToggleApproval(hideTarget);
-          setHideTarget(null);
-        }}
-        onCancel={() => setHideTarget(null)}
       />
     </div>
   );

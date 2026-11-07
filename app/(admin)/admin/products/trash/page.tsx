@@ -18,7 +18,7 @@ export default async function ProductTrashPage({
   const sp = await searchParams;
   const search = sp.search || "";
   const page = parseInt(sp.page || "1", 10);
-  const res = await getTrashedProductsAction({ search, page, limit: 50 });
+  const res: any = await getTrashedProductsAction({ search, page, limit: 50 });
   const rows = res?.data?.data || [];
   const total = res?.data?.total || 0;
 

@@ -309,7 +309,7 @@ export function TicketsClient({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTickets.map((ticket) => {
+                  filteredTickets.map((ticket: any) => {
                     const customerName =
                       ticket.customer?.full_name ||
                       [ticket.customer_profiles?.first_name, ticket.customer_profiles?.last_name]

@@ -40,7 +40,6 @@ interface VariantItem {
   product_name?: string;
   title?: string;
   price?: number;
-  cost_price?: number;
 }
 
 interface PurchaseOrderItem {
@@ -52,34 +51,22 @@ interface PurchaseOrderItem {
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
   const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseItem[]>([]);
   const [variants, setVariants] = useState<VariantItem[]>([]);
   
   const [items, setItems] = useState<PurchaseOrderItem[]>([{ variant_id: "", quantity_ordered: 1, unit_cost: 0 }]);
-  // S4-6: supplier/warehouse are CONTROLLED selects. They were previously
-  // uncontrolled `name`-only selects read back through FormData — the
-  // shared Select component resolves its trigger label from the
-  // controlled value only, so the trigger stayed on the placeholder and
-  // the selection never visibly bound.
-  const [supplierId, setSupplierId] = useState("");
-  const [warehouseId, setWarehouseId] = useState("");
 
   useEffect(() => {
     async function fetchData() {
-      try {
-        const [suppliersRes, warehousesRes, variantsRes] = await Promise.all([
-          getSupplierProfiles(),
-          getWarehouses(),
-          getVariants()
-        ]);
-        if (suppliersRes.success && suppliersRes.data) setSuppliers(suppliersRes.data);
-        if (warehousesRes.success && warehousesRes.data) setWarehouses(warehousesRes.data);
-        if (variantsRes.success && variantsRes.data) setVariants(variantsRes.data);
-      } finally {
-        setDataLoading(false);
-      }
+      const [suppliersRes, warehousesRes, variantsRes] = await Promise.all([
+        getSupplierProfiles(),
+        getWarehouses(),
+        getVariants()
+      ]);
+      if (suppliersRes.success && suppliersRes.data) setSuppliers(suppliersRes.data);
+      if (warehousesRes.success && warehousesRes.data) setWarehouses(warehousesRes.data);
+      if (variantsRes.success && variantsRes.data) setVariants(variantsRes.data);
     }
     fetchData();
   }, []);
@@ -98,14 +85,11 @@ export default function NewPurchaseOrderPage() {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     
-    // Auto-fill the unit cost from the variant's recorded cost (variant
-    // cost, else the product's COGS) — the same cost the product record
-    // presents. (This previously fabricated 60% of the retail price,
-    // which disagreed with the product's actual COGS.)
+    // Auto fill unit cost if variant is selected
     if (field === "variant_id") {
       const selectedVariant = variants.find(v => v.id === value);
-      if (selectedVariant && selectedVariant.cost_price !== undefined && selectedVariant.cost_price !== null) {
-        newItems[index].unit_cost = Number(selectedVariant.cost_price) || 0;
+      if (selectedVariant && selectedVariant.price) {
+        newItems[index].unit_cost = selectedVariant.price * 0.6; // Assuming cost is 60% of retail price
       }
     }
     
@@ -128,9 +112,9 @@ export default function NewPurchaseOrderPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const supplier_id = supplierId;
-    const destination_warehouse_id = warehouseId;
-
+    const supplier_id = formData.get("supplier_id") as string;
+    const destination_warehouse_id = formData.get("destination_warehouse_id") as string;
+    
     if (!supplier_id) {
       toast.error("Please select a supplier. If none are available, please add one first.");
       setLoading(false);
@@ -195,12 +179,8 @@ export default function NewPurchaseOrderPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="supplier_id">Supplier <span className="text-destructive">*</span></Label>
-                {dataLoading ? (
-                  <div className="text-sm text-muted-foreground border border-dashed rounded-md p-3 text-center">
-                    Loading suppliers…
-                  </div>
-                ) : suppliers.length > 0 ? (
-                  <Select value={supplierId} onValueChange={(val) => setSupplierId(val || "")} required>
+                {suppliers.length > 0 ? (
+                  <Select name="supplier_id" required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select supplier..." />
                     </SelectTrigger>
@@ -219,7 +199,7 @@ export default function NewPurchaseOrderPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="destination_warehouse_id">Destination Warehouse <span className="text-destructive">*</span></Label>
-                <Select value={warehouseId} onValueChange={(val) => setWarehouseId(val || "")} required>
+                <Select name="destination_warehouse_id" required>
                   <SelectTrigger>
                     <SelectValue placeholder="Select warehouse..." />
                   </SelectTrigger>

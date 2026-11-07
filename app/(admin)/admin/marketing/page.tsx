@@ -11,12 +11,14 @@ import {
   Mail,
   Smartphone,
   TrendingUp,
+  DollarSign,
+  ArrowUpRight,
   Plus,
-  ArrowRight,
+  Play,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { fetchAdminMarketingStatsAction, fetchDashboardCampaignsAction } from "@/app/actions/manager/marketing.actions";
+import { formatCurrency } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Marketing Automation | Admin Dashboard",
@@ -28,18 +30,7 @@ export default async function MarketingDashboardPage() {
     fetchDashboardCampaignsAction(undefined, 5)
   ]);
 
-  // REG-24: revenue / open-rate / CTR cards were removed — they had no
-  // real source (the old stats fabricated them). Every figure below is
-  // a count from the campaigns / campaign_logs tables.
-  const stats = statsRes.data || {
-    campaignsTotal: 0,
-    campaignsSent: 0,
-    campaignsScheduled: 0,
-    campaignsDraft: 0,
-    messagesSent: 0,
-    messagesFailed: 0,
-    automations: { total: 0, running: 0, scheduled: 0 },
-  };
+  const stats = statsRes.data || { revenue: 0, openRate: 0, ctr: 0, automations: { total: 0, running: 0, scheduled: 0 } };
   const campaigns = campaignsRes.data || [];
 
   return (
@@ -70,14 +61,17 @@ export default async function MarketingDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Campaigns Sent
+              Marketing Revenue
             </CardTitle>
-            <Mail className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.campaignsSent}</div>
-            <p className="mt-1 flex items-center text-xs text-muted-foreground">
-              of {stats.campaignsTotal} campaigns created
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats.revenue)}
+            </div>
+            <p className="mt-1 flex items-center text-xs text-emerald-500">
+              <ArrowUpRight className="mr-1 h-3 w-3" />
+              Real-time attribution
             </p>
           </CardContent>
         </Card>
@@ -85,14 +79,14 @@ export default async function MarketingDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Messages Delivered
+              Avg. Open Rate
             </CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.messagesSent}</div>
+            <div className="text-2xl font-bold">{stats.openRate.toFixed(1)}%</div>
             <p className="mt-1 flex items-center text-xs text-muted-foreground">
-              {stats.messagesFailed} failed deliveries logged
+              Based on active campaigns
             </p>
           </CardContent>
         </Card>
@@ -100,16 +94,14 @@ export default async function MarketingDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Scheduled &amp; Drafts
+              Click-Through Rate
             </CardTitle>
             <Smartphone className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.campaignsScheduled + stats.campaignsDraft}
-            </div>
+            <div className="text-2xl font-bold">{stats.ctr.toFixed(1)}%</div>
             <p className="mt-1 flex items-center text-xs text-muted-foreground">
-              {stats.campaignsScheduled} scheduled, {stats.campaignsDraft} drafts
+              Based on active campaigns
             </p>
           </CardContent>
         </Card>
@@ -176,55 +168,53 @@ export default async function MarketingDashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Automation Triggers</CardTitle>
-            {/* FIX ROUND 29 (D9): this card claimed "Always-on revenue
-                drivers" and invented efficacy ("Abandoned Cart —
-                Recovers ~15% of carts") with play buttons implying the
-                flows were live — contradicting the Automations page
-                (REG-54): no automations exist or run. The card now
-                states the configured state honestly and describes only
-                what each trigger WOULD do once set up. */}
-            <CardDescription>
-              {stats.automations.total > 0
-                ? `${stats.automations.running} running of ${stats.automations.total} configured automations.`
-                : "Not set up yet — no lifecycle automations are configured, so nothing runs automatically."}
-            </CardDescription>
+            <CardDescription>Always-on revenue drivers.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                {
-                  name: "Abandoned Cart",
-                  would: "Would message shoppers who leave items in their cart, about an hour after they leave.",
-                },
-                {
-                  name: "Welcome Series",
-                  would: "Would greet new signups with an introductory series of messages.",
-                },
-                {
-                  name: "Post-Purchase Review",
-                  would: "Would ask buyers for a review after their order is delivered.",
-                },
-              ].map((trigger) => (
-                <div
-                  key={trigger.name}
-                  className="flex items-center justify-between gap-3 rounded-md border p-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{trigger.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {trigger.would}
-                    </p>
-                  </div>
-                  <Badge variant="secondary" className="shrink-0 text-xs">
-                    {stats.automations.total > 0 ? "Configured" : "Not configured"}
-                  </Badge>
+              <div className="flex items-center justify-between rounded-md border p-2">
+                <div>
+                  <p className="text-sm font-medium">Abandoned Cart</p>
+                  <p className="text-xs text-muted-foreground">
+                    Recovers ~15% of carts
+                  </p>
                 </div>
-              ))}
-              <Button variant="ghost" size="sm" asChild className="px-0">
-                <Link href="/admin/marketing/automations">
-                  Open Automations <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                </Link>
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-emerald-500"
+                >
+                  <Play className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-2">
+                <div>
+                  <p className="text-sm font-medium">Welcome Series</p>
+                  <p className="text-xs text-muted-foreground">
+                    Onboards new signups
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-emerald-500"
+                >
+                  <Play className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-2">
+                <div>
+                  <p className="text-sm font-medium">Post-Purchase Review</p>
+                  <p className="text-xs text-muted-foreground">Drives UGC</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-emerald-500"
+                >
+                  <Play className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

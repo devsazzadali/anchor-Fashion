@@ -27,7 +27,6 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { Review } from "@/types/catalog.types";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import {
   approveReviewAction,
   revokeReviewAction,
@@ -51,7 +50,6 @@ export function ReviewDetailDialog({
   onDelete,
 }: ReviewDetailDialogProps) {
   const [actionLoading, setActionLoading] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   if (!review) return null;
@@ -93,14 +91,17 @@ export function ReviewDetailDialog({
           toast.error(res.error || "Failed to approve review");
         }
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An error occurred while updating status");
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred while updating status");
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleDelete = async () => {
+    if (!confirm("Are you sure you want to permanently delete this review?")) {
+      return;
+    }
     setActionLoading(true);
     try {
       const res = await deleteReviewAction({ id: review.id });
@@ -111,8 +112,8 @@ export function ReviewDetailDialog({
       } else {
         toast.error(res.error || "Failed to delete review");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An error occurred while deleting");
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred while deleting");
     } finally {
       setActionLoading(false);
     }
@@ -142,11 +143,11 @@ export function ReviewDetailDialog({
                 </Badge>
               ) : (
                 <Badge
-                  variant="outline"
-                  className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-300 font-medium text-xs px-2.5 py-0.5"
+                  variant="destructive"
+                  className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-300 font-medium text-xs px-2.5 py-0.5"
                 >
                   <XCircle className="w-3.5 h-3.5 mr-1" />
-                  Pending / Hidden (Not on Store)
+                  Cancelled (Hidden from Store)
                 </Badge>
               )}
             </div>
@@ -303,7 +304,7 @@ export function ReviewDetailDialog({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setShowDeleteConfirm(true)}
+              onClick={handleDelete}
               disabled={actionLoading}
               className="text-destructive hover:bg-destructive/10 gap-1.5"
             >
@@ -358,22 +359,6 @@ export function ReviewDetailDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Delete gate — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        title="Delete review?"
-        description="Are you sure you want to permanently delete this review?"
-        confirmLabel="Delete review"
-        cancelLabel="Cancel"
-        variant="destructive"
-        isLoading={actionLoading}
-        onConfirm={() => {
-          setShowDeleteConfirm(false);
-          handleDelete();
-        }}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
 
       {/* Lightbox for full image view */}
       {selectedImage && (

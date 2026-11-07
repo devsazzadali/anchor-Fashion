@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createPost, getCategories } from "@/lib/actions/blog.actions";
+import { createPost, getCategories } from "@/actions/blog.actions";
 import { uploadImageAction } from "@/lib/actions/upload.actions";
 import { BlogCategory } from "@/types/blog.types";
 import { ArrowLeft, Save, Image as ImageIcon, Loader2, X } from "lucide-react";
@@ -88,8 +88,8 @@ export default function NewBlogPost() {
       } else {
         toast.error(res.error || "Failed to upload image");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload image");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload image");
     } finally {
       setUploadingImage(false);
     }
@@ -144,8 +144,8 @@ export default function NewBlogPost() {
       await createPost(payload);
       toast.success("Blog post created successfully!");
       router.push("/admin/cms/blogs");
-    } catch (error) {
-      toast.error((error as Error).message || "Failed to create blog post");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create blog post");
     } finally {
       setLoading(false);
     }

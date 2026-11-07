@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrderDetails } from "@/hooks/oms/use-order-details";
@@ -18,24 +18,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { OrderStatus, OrderWithDetails } from "@/types/oms";
-import { orderStatusLabel } from "@/lib/orders/status-labels";
 import {
   approveManualPaymentAction,
   rejectManualPaymentAction,
 } from "@/lib/actions/payment.actions";
 import { OrderSmsCard } from "@/components/admin/orders/order-sms-card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  CANCELLATION_REASONS,
-  deriveCancellationDisplay,
-} from "@/lib/orders/cancellation-display";
 import {
   Printer,
   FileText,
@@ -55,7 +42,6 @@ import {
   Loader2,
   CreditCard,
   AlertTriangle,
-  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -63,15 +49,9 @@ export default function AdminOrderDetailsPage() {
   const params = useParams();
   const orderId = params.id as string;
   const queryClient = useQueryClient();
-  const router = useRouter();
-  const { order, isLoading, error, updateStatus, isUpdatingStatus } =
+  const { order, isLoading, updateStatus, isUpdatingStatus } =
     useOrderDetails(orderId);
 
-  const [cancelGateOpen, setCancelGateOpen] = useState(false);
-  // FIX ROUND 29 (D8): admin cancels now capture a reason (+ optional
-  // note), mirroring the customer cancel dialog.
-  const [cancelReason, setCancelReason] = useState("");
-  const [cancelNote, setCancelNote] = useState("");
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -79,74 +59,15 @@ export default function AdminOrderDetailsPage() {
   const [copiedTrx, setCopiedTrx] = useState(false);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading order details...</div>;
-  if (!order)
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
-        <AlertTriangle className="h-10 w-10 text-amber-500" />
-        <h2 className="text-lg font-semibold">Order not found</h2>
-        <p className="max-w-md text-sm text-muted-foreground">
-          {error
-            ? `We couldn't load this order (${error.message}). It may have been deleted, or the link is incorrect.`
-            : "This order does not exist. It may have been deleted, or the link is incorrect."}
-        </p>
-        <Button asChild variant="outline">
-          <Link href="/admin/orders">Back to Orders</Link>
-        </Button>
-      </div>
-    );
+  if (!order) return <div className="p-8 text-destructive">Order not found</div>;
 
-  const handleStatusUpdate = async (
-    newStatus: OrderStatus,
-    extra?: { reason?: string; note?: string }
-  ) => {
+  const handleStatusUpdate = async (newStatus: OrderStatus) => {
     try {
-      const updated: any = await updateStatus({ order_id: order.id, new_status: newStatus, ...extra });
+      await updateStatus({ order_id: order.id, new_status: newStatus });
       toast.success(`Order status updated to ${newStatus}`);
-      // S5-4: several transitions previously left the page showing the
-      // old state until a manual reload (the invalidation refetch raced
-      // and lost). Patch the cached order with the mutation's own
-      // authoritative result immediately, then refresh the route so
-      // every server-rendered fragment agrees.
-      if (updated) {
-        queryClient.setQueryData(["order", orderId], (old: any) =>
-          old
-            ? {
-                ...old,
-                status: updated.status ?? old.status,
-                shipped_at: updated.shipped_at ?? old.shipped_at,
-                delivered_at: updated.delivered_at ?? old.delivered_at,
-                payment_status: updated.payment_status ?? old.payment_status,
-                paid_at: updated.paid_at ?? old.paid_at,
-              }
-            : old
-        );
-      }
-      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
-      router.refresh();
-    } catch (e) {
-      toast.error(`Failed to update status: ${(e as Error).message}`);
+    } catch (e: any) {
+      toast.error(`Failed to update status: ${e.message}`);
     }
-  };
-
-  // FIX ROUND 29 (D8): the cancel confirm requires a reason (and a
-  // note when the reason is "Other"), exactly like the customer-side
-  // dialog; the pair is stored in the order's status history.
-  const handleConfirmCancel = () => {
-    if (!cancelReason) {
-      toast.error("Please select a cancellation reason");
-      return;
-    }
-    if (cancelReason === "Other" && !cancelNote.trim()) {
-      toast.error("Please provide a note for 'Other' reason");
-      return;
-    }
-    setCancelGateOpen(false);
-    handleStatusUpdate("cancelled", {
-      reason: cancelReason,
-      note: cancelNote.trim() || undefined,
-    });
-    setCancelReason("");
-    setCancelNote("");
   };
 
   const handleCopyTrx = (text: string) => {
@@ -167,8 +88,8 @@ export default function AdminOrderDetailsPage() {
       } else {
         toast.error(res.error || "Failed to approve payment");
       }
-    } catch (e) {
-      toast.error((e as Error).message || "An error occurred");
+    } catch (e: any) {
+      toast.error(e.message || "An error occurred");
     } finally {
       setIsApproving(false);
     }
@@ -195,8 +116,8 @@ export default function AdminOrderDetailsPage() {
       } else {
         toast.error(res.error || "Failed to reject payment");
       }
-    } catch (e) {
-      toast.error((e as Error).message || "An error occurred");
+    } catch (e: any) {
+      toast.error(e.message || "An error occurred");
     } finally {
       setIsRejecting(false);
     }
@@ -204,13 +125,6 @@ export default function AdminOrderDetailsPage() {
 
   const typedOrder = order as unknown as OrderWithDetails;
   const customer = typedOrder.customer;
-  // FIX ROUND 29 (D8): cancellation facts + timeline, derived from the
-  // same history rows the customer page reads.
-  const cancellation = deriveCancellationDisplay(order as any);
-  const statusHistory = [...((order as any).order_status_history || [])].sort(
-    (a: any, b: any) =>
-      new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
-  );
   const shipping = typedOrder.shippingAddress;
   const billing = typedOrder.billingAddress;
   const manualPayment = typedOrder.manualPayment;
@@ -240,7 +154,7 @@ export default function AdminOrderDetailsPage() {
             <h1 className="text-3xl font-bold tracking-tight">
               Order #{order.order_number}
             </h1>
-            <Badge className="text-sm">{orderStatusLabel(order.status)}</Badge>
+            <Badge className="capitalize text-sm">{order.status.replace(/_/g, " ")}</Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             Placed on {new Date(order.created_at).toLocaleString()}
@@ -304,25 +218,8 @@ export default function AdminOrderDetailsPage() {
                         <p className="font-semibold text-foreground">{item.product_name}</p>
                         <p className="text-xs text-muted-foreground mt-0.5 font-mono">
                           SKU: {item.sku || "N/A"}{" "}
-                          {/* S5-1: the stored variant_name merely echoes the
-                              SKU ("SKU: AF-…"); only show it when it carries
-                              real information. Size/colour render from the
-                              variant's attributes instead. */}
-                          {item.variant_name && item.variant_name !== `SKU: ${item.sku}`
-                            ? `| ${item.variant_name}`
-                            : ""}
+                          {item.variant_name ? `| ${item.variant_name}` : ""}
                         </p>
-                        {(item.variant_label || item.variant_size || item.variant_color) && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {item.variant_label ||
-                              [
-                                item.variant_size ? `Size: ${item.variant_size}` : null,
-                                item.variant_color ? `Colour: ${item.variant_color}` : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                          </p>
-                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">
@@ -413,186 +310,10 @@ export default function AdminOrderDetailsPage() {
               </CardContent>
             </Card>
           </div>
-
-          {/* FIX ROUND 29 (D8): Cancellation Details — the reason the
-              customer picked (or staff recorded) used to be invisible
-              on the admin side. Derived from the status history, the
-              same source as the customer's Cancellation Details panel. */}
-          {order.status === "cancelled" && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                  <XCircle className="h-4 w-4 text-destructive" />
-                  Cancellation Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs text-muted-foreground space-y-1">
-                <p>
-                  <span className="font-medium text-foreground">Reason:</span>{" "}
-                  {cancellation.reason || "Not specified"}
-                </p>
-                {cancellation.note && (
-                  <p>
-                    <span className="font-medium text-foreground">Note:</span>{" "}
-                    {cancellation.note}
-                  </p>
-                )}
-                <p>
-                  <span className="font-medium text-foreground">Cancelled At:</span>{" "}
-                  {cancellation.cancelledAt
-                    ? new Date(cancellation.cancelledAt).toLocaleString()
-                    : "Unknown"}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* FIX ROUND 29 (D8): Status Timeline — the order's status
-              history was fetched but never rendered on this page. */}
-          {statusHistory.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  Status Timeline
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ol className="space-y-3">
-                  {statusHistory.map((h: any, i: number) => (
-                    <li key={i} className="flex gap-3 text-xs">
-                      <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-primary/60" />
-                      <div>
-                        <p className="font-medium text-foreground">
-                          {orderStatusLabel(String(h.status || "").toLowerCase())}
-                          <span className="ml-2 font-normal text-muted-foreground">
-                            {h.created_at
-                              ? new Date(h.created_at).toLocaleString()
-                              : ""}
-                          </span>
-                        </p>
-                        {h.notes && (
-                          <p className="text-muted-foreground">{h.notes}</p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Right Column: Status & Customer Details */}
         <div className="space-y-6">
-          {/* Payment Card (REG-19: the detail showed no payment method
-              or status anywhere — the list's "COD · Paid" had no
-              counterpart here. All values are the order's real fields.) */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                <CreditCard className="h-4 w-4 text-muted-foreground" />
-                Payment
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Method</span>
-                <span className="font-semibold text-foreground">
-                  {(order.payment_method || "COD").replace(/_/g, " ")}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Status</span>
-                {(order.payment_status || "").toUpperCase() === "PAID" ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                    Paid
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 capitalize">
-                    {(order.payment_status || "UNPAID").toLowerCase().replace(/_/g, " ")}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Amount</span>
-                <span className="font-semibold text-foreground">
-                  ৳{Number(order.grand_total || 0).toLocaleString()}
-                </span>
-              </div>
-              {(order as any).paid_at ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Paid at</span>
-                  <span className="text-foreground">
-                    {new Date((order as any).paid_at).toLocaleString()}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Last updated</span>
-                  <span className="text-foreground">
-                    {order.updated_at
-                      ? new Date(order.updated_at).toLocaleString()
-                      : "—"}
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Shipment Card (REG-17: once a shipment exists for the
-              order, surface it here — number, status, tracking.) */}
-          {typedOrder.shipment && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                  <Truck className="h-4 w-4 text-muted-foreground" />
-                  Shipment
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Shipment #</span>
-                  <Link
-                    href={`/admin/shipping/${typedOrder.shipment.id}`}
-                    className="font-semibold text-blue-600 hover:underline"
-                  >
-                    {typedOrder.shipment.shipment_number || "—"}
-                  </Link>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className="font-semibold text-foreground capitalize">
-                    {(typedOrder.shipment.status || "").replace(/_/g, " ")}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Courier</span>
-                  <span className="text-foreground">
-                    {typedOrder.shipment.courier_name ||
-                      typedOrder.shipment.courier_provider_code ||
-                      typedOrder.shipment.courier ||
-                      "Not assigned yet"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Tracking #</span>
-                  <span className="font-mono text-foreground">
-                    {typedOrder.shipment.tracking_number || "—"}
-                  </span>
-                </div>
-                {typedOrder.shipment.is_cod && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">COD amount</span>
-                    <span className="font-semibold text-foreground">
-                      ৳{Number(typedOrder.shipment.cod_amount || 0).toLocaleString()}
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
           {/* Manual Payment Verification Card */}
           {isManualPayment && (
             <Card className="border-2 border-primary/20 shadow-sm overflow-hidden">
@@ -927,7 +648,7 @@ export default function AdminOrderDetailsPage() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => setCancelGateOpen(true)}
+                      onClick={() => handleStatusUpdate("cancelled")}
                       disabled={isUpdatingStatus}
                     >
                       Cancel Order
@@ -1059,71 +780,6 @@ export default function AdminOrderDetailsPage() {
           </Card>
         </div>
       </div>
-
-      {/* S5-12: cancelling an order is irreversible and releases its
-          reserved stock — it previously fired on a single click with no
-          confirmation (the one destructive action round 3 missed).
-          FIX ROUND 29 (D8): the gate now also captures WHY — a reason
-          select + optional note mirroring the customer cancel dialog,
-          stored in the order's status history the same way. */}
-      <Dialog open={cancelGateOpen} onOpenChange={setCancelGateOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Cancel this order?</DialogTitle>
-            <DialogDescription>
-              Order #{order.order_number} will be cancelled and its reserved stock released back to available inventory. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <label htmlFor="admin-cancel-reason" className="text-xs font-semibold text-foreground">
-                Reason for cancellation <span className="text-destructive">*</span>
-              </label>
-              <Select value={cancelReason} onValueChange={(val) => setCancelReason(val || "")}>
-                <SelectTrigger id="admin-cancel-reason">
-                  <SelectValue placeholder="Select a reason" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CANCELLATION_REASONS.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {(cancelReason === "Other" || cancelReason) && (
-              <div className="grid gap-2">
-                <label htmlFor="admin-cancel-note" className="text-xs font-semibold text-foreground">
-                  Additional Note {cancelReason === "Other" && <span className="text-destructive">*</span>}
-                </label>
-                <Textarea
-                  id="admin-cancel-note"
-                  value={cancelNote}
-                  onChange={(e) => setCancelNote(e.target.value)}
-                  placeholder="Add any details about this cancellation"
-                  rows={3}
-                />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelGateOpen(false)}>
-              Keep Order
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmCancel}
-              disabled={isUpdatingStatus}
-            >
-              {isUpdatingStatus ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Cancel Order
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Reject Payment Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>

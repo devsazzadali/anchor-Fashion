@@ -29,8 +29,8 @@ export function StoreSettingsClient({ initialConfig }: { initialConfig: StoreCon
       } else {
         toast.error(res.error || "Failed to save configuration");
       }
-    } catch (e) {
-      toast.error((e as Error).message || "An error occurred");
+    } catch (e: any) {
+      toast.error(e.message || "An error occurred");
     } finally {
       setIsSaving(false);
     }

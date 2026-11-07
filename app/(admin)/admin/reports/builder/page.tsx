@@ -43,7 +43,7 @@ import {
 import {
   saveReportAction,
   runReportQueryAction,
-} from "@/lib/actions/report.actions";
+} from "@/actions/report.actions";
 import { SavedReportsModal } from "@/features/reports/components/SavedReportsModal";
 
 const DIMENSIONS: { id: ReportDimension; label: string }[] = [
@@ -139,8 +139,8 @@ export default function ReportBuilderPage() {
       setPreviewData(res.data.data);
       setSummary(res.data.summary);
       toast.success(`Query returned ${res.data.totalRows} aggregated record(s)`);
-    } catch (err) {
-      const msg = (err as Error).message || "An unexpected error occurred running query";
+    } catch (err: any) {
+      const msg = err.message || "An unexpected error occurred running query";
       setErrorMsg(msg);
       toast.error(msg);
     } finally {
@@ -200,8 +200,9 @@ export default function ReportBuilderPage() {
       });
 
       toast.success(`Exported PDF: ${filename}`);
-    } catch (err) {
-      toast.error((err as Error)?.message || "Failed to generate PDF");
+    } catch (err: any) {
+      console.error("PDF export error:", err);
+      toast.error(err?.message || "Failed to generate PDF");
     } finally {
       setIsExportingPdf(false);
     }
@@ -234,8 +235,8 @@ export default function ReportBuilderPage() {
 
       setReportId(res.data.id);
       toast.success(`Report "${res.data.report_name}" saved to database!`);
-    } catch (err) {
-      toast.error((err as Error).message || "An error occurred saving report");
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred saving report");
     } finally {
       setIsSaving(false);
     }

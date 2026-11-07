@@ -31,7 +31,7 @@ import {
   getTicketMessagesAction,
   sendAgentMessageAction,
   updateTicketStatusAction,
-} from "@/lib/actions/support.actions";
+} from "@/actions/support.actions";
 import {
   SupportTicketRecord,
   TicketMessageRecord,
@@ -65,7 +65,8 @@ export default function LiveChatInterfacePage() {
           setActiveTicket(null);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error("Failed to load tickets", err);
     } finally {
       setLoadingTickets(false);
     }
@@ -159,8 +160,8 @@ export default function LiveChatInterfacePage() {
           messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
         }, 100);
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to send message");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send message");
     } finally {
       setSending(false);
     }
@@ -180,8 +181,8 @@ export default function LiveChatInterfacePage() {
       toast.success(`Ticket marked as ${status}`);
       setActiveTicket((prev) => (prev ? { ...prev, status } : null));
       loadTickets(activeTicket.id);
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to update status");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update status");
     }
   };
 

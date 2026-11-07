@@ -3,7 +3,7 @@ import {
   getCommunicationLogsAction,
   getCustomersAction,
   getLeadsAction,
-} from "@/lib/actions/crm.actions";
+} from "@/actions/crm.actions";
 import { MessagesClient } from "@/features/crm/components/MessagesClient";
 
 export const metadata: Metadata = {

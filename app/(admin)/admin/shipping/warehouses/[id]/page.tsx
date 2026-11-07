@@ -32,7 +32,7 @@ export default async function EditWarehousePage({
   // Fetch bins for all zones
   let allBins: any[] = [];
   if (zones.length > 0) {
-    const binsPromises = zones.map((z) => getBinsByZoneAction(z.id));
+    const binsPromises = zones.map((z: any) => getBinsByZoneAction(z.id));
     const binsResults = await Promise.all(binsPromises);
     allBins = binsResults.flatMap(r => r.success ? r.data : []);
   }

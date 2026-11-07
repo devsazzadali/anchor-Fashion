@@ -67,7 +67,7 @@ import {
   toggleNotificationStatusAction,
   markAllNotificationsAsReadAction,
   type AdminNotification,
-} from "@/lib/actions/admin/notification.actions";
+} from "@/actions/admin/notification.actions";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 interface Template {
@@ -203,8 +203,8 @@ export default function NotificationsPage() {
       } else if (res.error) {
         toast.error(res.error);
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to load notifications");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load notifications");
     } finally {
       setLoading(false);
     }
@@ -295,8 +295,8 @@ export default function NotificationsPage() {
           toast.error(res.error || "Failed to create notification");
         }
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred");
     } finally {
       setSubmitting(false);
     }
@@ -336,8 +336,8 @@ export default function NotificationsPage() {
       } else {
         toast.error(res.error || "Failed to delete notification");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to delete notification");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete notification");
     } finally {
       setDeleting(false);
     }
@@ -357,8 +357,8 @@ export default function NotificationsPage() {
       } else {
         toast.error(res.error || "Failed to delete notifications");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to delete notifications");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete notifications");
     } finally {
       setDeletingAll(false);
     }

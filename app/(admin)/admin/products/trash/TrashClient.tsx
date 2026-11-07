@@ -51,15 +51,15 @@ export default function TrashClient({
     setBusyId(id);
     startTransition(async () => {
       try {
-        const res = await fn();
+        const res: any = await fn();
         if (res?.success === false || res?.error) {
           toast.error(res.error || "Action failed");
           return;
         }
         toast.success(okMsg);
         router.refresh();
-      } catch (err) {
-        toast.error((err as Error)?.message || "Action failed");
+      } catch (err: any) {
+        toast.error(err?.message || "Action failed");
       } finally {
         setBusyId(null);
       }
