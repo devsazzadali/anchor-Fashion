@@ -33,7 +33,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createCouponAction } from "@/lib/actions/marketing.actions";
+import { createCouponAction } from "@/actions/marketing.actions";
 import { CouponRecord } from "@/lib/repositories/marketing/coupon.repository";
 
 const couponFormSchema = z
@@ -114,8 +114,8 @@ export function CouponDialog({ open, onOpenChange, onSuccess }: CouponDialogProp
       if (res.data) onSuccess?.(res.data);
       form.reset();
       onOpenChange(false);
-    } catch (err) {
-      toast.error((err as Error).message || "An error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred");
     } finally {
       setSubmitting(false);
     }
@@ -171,7 +171,7 @@ export function CouponDialog({ open, onOpenChange, onSuccess }: CouponDialogProp
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="PERCENTAGE">Percentage (%)</SelectItem>
-                        <SelectItem value="FIXED">Fixed Amount (৳)</SelectItem>
+                        <SelectItem value="FIXED">Fixed Amount ($)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

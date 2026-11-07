@@ -48,7 +48,6 @@ import {
   getSupplierProfiles,
 } from "@/app/actions/admin/procurement.actions";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 interface SupplierProfile {
   id: string;
@@ -246,16 +245,8 @@ export function SuppliersClient({ suppliers = [] }: { suppliers: SupplierProfile
     }
   };
 
-  const [supplierToDelete, setSupplierToDelete] = useState<SupplierProfile | null>(null);
-
-  const handleDelete = (supplier: SupplierProfile) => {
-    setSupplierToDelete(supplier);
-  };
-
-  const runDelete = async () => {
-    if (!supplierToDelete) return;
-    const supplier = supplierToDelete;
-    setSupplierToDelete(null);
+  const handleDelete = async (supplier: SupplierProfile) => {
+    if (!confirm(`Are you sure you want to delete supplier "${supplier.company_name}"?`)) return;
 
     setDeleteLoading(supplier.id);
     const res = await deleteSupplierProfileAction(supplier.id);
@@ -635,23 +626,6 @@ export function SuppliersClient({ suppliers = [] }: { suppliers: SupplierProfile
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Delete gate — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={!!supplierToDelete}
-        title="Delete supplier?"
-        description={
-          supplierToDelete
-            ? `Are you sure you want to delete supplier "${supplierToDelete.company_name}"?`
-            : ""
-        }
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        variant="destructive"
-        isLoading={!!deleteLoading}
-        onConfirm={runDelete}
-        onCancel={() => setSupplierToDelete(null)}
-      />
     </div>
   );
 }

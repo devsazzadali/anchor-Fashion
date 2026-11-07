@@ -45,7 +45,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteLeadAction, convertLeadAction } from "@/lib/actions/crm.actions";
+import { deleteLeadAction, convertLeadAction } from "@/actions/crm.actions";
 import { LeadDialog } from "@/features/crm/components/LeadDialog";
 import { LeadDetailsSheet } from "@/features/crm/components/LeadDetailsSheet";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
@@ -162,8 +162,8 @@ export function LeadsClient({ initialLeads }: LeadsClientProps) {
       if (res?.data) {
         handleDialogSuccess(res.data);
       }
-    } catch (err) {
-      toast.error((err as Error)?.message || "Failed to convert lead");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to convert lead");
     }
   };
 
@@ -190,8 +190,8 @@ export function LeadsClient({ initialLeads }: LeadsClientProps) {
       setDeleteConfirmOpen(false);
       setLeadToDelete(null);
       router.refresh();
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to delete lead");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete lead");
     } finally {
       setDeleting(false);
     }

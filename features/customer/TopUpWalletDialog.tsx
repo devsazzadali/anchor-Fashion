@@ -90,8 +90,8 @@ export function TopUpWalletDialog() {
       } else {
         toast.error(res.error || "Failed to process wallet top-up");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     }
   };
 

@@ -154,8 +154,8 @@ export function CustomerAdminActions({ customer }: CustomerAdminActionsProps) {
       }
       setIsEditOpen(false);
       setNewPassword("");
-    } catch (err) {
-      toast.error((err as Error)?.message || "An unexpected error occurred.");
+    } catch (err: any) {
+      toast.error(err?.message || "An unexpected error occurred.");
     } finally {
       setIsUpdating(false);
     }
@@ -173,8 +173,8 @@ export function CustomerAdminActions({ customer }: CustomerAdminActionsProps) {
 
       toast.success("Customer account deleted successfully.");
       setIsDeleteOpen(false);
-    } catch (err) {
-      toast.error((err as Error)?.message || "An unexpected error occurred.");
+    } catch (err: any) {
+      toast.error(err?.message || "An unexpected error occurred.");
     } finally {
       setIsDeleting(false);
     }

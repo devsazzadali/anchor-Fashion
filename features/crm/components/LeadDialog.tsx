@@ -33,7 +33,7 @@ import { Loader2, UserPlus, Pencil, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { createCRMLeadSchema } from "@/schemas/crm.schema";
 import { CRMLead } from "@/types/crm.types";
-import { createLeadAction, updateLeadAction } from "@/lib/actions/crm.actions";
+import { createLeadAction, updateLeadAction } from "@/actions/crm.actions";
 import { z } from "zod";
 
 type LeadFormValues = z.infer<typeof createCRMLeadSchema>;
@@ -153,12 +153,12 @@ export function LeadDialog({
         if (res.data) onSuccess?.(res.data);
       }
       onOpenChange(false);
-    } catch (err) {
+    } catch (err: any) {
       form.setError("root", {
         type: "server",
-        message: (err as Error).message || "An unexpected error occurred",
+        message: err.message || "An unexpected error occurred",
       });
-      toast.error((err as Error).message || "An unexpected error occurred");
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setSubmitting(false);
     }

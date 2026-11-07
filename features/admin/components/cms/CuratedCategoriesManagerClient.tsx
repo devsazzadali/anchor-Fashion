@@ -30,7 +30,7 @@ import { Category } from "@/types/catalog.types";
 import {
   updateCuratedCategoriesSettings,
   resetCuratedCategoriesSettings,
-} from "@/lib/actions/curated-categories.actions";
+} from "@/actions/curated-categories.actions";
 import { uploadImageAction } from "@/lib/actions/upload.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +45,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { jost } from "@/lib/fonts";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { cn } from "@/lib/utils";
 
 interface CuratedCategoriesManagerClientProps {
@@ -182,8 +181,8 @@ export function CuratedCategoriesManagerClient({
       } else {
         toast.error(res.error || "Failed to upload image");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload image");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload image");
     } finally {
       setUploadingSlot(null);
       if (e.target) e.target.value = "";
@@ -200,21 +199,21 @@ export function CuratedCategoriesManagerClient({
       } else {
         toast.error(res.error || "Failed to save settings");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-
-  const handleReset = () => {
-    setShowResetConfirm(true);
-  };
-
-  const runReset = async () => {
-    setShowResetConfirm(false);
+  const handleReset = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to reset this section to the default auto-category configuration?"
+      )
+    ) {
+      return;
+    }
 
     setIsResetting(true);
     try {
@@ -239,8 +238,8 @@ export function CuratedCategoriesManagerClient({
       } else {
         toast.error(res.error || "Failed to reset settings");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to reset");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset");
     } finally {
       setIsResetting(false);
     }
@@ -999,19 +998,6 @@ export function CuratedCategoriesManagerClient({
           </CardContent>
         </Card>
       )}
-
-      {/* Reset gate — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={showResetConfirm}
-        title="Reset section?"
-        description="Are you sure you want to reset this section to the default auto-category configuration?"
-        confirmLabel="Reset"
-        cancelLabel="Cancel"
-        variant="destructive"
-        isLoading={isResetting}
-        onConfirm={runReset}
-        onCancel={() => setShowResetConfirm(false)}
-      />
     </div>
   );
 }

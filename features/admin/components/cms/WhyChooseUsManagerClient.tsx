@@ -37,7 +37,7 @@ import {
 import {
   updateWhyChooseUsSettings,
   resetWhyChooseUsSettings,
-} from "@/lib/actions/why-choose-us.actions";
+} from "@/actions/why-choose-us.actions";
 import { uploadImageAction } from "@/lib/actions/upload.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,7 +58,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { jost } from "@/lib/fonts";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 const AVAILABLE_ICONS = [
   { value: "ShieldCheck", label: "Shield / Quality", icon: ShieldCheck },
@@ -109,8 +108,8 @@ export function WhyChooseUsManagerClient({
       } else {
         toast.error(res.error || "Failed to upload image");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload image");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload image");
     } finally {
       setIsUploading(false);
       if (e.target) e.target.value = "";
@@ -170,21 +169,17 @@ export function WhyChooseUsManagerClient({
       } else {
         toast.error(res.error || "Failed to save settings");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-
-  const handleReset = () => {
-    setShowResetConfirm(true);
-  };
-
-  const runReset = async () => {
-    setShowResetConfirm(false);
+  const handleReset = async () => {
+    if (!confirm("Are you sure you want to reset this section to the default copy and images?")) {
+      return;
+    }
     setIsResetting(true);
     try {
       const res = await resetWhyChooseUsSettings();
@@ -195,8 +190,8 @@ export function WhyChooseUsManagerClient({
       } else {
         toast.error(res.error || "Failed to reset");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to reset");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset");
     } finally {
       setIsResetting(false);
     }
@@ -688,19 +683,6 @@ export function WhyChooseUsManagerClient({
           </div>
         </div>
       )}
-
-      {/* Reset gate — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={showResetConfirm}
-        title="Reset section?"
-        description="Are you sure you want to reset this section to the default copy and images?"
-        confirmLabel="Reset"
-        cancelLabel="Cancel"
-        variant="destructive"
-        isLoading={isResetting}
-        onConfirm={runReset}
-        onCancel={() => setShowResetConfirm(false)}
-      />
     </div>
   );
 }

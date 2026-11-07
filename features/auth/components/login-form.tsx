@@ -8,10 +8,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 
 import { authClient } from "@/lib/auth/client";
-import {
-  getPostLoginRedirectAction,
-  recordSignInAuditAction,
-} from "@/lib/actions/auth.actions";
+import { getPostLoginRedirectAction } from "@/actions/auth.actions";
 import { LoadingButton } from "@/components/ui/loading-button";
 import {
   Form,
@@ -80,11 +77,6 @@ export function LoginForm() {
       toast.success("Successfully logged in!");
       setIsRedirecting(true);
 
-      // REG-27: record the sign-in in the audit log (server action
-      // resolves the actor from the fresh session). Not awaited — the
-      // redirect must not wait on bookkeeping.
-      recordSignInAuditAction().catch(() => {});
-
       const params = new URLSearchParams(window.location.search);
       const next = params.get("next");
 
@@ -94,8 +86,9 @@ export function LoginForm() {
       } catch {
         window.location.replace(next || "/account/profile");
       }
-    } catch (err) {
-      toast.error((err as Error)?.message || "Failed to sign in. Please verify your internet or credentials.");
+    } catch (err: any) {
+      console.error("[LoginForm] Error during sign-in:", err);
+      toast.error(err?.message || "Failed to sign in. Please verify your internet or credentials.");
       setIsLoading(false);
       setIsRedirecting(false);
     }

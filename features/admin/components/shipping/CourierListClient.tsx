@@ -29,7 +29,7 @@ import {
   getCourierMetricsAction,
   testCourierConnectionAction,
   CourierMetrics,
-} from "@/lib/actions/logistics.actions";
+} from "@/actions/logistics.actions";
 import {
   Dialog,
   DialogContent,
@@ -61,23 +61,12 @@ const COURIER_CODE_OPTIONS = [
   { code: "sandbox", label: "Sandbox (test)" },
 ];
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 import { CourierConfigModal } from "./CourierConfigModal";
 import { CourierLogsModal } from "./CourierLogsModal";
 
 interface Props {
   initialCouriers: CourierProviderRecord[];
 }
-
-const INITIAL_NEW_COURIER = {
-  code: "steadfast",
-  name: "",
-  apiKey: "",
-  secretKey: "",
-  shipperPhone: "",
-  isSandbox: false,
-  isActive: true,
-};
 
 export function CourierListClient({ initialCouriers }: Props) {
   const [couriers, setCouriers] = useState(initialCouriers);
@@ -87,22 +76,14 @@ export function CourierListClient({ initialCouriers }: Props) {
   const [syncing, setSyncing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newCourier, setNewCourier] = useState(INITIAL_NEW_COURIER);
-  // True once the admin types into Display name by hand — a provider
-  // switch must never stomp a hand-typed name with the prefill.
-  const [newCourierNameDirty, setNewCourierNameDirty] = useState(false);
-
-  // The Add dialog opens pristine every time: a cancelled form is
-  // discarded on close, not carried into the next open.
-  const resetNewCourierForm = () => {
-    setNewCourier({ ...INITIAL_NEW_COURIER });
-    setNewCourierNameDirty(false);
-  };
-
-  const handleAddOpenChange = (open: boolean) => {
-    setAddOpen(open);
-    if (!open) resetNewCourierForm();
-  };
+  const [newCourier, setNewCourier] = useState({
+    code: "steadfast",
+    name: "",
+    apiKey: "",
+    secretKey: "",
+    isSandbox: false,
+    isActive: true,
+  });
 
   const handleCreateCourier = async () => {
     setCreating(true);
@@ -112,7 +93,6 @@ export function CourierListClient({ initialCouriers }: Props) {
         name: newCourier.name.trim() || newCourier.code,
         apiKey: newCourier.apiKey,
         secretKey: newCourier.secretKey,
-        shipperPhone: newCourier.shipperPhone,
         isSandbox: newCourier.isSandbox,
         isActive: newCourier.isActive,
       });
@@ -122,9 +102,16 @@ export function CourierListClient({ initialCouriers }: Props) {
       toast.success(`${res.data.display_name} added. Configure or test it any time.`);
       setCouriers((prev) => [...prev, res.data!]);
       setAddOpen(false);
-      resetNewCourierForm();
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to add courier");
+      setNewCourier({
+        code: "steadfast",
+        name: "",
+        apiKey: "",
+        secretKey: "",
+        isSandbox: false,
+        isActive: true,
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add courier");
     } finally {
       setCreating(false);
     }
@@ -176,8 +163,8 @@ export function CourierListClient({ initialCouriers }: Props) {
         }
       }
       setHealthMap(newHealthMap);
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to sync status");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to sync status");
     } finally {
       setSyncing(false);
     }
@@ -187,15 +174,13 @@ export function CourierListClient({ initialCouriers }: Props) {
     loadMetricsAndHealth();
   }, [couriers.length]);
 
-  const [pendingDeactivation, setPendingDeactivation] = useState<string | null>(null);
-
   const handleToggle = async (id: string, checked: boolean) => {
-    if (!checked && pendingDeactivation !== id) {
-      // Gate deactivation behind the shared in-app dialog (replaces window.confirm)
-      setPendingDeactivation(id);
-      return;
+    if (!checked) {
+      const confirmed = window.confirm(
+        "Are you sure you want to deactivate this courier? No new shipments can be routed through disabled providers."
+      );
+      if (!confirmed) return;
     }
-    if (pendingDeactivation === id) setPendingDeactivation(null);
 
     const nextCouriers = couriers.map((c) =>
       c.id === id ? { ...c, is_active: checked } : c
@@ -207,8 +192,8 @@ export function CourierListClient({ initialCouriers }: Props) {
       if (!res.success) throw new Error(res.error);
       toast.success(checked ? "Courier activated" : "Courier deactivated");
       loadMetricsAndHealth(nextCouriers);
-    } catch (err) {
-      toast.error((err as Error).message);
+    } catch (err: any) {
+      toast.error(err.message);
       // Revert
       setCouriers(couriers);
     }
@@ -428,7 +413,7 @@ export function CourierListClient({ initialCouriers }: Props) {
 
       {/* Add Courier (Phase 9): providers can now be created from the
           dashboard — previously only pre-seeded rows could be edited. */}
-      <Dialog open={addOpen} onOpenChange={handleAddOpenChange}>
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Courier Provider</DialogTitle>
@@ -446,13 +431,10 @@ export function CourierListClient({ initialCouriers }: Props) {
                   setNewCourier((s) => ({
                     ...s,
                     code: v,
-                    // Keep the Display name prefill in sync with the
-                    // selected provider until the admin edits the name
-                    // by hand (nameDirty) — then it is left untouched.
-                    name: newCourierNameDirty
-                      ? s.name
-                      : COURIER_CODE_OPTIONS.find((o) => o.code === v)
-                          ?.label || "",
+                    name:
+                      s.name ||
+                      COURIER_CODE_OPTIONS.find((o) => o.code === v)?.label ||
+                      "",
                   }))
                 }
               >
@@ -473,10 +455,9 @@ export function CourierListClient({ initialCouriers }: Props) {
               <Input
                 id="new-courier-name"
                 value={newCourier.name}
-                onChange={(e) => {
-                  setNewCourierNameDirty(true);
-                  setNewCourier((s) => ({ ...s, name: e.target.value }));
-                }}
+                onChange={(e) =>
+                  setNewCourier((s) => ({ ...s, name: e.target.value }))
+                }
                 placeholder="e.g. Steadfast"
               />
             </div>
@@ -505,28 +486,6 @@ export function CourierListClient({ initialCouriers }: Props) {
                 autoComplete="off"
               />
             </div>
-            {(newCourier.code === "dhl" || newCourier.code === "fedex") && (
-              <div className="space-y-1.5">
-                <Label htmlFor="new-courier-shipper-phone">Shipper phone</Label>
-                <Input
-                  id="new-courier-shipper-phone"
-                  value={newCourier.shipperPhone}
-                  onChange={(e) =>
-                    setNewCourier((s) => ({
-                      ...s,
-                      shipperPhone: e.target.value,
-                    }))
-                  }
-                  placeholder="Store phone the courier calls about pickups"
-                  autoComplete="off"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Required by {newCourier.code === "dhl" ? "DHL" : "FedEx"} —
-                  shipments are rejected without a shipper contact phone. Can
-                  also be set later under Configure Settings.
-                </p>
-              </div>
-            )}
             <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
               <div>
                 <p className="text-sm font-medium">Sandbox mode</p>
@@ -561,7 +520,7 @@ export function CourierListClient({ initialCouriers }: Props) {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => handleAddOpenChange(false)}
+              onClick={() => setAddOpen(false)}
               disabled={creating}
             >
               Cancel
@@ -572,20 +531,6 @@ export function CourierListClient({ initialCouriers }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Deactivation gate — shared in-app dialog (replaces window.confirm) */}
-      <ConfirmDialog
-        open={!!pendingDeactivation}
-        title="Deactivate courier?"
-        description="Are you sure you want to deactivate this courier? No new shipments can be routed through disabled providers."
-        confirmLabel="Deactivate"
-        cancelLabel="Cancel"
-        variant="destructive"
-        onConfirm={() => {
-          if (pendingDeactivation) handleToggle(pendingDeactivation, false);
-        }}
-        onCancel={() => setPendingDeactivation(null)}
-      />
     </>
   );
 }

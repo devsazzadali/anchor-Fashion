@@ -33,7 +33,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ExpenseFormSchema, ExpenseFormValues } from "@/schemas/finance.schema";
 import { Expense } from "@/types/finance.types";
-import { createExpenseAction, updateExpenseAction } from "@/lib/actions/finance.actions";
+import { createExpenseAction, updateExpenseAction } from "@/actions/finance.actions";
 
 interface ExpenseDialogProps {
   open: boolean;
@@ -152,8 +152,8 @@ export function ExpenseDialog({
         if (res.data) onSuccess?.(res.data);
       }
       onOpenChange(false);
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setSubmitting(false);
     }

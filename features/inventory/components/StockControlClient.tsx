@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StockControlActions } from "@/features/inventory/components/InventoryPageActions";
-import { adjustStock } from "@/lib/actions/inventory.actions";
+import { adjustStock } from "@/actions/inventory.actions";
 import { exportToCsv } from "@/lib/utils/export";
 import { toast } from "sonner";
 
@@ -65,15 +65,11 @@ export function StockControlClient({
   const filteredInventory = useMemo(() => {
     return inventory.filter((item) => {
       const sku = item.variants?.sku?.toLowerCase() || "";
-      // REG-42: the server page already ships each row's variant barcode
-      // (`variants.barcode`); the filter never tested it, so scanning or
-      // typing a barcode in Stock Control resolved nothing.
-      const barcode = item.variants?.barcode?.toLowerCase() || "";
       const name = (item.variants?.product?.name || item.variants?.name || "").toLowerCase();
       const warehouse = item.warehouses?.name?.toLowerCase() || "";
       const query = search.toLowerCase();
 
-      const matchesSearch = !search || sku.includes(query) || barcode.includes(query) || name.includes(query) || warehouse.includes(query);
+      const matchesSearch = !search || sku.includes(query) || name.includes(query) || warehouse.includes(query);
 
       const matchesWarehouse = warehouseFilter === "ALL" || item.warehouse_id === warehouseFilter;
 
@@ -107,8 +103,7 @@ export function StockControlClient({
       adjustItem.id,
       Number(adjustAvailable),
       Number(adjustReserved),
-      adjustReason,
-      adjustNotes
+      adjustReason
     );
     setAdjustLoading(false);
 
@@ -179,7 +174,7 @@ export function StockControlClient({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search barcode, SKU, product name, warehouse..."
+            placeholder="Search SKU, product name, warehouse..."
             className="pl-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -348,7 +343,7 @@ export function StockControlClient({
               <div className="rounded-lg border bg-muted/40 p-3 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Product:</span>
-                  <span className="font-semibold">{adjustItem.variants?.product?.name || adjustItem.variants?.name || "N/A"}</span>
+                  <span className="font-semibold">{adjustItem.variants?.name || "N/A"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">SKU:</span>

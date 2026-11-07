@@ -17,7 +17,7 @@ import { KeyRound, Smartphone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingButton } from "@/components/ui/loading-button";
-import { getPostLoginRedirectAction } from "@/lib/actions/auth.actions";
+import { getPostLoginRedirectAction } from "@/actions/auth.actions";
 
 function toE164(raw: string): string | null {
   const cleaned = raw.trim().replace(/[\s\-()]/g, "");
@@ -64,8 +64,8 @@ export function PhoneLoginForm() {
       setE164(normalized);
       setStep("code");
       toast.success("A code has been sent to your mobile");
-    } catch (err) {
-      toast.error((err as Error).message || "Could not send the OTP");
+    } catch (err: any) {
+      toast.error(err.message || "Could not send the OTP");
     } finally {
       setIsLoading(false);
     }
@@ -100,8 +100,8 @@ export function PhoneLoginForm() {
       } catch {
         window.location.replace("/account/profile");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Verification failed");
+    } catch (err: any) {
+      toast.error(err.message || "Verification failed");
       setIsLoading(false);
     }
   }

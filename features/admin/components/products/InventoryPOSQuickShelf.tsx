@@ -83,6 +83,7 @@ export function InventoryPOSQuickShelf({
           setShelfItems(res.data.items);
         }
       } catch (err) {
+        console.error("Shelf load error:", err);
       } finally {
         if (!isCancelled) setIsLoading(false);
       }

@@ -50,7 +50,6 @@ import {
   updateStorePoliciesAction,
 } from "@/app/actions/cms/faq-policy.actions";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
 
 const COMMON_CATEGORIES = [
   "Orders & Delivery",
@@ -201,16 +200,10 @@ export function FaqPolicyManagerClient({
   };
 
   // Delete FAQ
-  const [faqToDelete, setFaqToDelete] = useState<FAQItem | null>(null);
-
-  const handleDeleteFaq = (item: FAQItem) => {
-    setFaqToDelete(item);
-  };
-
-  const runDeleteFaq = async () => {
-    if (!faqToDelete) return;
-    const item = faqToDelete;
-    setFaqToDelete(null);
+  const handleDeleteFaq = async (item: FAQItem) => {
+    if (!confirm(`Are you sure you want to delete this FAQ?\n\n"${item.question}"`)) {
+      return;
+    }
     setDeleteId(item.id);
     const res = await deleteFaqAction(item.id);
     setDeleteId(null);
@@ -905,23 +898,6 @@ export function FaqPolicyManagerClient({
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Delete gate — shared in-app dialog (replaces native confirm) */}
-      <ConfirmDialog
-        open={!!faqToDelete}
-        title="Delete FAQ?"
-        description={
-          faqToDelete
-            ? `Are you sure you want to delete this FAQ?\n\n"${faqToDelete.question}"`
-            : ""
-        }
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        variant="destructive"
-        isLoading={!!deleteId}
-        onConfirm={runDeleteFaq}
-        onCancel={() => setFaqToDelete(null)}
-      />
     </div>
   );
 }

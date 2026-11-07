@@ -83,8 +83,8 @@ export function BrandsClientPage({ initialBrands }: BrandsClientPageProps) {
       } else {
         toast.error(res.error || "Failed to upload logo");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload logo");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload logo");
     } finally {
       setIsUploading(false);
       if (e.target) e.target.value = "";
@@ -178,7 +178,7 @@ export function BrandsClientPage({ initialBrands }: BrandsClientPageProps) {
       // Remove from local list (it's now inactive / soft-deleted)
       setBrands((prev) => prev.filter((b) => b.id !== deleteTarget.id));
     } else {
-      toast.error(res.error || "Failed to deactivate brand");
+      toast.error(res.error || "Failed to delete brand");
     }
     setIsDeleting(false);
     setConfirmOpen(false);
@@ -266,7 +266,6 @@ export function BrandsClientPage({ initialBrands }: BrandsClientPageProps) {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-600"
-                          title="Deactivate brand"
                           onClick={() => confirmDelete(brand)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -417,12 +416,12 @@ export function BrandsClientPage({ initialBrands }: BrandsClientPageProps) {
         </SheetContent>
       </Sheet>
 
-      {/* Deactivate Confirmation (REG-40: the action deactivates) */}
+      {/* Delete Confirmation */}
       <ConfirmDialog
         open={confirmOpen}
-        title={`Deactivate "${deleteTarget?.name}"?`}
+        title={`Delete "${deleteTarget?.name}"?`}
         description="This will deactivate the brand. It will no longer appear in product forms or the storefront."
-        confirmLabel="Deactivate"
+        confirmLabel="Delete"
         isLoading={isDeleting}
         onConfirm={handleDelete}
         onCancel={() => {

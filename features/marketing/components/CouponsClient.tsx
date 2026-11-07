@@ -34,7 +34,7 @@ import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog"
 import {
   toggleCouponStatusAction,
   deleteCouponAction,
-} from "@/lib/actions/marketing.actions";
+} from "@/actions/marketing.actions";
 
 interface CouponsClientProps {
   initialCoupons: CouponRecord[];
@@ -73,8 +73,8 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
       );
       toast.success(`Coupon "${coupon.code}" ${nextState ? "activated" : "deactivated"}`);
       router.refresh();
-    } catch (err) {
-      toast.error((err as Error).message || "An error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred");
     }
   };
 
@@ -91,8 +91,8 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
       toast.success(`Coupon "${deletingCoupon.code}" deleted`);
       setDeletingCoupon(null);
       router.refresh();
-    } catch (err) {
-      toast.error((err as Error).message || "An error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred");
     } finally {
       setIsDeleting(false);
     }
@@ -177,7 +177,7 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
                         <TableCell className="font-medium">
                           {coupon.discount_type === "PERCENTAGE"
                             ? `${coupon.value}% OFF`
-                            : `৳${coupon.value} OFF`}
+                            : `$${coupon.value} OFF`}
                         </TableCell>
                         <TableCell className="capitalize text-xs">
                           {coupon.discount_type === "PERCENTAGE" ? "Percentage" : "Fixed Amount"}

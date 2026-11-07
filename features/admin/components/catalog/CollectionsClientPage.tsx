@@ -178,8 +178,8 @@ export function CollectionsClientPage({
       } else {
         toast.error(res.error || "Failed to upload banner image");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload banner image");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload banner image");
     } finally {
       setIsUploadingImage(false);
       e.target.value = "";
@@ -253,7 +253,7 @@ export function CollectionsClientPage({
         prev.filter((c) => c.id !== deleteTarget.id)
       );
     } else {
-      toast.error(res.error || "Failed to deactivate collection");
+      toast.error(res.error || "Failed to delete collection");
     }
     setIsDeleting(false);
     setConfirmOpen(false);
@@ -357,7 +357,6 @@ export function CollectionsClientPage({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-600"
-                          title="Deactivate collection"
                           onClick={() => confirmDelete(collection)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -597,12 +596,12 @@ export function CollectionsClientPage({
         </SheetContent>
       </Sheet>
 
-      {/* Deactivate Confirmation (REG-40: the action deactivates) */}
+      {/* Delete Confirmation */}
       <ConfirmDialog
         open={confirmOpen}
-        title={`Deactivate "${deleteTarget?.name}"?`}
+        title={`Delete "${deleteTarget?.name}"?`}
         description="This will deactivate the collection. It will be hidden from the storefront."
-        confirmLabel="Deactivate"
+        confirmLabel="Delete"
         isLoading={isDeleting}
         onConfirm={handleDelete}
         onCancel={() => {

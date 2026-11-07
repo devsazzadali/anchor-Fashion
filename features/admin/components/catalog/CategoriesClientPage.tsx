@@ -430,8 +430,8 @@ export function CategoriesClientPage({
       } else {
         toast.error(res.error || "Failed to upload image");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload image");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload image");
     } finally {
       setIsUploading(false);
       if (e.target) e.target.value = "";
@@ -497,10 +497,10 @@ export function CategoriesClientPage({
     setIsDeleting(true);
     const res = await deleteCategoryAction({ id: deleteTarget.id });
     if (res.success) {
-      toast.success("Category deactivated");
+      toast.success("Category deleted");
       setCategories((prev) => prev.filter((c) => c.id !== deleteTarget.id));
     } else {
-      toast.error(res.error || "Failed to deactivate category");
+      toast.error(res.error || "Failed to delete category");
     }
     setIsDeleting(false);
     setConfirmOpen(false);
@@ -699,7 +699,6 @@ export function CategoriesClientPage({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-600"
-                          title="Deactivate category"
                           onClick={() => confirmDelete(category)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -899,12 +898,12 @@ export function CategoriesClientPage({
         </SheetContent>
       </Sheet>
 
-      {/* Deactivate Confirmation (REG-40: the action deactivates) */}
+      {/* Delete Confirmation */}
       <ConfirmDialog
         open={confirmOpen}
-        title={`Deactivate "${deleteTarget?.name}"?`}
-        description="This will deactivate the category. It will no longer appear in menus or the storefront. Products in this category will become uncategorized."
-        confirmLabel="Deactivate"
+        title={`Delete "${deleteTarget?.name}"?`}
+        description="This will permanently delete the category. Products in this category will become uncategorized."
+        confirmLabel="Delete"
         isLoading={isDeleting}
         onConfirm={handleDelete}
         onCancel={() => {

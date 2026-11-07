@@ -185,7 +185,7 @@ export function StockMovementClient({
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((movement) => {
+              filtered.map((movement: any) => {
                 const qtyChange = movement.quantity_change ?? movement.quantity ?? 0;
                 const isPositive = qtyChange > 0;
                 const sku = movement.variants?.sku || movement.variant?.sku || movement.variant_id;

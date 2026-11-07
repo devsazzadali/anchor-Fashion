@@ -3,7 +3,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { MoreHorizontal } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { formatCurrency } from "@/lib/utils";
 
 const COLORS = ["#00A1FF", "#9333EA", "#F43F5E", "#F59E0B", "#10B981", "#6366F1"];
 
@@ -50,16 +49,13 @@ export function RevenueByCategoryChart({ data = [] }: { data?: any[] }) {
                   color: 'hsl(var(--card-foreground))',
                   boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
                 }} 
-                formatter={(value) => formatCurrency(Number(value))}
+                formatter={(value) => `৳${value}`}
               />
             </PieChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <span className="text-lg font-bold text-foreground leading-none mb-1">{topCategory.name}</span>
-            {/* FIX ROUND 29 (D10): was `৳{value}` raw — "৳60020". Use
-                the standard currency formatter (60,020) here, matching
-                every other money figure on the dashboard. */}
-            <span className="text-sm font-medium text-muted-foreground">{formatCurrency(topCategory.value)}</span>
+            <span className="text-sm font-medium text-muted-foreground">৳{topCategory.value}</span>
           </div>
         </div>
         

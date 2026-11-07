@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useOrderMetrics } from "@/hooks/oms/use-orders";
-import { ORDER_DELIVERED_LABEL } from "@/lib/orders/status-labels";
 import {
   LayoutDashboard,
   BarChart3,
@@ -128,7 +127,7 @@ const navigation: NavCategory[] = [
           { name: "All Orders", href: "/admin/orders" },
           { name: "Pending", href: "/admin/orders/pending" },
           { name: "Processing", href: "/admin/orders/processing" },
-          { name: ORDER_DELIVERED_LABEL, href: "/admin/orders/completed" },
+          { name: "Completed", href: "/admin/orders/completed" },
           { name: "Cancelled", href: "/admin/orders/cancelled" },
           { name: "Returns", href: "/admin/orders/returns" },
         ],
@@ -150,7 +149,6 @@ const navigation: NavCategory[] = [
         items: [
           { name: "Overview", href: "/admin/inventory" },
           { name: "Stock Control", href: "/admin/inventory/stock" },
-          { name: "Scan Station", href: "/admin/operations/scan" },
           { name: "Warehouses", href: "/admin/inventory/warehouses" },
           { name: "Stock Movement", href: "/admin/inventory/movement" },
           { name: "Movement Audit Log", href: "/admin/inventory/stock-movements" },
@@ -249,7 +247,7 @@ export const AdminSidebar = ({
         return orderMetrics.pendingOrders;
       case "Processing":
         return orderMetrics.processingOrders;
-      case ORDER_DELIVERED_LABEL:
+      case "Completed":
         return orderMetrics.completedOrders;
       case "Cancelled":
         return orderMetrics.cancelledOrders;
@@ -269,12 +267,10 @@ export const AdminSidebar = ({
       <div className={cn("h-[80px] shrink-0 flex items-center border-b border-border relative", effectiveCollapsed ? "px-0 justify-center" : "px-6 gap-3")}>
         {!effectiveCollapsed && (
           <>
-            {/* Brand mark links to the storefront home, same as the
-                storefront header logo (shared component's built-in link). */}
-            <AnchorFashionLogo className="text-foreground" />
+            <AnchorFashionLogo noLink={true} className="text-foreground" />
           </>
         )}
-        {effectiveCollapsed && <AnchorFashionLogo className="text-foreground w-8 h-8" />}
+        {effectiveCollapsed && <AnchorFashionLogo noLink={true} className="text-foreground w-8 h-8" />}
         
         {!isMobile && (
           <button

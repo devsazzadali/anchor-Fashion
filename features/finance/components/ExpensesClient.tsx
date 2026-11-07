@@ -52,7 +52,7 @@ import { toast } from "sonner";
 import { Expense } from "@/types/finance.types";
 import { ExpenseDialog } from "./ExpenseDialog";
 import { ConfirmDialog } from "@/features/admin/components/shared/ConfirmDialog";
-import { deleteExpenseAction } from "@/lib/actions/finance.actions";
+import { deleteExpenseAction } from "@/actions/finance.actions";
 
 interface ExpensesClientProps {
   initialExpenses: Expense[];
@@ -139,8 +139,8 @@ export function ExpensesClient({
       toast.success("Expense record removed from ledger");
       setDeletingExpense(null);
       router.refresh();
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setIsDeleting(false);
     }

@@ -56,14 +56,14 @@ import {
   markNotificationAsReadAction,
   markAllNotificationsAsReadAction,
   type AdminNotification,
-} from "@/lib/actions/admin/notification.actions";
+} from "@/actions/admin/notification.actions";
 import {
   getAdminHeaderMessagesAction,
   markAllMessagesAsReadAction,
   deleteMessageAction,
   deleteAllMessagesAction,
   type AdminMessage,
-} from "@/lib/actions/admin/messages.actions";
+} from "@/actions/admin/messages.actions";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -258,6 +258,7 @@ export const AdminHeader = ({ user, role, className }: AdminHeaderProps) => {
           setNotifUnread(result.unreadCount);
         }
       } catch (e) {
+        console.warn("Error fetching admin notifications:", e);
       } finally {
         if (!isPolling) setNotifLoading(false);
       }
@@ -274,6 +275,7 @@ export const AdminHeader = ({ user, role, className }: AdminHeaderProps) => {
         setMsgUnread(result.unreadCount);
       }
     } catch (e) {
+      console.warn("Error fetching admin messages:", e);
     } finally {
       setMsgLoading(false);
     }

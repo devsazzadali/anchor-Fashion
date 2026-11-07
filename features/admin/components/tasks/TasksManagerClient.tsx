@@ -165,8 +165,8 @@ export function TasksManagerClient({ initialTasks = [] }: TasksManagerClientProp
       } else {
         toast.error(res.error || "Failed to update task");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to update task");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update task");
     } finally {
       setIsUpdating(false);
     }
@@ -184,8 +184,8 @@ export function TasksManagerClient({ initialTasks = [] }: TasksManagerClientProp
       } else {
         toast.error(res.error || "Failed to update task status");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to update task status");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update task status");
     }
   };
 
@@ -202,8 +202,8 @@ export function TasksManagerClient({ initialTasks = [] }: TasksManagerClientProp
       } else {
         toast.error(res.error || "Failed to delete task");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to delete task");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete task");
     } finally {
       setIsDeleting(false);
     }

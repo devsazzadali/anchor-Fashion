@@ -36,13 +36,13 @@ import { toast } from "sonner";
 import {
   promotionSchema,
   PromotionFormValues,
-} from "@/schemas/marketing.schema";
+} from "@/validators/marketing.schema";
 import { PromotionRecord } from "@/lib/repositories/marketing/promotion.repository";
 import {
   createPromotionAction,
   updatePromotionAction,
-} from "@/lib/actions/marketing.actions";
-import { uploadMedia } from "@/lib/actions/cms.actions";
+} from "@/actions/marketing.actions";
+import { uploadMedia } from "@/actions/cms.actions";
 import Image from "next/image";
 
 interface PromotionDialogProps {
@@ -73,12 +73,10 @@ export function PromotionDialog({
       end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0],
-      // REG-30: a new promotion must start INACTIVE with no popup —
-      // both switches default OFF; the admin opts in deliberately.
-      is_active: false,
+      is_active: true,
       banner_url: "",
       banner_link: "",
-      show_popup: false,
+      show_popup: true,
       popup_delay: 5,
       description: "",
     },
@@ -97,12 +95,11 @@ export function PromotionDialog({
           is_active: initialData.is_active,
           banner_url: initialData.banner_url || "",
           banner_link: initialData.banner_link || "",
-          show_popup: initialData.show_popup ?? false,
+          show_popup: initialData.show_popup ?? true,
           popup_delay: initialData.popup_delay ?? 5,
           description: initialData.description || "",
         });
       } else {
-        // REG-30: create mode — Enable Promotion / Show Popup default OFF.
         form.reset({
           name: "",
           discount_percentage: 10,
@@ -110,10 +107,10 @@ export function PromotionDialog({
           end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
             .toISOString()
             .split("T")[0],
-          is_active: false,
+          is_active: true,
           banner_url: "",
           banner_link: "",
-          show_popup: false,
+          show_popup: true,
           popup_delay: 5,
           description: "",
         });
@@ -142,8 +139,8 @@ export function PromotionDialog({
       } else {
         toast.error("Failed to upload image. Please enter an image URL.");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload banner photo");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload banner photo");
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) {
@@ -173,8 +170,8 @@ export function PromotionDialog({
         if (res.data) onSuccess?.(res.data);
       }
       onOpenChange(false);
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setSubmitting(false);
     }

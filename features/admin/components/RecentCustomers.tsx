@@ -25,12 +25,9 @@ export function RecentCustomers({ data = [] }: { data?: any[] }) {
                 <AvatarFallback className="bg-muted text-muted-foreground"><User className="h-4 w-4"/></AvatarFallback>
               </Avatar>
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-foreground/90 leading-none mb-1.5">{customer.full_name || 'Guest customer'}</span>
+                <span className="text-sm font-semibold text-foreground/90 leading-none mb-1.5">{customer.full_name || 'Guest'}</span>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  {/* FIX ROUND 29 (D5): the visible identifier is the
-                      customer's email — a truncated UUID reads as a
-                      missing name. The full id stays in the tooltip. */}
-                  <span className="max-w-[140px] truncate" title={customer.email || customer.user_id}>{customer.email || 'Guest checkout'}</span>
+                  <span className="max-w-[80px] truncate" title={customer.user_id}>ID {customer.user_id.slice(0,6)}...</span>
                   <span className={
                     customer.latest_order_status === "completed" || customer.latest_order_status === "delivered" 
                       ? "text-emerald-500" 

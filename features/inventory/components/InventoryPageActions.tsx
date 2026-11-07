@@ -39,7 +39,7 @@ import {
   addStockAction,
   transferStock,
   recordManualMovementAction,
-} from "@/lib/actions/inventory.actions";
+} from "@/actions/inventory.actions";
 import { StockInwardDialog } from "@/features/inventory/components/StockInwardDialog";
 import { Loader2 } from "lucide-react";
 
@@ -676,7 +676,7 @@ function RecordMovementDialog({ allWarehouses = [], allVariants = [] }: RecordMo
                     <FormItem>
                       <FormLabel>Movement Type</FormLabel>
                       <Select
-                        onValueChange={(val) => {
+                        onValueChange={(val: any) => {
                           field.onChange(val);
                           if (val === "IN") form.setValue("reason", "RESTOCK");
                           else if (val === "OUT") form.setValue("reason", "DAMAGE");

@@ -33,7 +33,7 @@ export function ClaimForm({ initialPhone = "" }: { initialPhone?: string }) {
   async function onSendCode(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
-    const res = await requestClaimOtpAction(phone.trim());
+    const res: any = await requestClaimOtpAction(phone.trim());
     setIsLoading(false);
     if (!res?.success) {
       toast.error(res?.error || "Could not send the verification code.");
@@ -48,7 +48,7 @@ export function ClaimForm({ initialPhone = "" }: { initialPhone?: string }) {
   async function onVerify(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
-    const res = await verifyClaimOtpAction(sessionId, code.trim());
+    const res: any = await verifyClaimOtpAction(sessionId, code.trim());
     setIsLoading(false);
     if (!res?.success) {
       toast.error(res?.error || "Invalid verification code.");
@@ -68,7 +68,7 @@ export function ClaimForm({ initialPhone = "" }: { initialPhone?: string }) {
       return;
     }
     setIsLoading(true);
-    const res = await completeClaimAction(
+    const res: any = await completeClaimAction(
       sessionId,
       password,
       needsEmail ? email.trim() : null

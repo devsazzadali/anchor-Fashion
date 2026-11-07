@@ -62,8 +62,8 @@ export function ZoneForm({ initialData }: Props) {
         router.push("/admin/shipping/zones");
         router.refresh();
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to save zone");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save zone");
     } finally {
       setIsSubmitting(false);
     }

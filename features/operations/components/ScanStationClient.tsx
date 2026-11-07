@@ -40,7 +40,7 @@ import { toast } from "sonner";
 import {
   lookupBarcodeAction,
   adjustScannedStockAction,
-} from "@/lib/actions/admin/scan.actions";
+} from "@/actions/admin/scan.actions";
 
 export function ScanStationClient() {
   const [query, setQuery] = useState("");
@@ -138,6 +138,7 @@ export function ScanStationClient() {
         toast.info("Native scanner not available in this browser. Point camera or use manual input.");
       }
     } catch (err: any) {
+      console.error("[startCamera]", err);
       setCameraError(
         err.name === "NotAllowedError"
           ? "Camera permission denied. Please grant camera access."
@@ -336,30 +337,6 @@ export function ScanStationClient() {
                 </div>
               </CardHeader>
               <CardContent className="pt-4 space-y-5">
-                {/* REG-48: Size / Color as their own labelled lines —
-                    staff identify the exact variant at a glance instead
-                    of decoding size/colour out of the SKU string. */}
-                {(scannedData.size || scannedData.color) && (
-                  <div className="flex flex-wrap gap-x-10 gap-y-2 rounded-md border border-border bg-muted/30 px-3 py-2.5">
-                    {scannedData.size && (
-                      <p className="text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">
-                          Size
-                        </span>
-                        <span className="font-semibold">{scannedData.size}</span>
-                      </p>
-                    )}
-                    {scannedData.color && (
-                      <p className="text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">
-                          Color
-                        </span>
-                        <span className="font-semibold">{scannedData.color}</span>
-                      </p>
-                    )}
-                  </div>
-                )}
-
                 {/* Warehouse Inventory Breakdown */}
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
