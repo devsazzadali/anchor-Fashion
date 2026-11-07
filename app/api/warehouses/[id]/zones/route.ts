@@ -13,7 +13,7 @@ export async function GET(
     const service = new WarehouseService();
     const zones = await service.getZones(id);
     return NextResponse.json(zones);
-  } catch (error) {
+  } catch (error: any) {
     return authErrorResponse(error);
   }
 }
@@ -29,7 +29,7 @@ export async function POST(
     const service = new WarehouseService();
     const zone = await service.createZone({ ...body, warehouse_id: id });
     return NextResponse.json(zone, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     return authErrorResponse(error, 400);
   }
 }

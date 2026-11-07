@@ -8,32 +8,22 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, ShieldCheck } from "lucide-react";
-import { applyCouponAction, removeCouponAction } from "@/lib/actions/checkout.actions";
-import { toast } from "sonner";
-import { totalVatAmount, priceWithVat } from "@/lib/utils/vat";
+import { applyCouponAction, removeCouponAction } from "@/actions/checkout.actions";
+import { useToast } from "@/hooks/use-toast";
+import { totalVatAmount } from "@/lib/utils/vat";
 import { getPublicZonesAction } from "@/lib/actions/shipping.actions";
 import { getStoreInfo } from "@/lib/actions/settings.actions";
 import {
-  computeShippingFee,
+  pickZone,
+  defaultZone,
   type PublicZone,
 } from "@/lib/services/shipping/zone-shared";
 
-export function OrderSummary({
-  initialZones = [],
-  initialFreeThreshold = 0,
-}: {
-  /** Zones fetched by the server component — seed so the first paint is correct. */
-  initialZones?: PublicZone[];
-  /** Free-shipping threshold fetched by the server component (0 = not seeded). */
-  initialFreeThreshold?: number;
-} = {}) {
+export function OrderSummary() {
   const { cart } = useCartStore();
   const { formData, session } = useCheckoutStore();
+  const { toast } = useToast();
   const [couponCode, setCouponCode] = useState("");
-  const [couponMessage, setCouponMessage] = useState<{
-    kind: "error" | "success";
-    text: string;
-  } | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<{
     code: string;
@@ -55,14 +45,8 @@ export function OrderSummary({
   const shippingMethod = formData.shipping?.shipping_method;
   // Delivery charge mirrors the server's zone resolution: admin-configured
   // zones (Settings → Store) matched by the customer's city/district, with
-  // the default zone as fallback, and free at/above the store's
-  // free-shipping threshold (Settings → Store Info). Zones and threshold
-  // are SEEDED from the server component's fetch so the free-shipping rule
-  // applies on the very first paint — previously both loaded via client
-  // effects after mount, so a qualifying cart briefly showed the zone fee
-  // (and the higher total) until the fetch landed. The effects stay as a
-  // refresh so mid-session admin edits still arrive.
-  const [zones, setZones] = useState<PublicZone[]>(initialZones);
+  // the default zone as fallback. Legacy flat rates only until zones load.
+  const [zones, setZones] = useState<PublicZone[]>([]);
   useEffect(() => {
     let cancelled = false;
     getPublicZonesAction()
@@ -74,7 +58,24 @@ export function OrderSummary({
       cancelled = true;
     };
   }, []);
-  const [freeThreshold, setFreeThreshold] = useState(initialFreeThreshold);
+  const cityForZone = formData.information?.shipping_address?.city || "";
+  const zoneFee = (() => {
+    if (subtotal <= 0) return 0;
+    if (zones.length > 0) {
+      const zone =
+        shippingMethod === "home_delivery_outside"
+          ? defaultZone(zones)
+          : pickZone(zones, cityForZone, cityForZone);
+      if (zone) return zone.rate;
+    }
+    return shippingMethod === "home_delivery_outside" ? 150 : 100;
+  })();
+  // Free-shipping threshold (Settings → Store Info, advertised in the
+  // announcement bar and cart): at/above it delivery is free. Mirrors the
+  // server's OrderService.calculateSummary so the displayed total matches
+  // the charged total. BUG FIX: this display previously never consulted
+  // the threshold and kept showing the zone fee on qualifying orders.
+  const [freeThreshold, setFreeThreshold] = useState(0);
   useEffect(() => {
     let cancelled = false;
     getStoreInfo()
@@ -88,14 +89,8 @@ export function OrderSummary({
       cancelled = true;
     };
   }, []);
-  const cityForZone = formData.information?.shipping_address?.city || "";
-  const shippingFee = computeShippingFee({
-    subtotal,
-    zones,
-    freeThreshold,
-    shippingMethod,
-    city: cityForZone,
-  });
+  const shippingFee =
+    freeThreshold > 0 && subtotal >= freeThreshold ? 0 : zoneFee;
   // Real per-product VAT (each product's vat_percent, added on top of its
   // selling price) — identical to the server's OrderService.calculateSummary.
   // (This replaces a hardcoded 15% "estimated tax" that the server never
@@ -125,42 +120,23 @@ export function OrderSummary({
 
   const handleApplyCoupon = async (codeToApply?: string) => {
     const code = codeToApply || couponCode;
-    if (!code.trim()) {
-      setCouponMessage({ kind: "error", text: "Please enter a coupon code." });
-      return;
-    }
-    if (!session?.id) {
-      setCouponMessage({
-        kind: "error",
-        text: "Checkout session is still loading — please try again in a moment.",
-      });
-      return;
-    }
-
+    if (!code.trim() || !session?.id) return;
+    
     setIsApplying(true);
-    setCouponMessage(null);
     try {
       const res = await applyCouponAction(session.id, code, subtotal);
       if (res.success && res.discount !== undefined) {
         setAppliedCoupon({ code: res.code || code, discount: res.discount });
         setCouponCode("");
-        setCouponMessage({
-          kind: "success",
-          text: `Coupon ${res.code || code} applied — you save ${formatCurrency(res.discount)}.`,
-        });
         if (!codeToApply) {
-          toast.success("Coupon applied successfully");
+          toast({ title: "Coupon applied successfully" });
         }
       } else {
-        const message = res.error || "This coupon code is not valid.";
-        setCouponMessage({ kind: "error", text: message });
-        toast.error(message);
+        toast({ title: "Coupon Error", description: res.error, variant: "destructive" });
         setAppliedCoupon(null);
       }
     } catch (err) {
-      const message = "Failed to apply coupon. Please try again.";
-      setCouponMessage({ kind: "error", text: message });
-      toast.error(message);
+      toast({ title: "Failed to apply coupon", variant: "destructive" });
     } finally {
       setIsApplying(false);
     }
@@ -173,10 +149,9 @@ export function OrderSummary({
       await removeCouponAction(session.id);
       setAppliedCoupon(null);
       setCouponCode("");
-      setCouponMessage(null);
-      toast.success("Coupon removed");
+      toast({ title: "Coupon removed" });
     } catch (err) {
-      toast.error("Failed to remove coupon");
+      toast({ title: "Failed to remove coupon", variant: "destructive" });
     } finally {
       setIsApplying(false);
     }
@@ -221,17 +196,7 @@ export function OrderSummary({
                 )}
               </div>
               <div className="flex items-center text-sm font-medium">
-                {/* REG-50: line prices follow the PDP rule — VAT-inclusive,
-                    always labelled (VAT is 0% on some products). */}
-                <span className="text-right">
-                  {formatCurrency(
-                    priceWithVat(price, (item.product as any)?.vat_percent ?? 0) *
-                      item.quantity
-                  )}
-                  <span className="block text-[10px] font-normal text-slate-400">
-                    incl. VAT
-                  </span>
-                </span>
+                {formatCurrency(price * item.quantity)}
               </div>
             </div>
           );
@@ -256,12 +221,7 @@ export function OrderSummary({
             <Input
               placeholder="Enter discount code"
               value={couponCode}
-              onChange={(e) => {
-                setCouponCode(e.target.value);
-                // A stale coupon error must not linger once the customer
-                // edits (or clears) the code — clear it on any change.
-                if (couponMessage?.kind === "error") setCouponMessage(null);
-              }}
+              onChange={(e) => setCouponCode(e.target.value)}
               className="flex-1"
               disabled={isApplying}
             />
@@ -270,26 +230,12 @@ export function OrderSummary({
             </Button>
           </div>
         )}
-        {couponMessage && (
-          <p
-            role={couponMessage.kind === "error" ? "alert" : "status"}
-            className={`mt-2 text-xs font-medium ${
-              couponMessage.kind === "error" ? "text-red-600" : "text-green-700"
-            }`}
-          >
-            {couponMessage.text}
-          </p>
-        )}
       </div>
 
       <div className="space-y-3 border-t pt-6 text-sm">
-        {/* REG-50: same VAT rule as cards/PDP/cart — merchandise subtotal
-            is VAT-inclusive; the VAT row states the included portion
-            (informational). The payable total is unchanged: it is still
-            computed once as pre-VAT subtotal + shipping + tax − discount. */}
         <div className="flex justify-between">
-          <span className="text-slate-500">Subtotal (incl. VAT)</span>
-          <span className="font-medium">{formatCurrency(subtotal + tax)}</span>
+          <span className="text-slate-500">Subtotal</span>
+          <span className="font-medium">{formatCurrency(subtotal)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-500">Shipping</span>
@@ -298,7 +244,7 @@ export function OrderSummary({
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">VAT included</span>
+          <span className="text-slate-500">VAT</span>
           <span className="font-medium">{formatCurrency(tax)}</span>
         </div>
         {discount > 0 && (
@@ -310,7 +256,7 @@ export function OrderSummary({
       </div>
 
       <div className="mt-6 flex items-center justify-between border-t border-gray-200 pt-6">
-        <span className="text-lg font-medium text-[#1A1A1A]">Total (incl. VAT)</span>
+        <span className="text-lg font-medium text-[#1A1A1A]">Total</span>
         <span className="text-2xl font-semibold text-[#1A1A1A]">{formatCurrency(total)}</span>
       </div>
 

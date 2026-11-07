@@ -8,29 +8,21 @@ interface InvoiceToolbarProps {
   backUrl: string;
   backLabel?: string;
   autoPrint?: boolean;
-  /**
-   * Customer-facing invoice pages are view-only (owner rule: customers
-   * view invoices, they do not print or download them). Pass false to
-   * render only the back link — no print button, no print tip, and no
-   * auto-print. Staff pages keep the default print behaviour.
-   */
-  allowPrint?: boolean;
 }
 
 export function InvoiceToolbar({
   backUrl,
   backLabel = "Back to Order Details",
   autoPrint = true,
-  allowPrint = true,
 }: InvoiceToolbarProps) {
   useEffect(() => {
-    if (autoPrint && allowPrint) {
+    if (autoPrint) {
       const timer = setTimeout(() => {
         window.print();
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [autoPrint, allowPrint]);
+  }, [autoPrint]);
 
   return (
     <div className="max-w-4xl mx-auto mb-4 px-4 sm:px-0 flex flex-wrap items-center justify-between gap-3 print:hidden font-sans">
@@ -41,21 +33,19 @@ export function InvoiceToolbar({
         <ArrowLeft className="h-4 w-4" />
         {backLabel}
       </Link>
-      {allowPrint && (
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-500 hidden sm:inline">
-            Print Tip: Select A4 Portrait & enable Background Graphics
-          </span>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-2 bg-[#122B59] hover:bg-[#0c1e3f] text-white px-4 py-2 rounded-lg text-xs font-bold shadow transition active:scale-95 cursor-pointer"
-          >
-            <Printer className="h-4 w-4" />
-            Print / Save as PDF
-          </button>
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-slate-500 hidden sm:inline">
+          Print Tip: Select A4 Portrait & enable Background Graphics
+        </span>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="inline-flex items-center gap-2 bg-[#122B59] hover:bg-[#0c1e3f] text-white px-4 py-2 rounded-lg text-xs font-bold shadow transition active:scale-95 cursor-pointer"
+        >
+          <Printer className="h-4 w-4" />
+          Print / Save as PDF
+        </button>
+      </div>
     </div>
   );
 }

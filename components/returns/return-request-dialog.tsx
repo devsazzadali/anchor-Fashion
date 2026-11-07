@@ -38,7 +38,7 @@ import {
   useReturnEligibility,
   useSubmitCustomerReturn,
 } from "@/hooks/shipping/use-returns";
-import { uploadReturnProofAction } from "@/lib/actions/returns.actions";
+import { uploadReturnProofAction } from "@/actions/returns.actions";
 import { formatCurrency } from "@/lib/utils";
 
 interface ReturnRequestDialogProps {
@@ -157,8 +157,8 @@ export function ReturnRequestDialog({
           setUploadedPhotos((prev) => [...prev, res.data.url]);
         }
       }
-    } catch (err) {
-      setFormError((err as Error).message || "Failed to upload photo proof");
+    } catch (err: any) {
+      setFormError(err.message || "Failed to upload photo proof");
     } finally {
       setIsUploadingPhoto(false);
       e.target.value = "";
@@ -225,8 +225,8 @@ export function ReturnRequestDialog({
       });
 
       setSubmittedReturn(res);
-    } catch (err) {
-      setFormError((err as Error).message || "Failed to submit return request");
+    } catch (err: any) {
+      setFormError(err.message || "Failed to submit return request");
     }
   };
 

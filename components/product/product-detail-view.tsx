@@ -33,8 +33,6 @@ export interface ProductDetailViewProps {
   flashSale?: FlashSaleInfo | null;
   reviews?: any[];
   relatedProducts?: any[];
-  /** REG-81: Admin free-shipping threshold (BDT) for the PDP claim. */
-  freeShippingThreshold?: number;
 }
 
 export function ProductDetailView({
@@ -42,7 +40,6 @@ export function ProductDetailView({
   flashSale = null,
   reviews = [],
   relatedProducts = [],
-  freeShippingThreshold = 0,
 }: ProductDetailViewProps) {
   // Base gallery images & media items from product_media
   const baseGalleryItems: GalleryImageInput[] = useMemo(() => {
@@ -72,9 +69,8 @@ export function ProductDetailView({
     flashSale || product.sale_price ? product.base_price : null
   );
   const [currentSku, setCurrentSku] = useState<string>(product.sku || "");
-  // Server-computed product total. If it is ever absent the honest
-  // initial state is 0 (out of stock) — never an invented quantity.
-  const initialStock = product.total_available_stock ?? 0;
+  const initialStock =
+    product.total_available_stock ?? (product.is_in_stock ? 10 : 0);
   const [isOutOfStock, setIsOutOfStock] = useState<boolean>(
     !product.is_in_stock || initialStock <= 0
   );
@@ -123,18 +119,7 @@ export function ProductDetailView({
       setSelectedVariantId(info.variant?.id || null);
 
       if (info.images && info.images.length > 0) {
-        const nextImages = info.images;
-        setCurrentGalleryImages((prev) => {
-          // Keep the previous array when the URL set is unchanged —
-          // a fresh array identity here re-renders the gallery and
-          // used to feed the notify loop in the variant selector.
-          const toUrl = (m: any) => (typeof m === "string" ? m : m?.url);
-          const prevUrls = prev.map(toUrl);
-          const nextUrls = (nextImages as any[]).map(toUrl);
-          return JSON.stringify(prevUrls) === JSON.stringify(nextUrls)
-            ? prev
-            : nextImages;
-        });
+        setCurrentGalleryImages(info.images);
       } else {
         setCurrentGalleryImages(baseGalleryItems);
       }
@@ -170,18 +155,6 @@ export function ProductDetailView({
 
   // Per-product VAT % — displayed prices add VAT on top of the selling price.
   const vatPercent = Number(product.vat_percent ?? product.vatPercent ?? 0);
-
-  // Stable-identity image URL list for the variant selector. Building
-  // this inline in JSX mints a new array on EVERY render, which kept
-  // invalidating the selector's gallery memo and re-firing its notify
-  // effect (its parent setState → re-render → new array → … loop).
-  const productImages = useMemo<string[]>(
-    () =>
-      typeof currentGalleryImages[0] === "string"
-        ? (currentGalleryImages as string[])
-        : (currentGalleryImages as any[]).map((m) => m.url || m),
-    [currentGalleryImages]
-  );
 
   return (
     <div className="min-h-screen bg-[#FCFCFD] pb-24 pt-3">
@@ -359,16 +332,14 @@ export function ProductDetailView({
                 productSalePrice={product.sale_price}
                 productVatPercent={vatPercent}
                 productSku={product.sku}
-                productImages={productImages}
+                productImages={
+                  typeof currentGalleryImages[0] === "string"
+                    ? (currentGalleryImages as string[])
+                    : (currentGalleryImages as any[]).map((m) => m.url || m)
+                }
                 productMedia={product.product_media || []}
                 flashSale={flashSale}
                 sizeCharts={product.size_charts || []}
-                productCategory={
-                  product.categories
-                    ? `${product.categories.slug || ""} ${product.categories.name || ""}`.trim()
-                    : undefined
-                }
-                freeShippingThreshold={freeShippingThreshold}
                 onVariantChange={handleVariantChange}
               />
             </div>

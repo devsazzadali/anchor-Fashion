@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { AnchorFashionLogo } from "@/components/shared/logo";
+import Image from "next/image";
 import { Suspense } from "react";
 import { RegisterForm } from "@/features/auth/components/register-form";
 import { ReferralCapture } from "./referral-capture";
@@ -17,8 +17,18 @@ export default function RegisterPage() {
         <ReferralCapture />
       </Suspense>
 
-      {/* Logo — the shared animated brand mark, same as the storefront header */}
-      <AnchorFashionLogo className="w-[160px]" />
+      {/* Logo */}
+      <Link href="/" aria-label="Go to homepage">
+        <Image
+          src="/logo.png"
+          alt="Anchor Fashion"
+          width={180}
+          height={10}
+          style={{ width: "auto", height: "auto" }}
+          className="max-w-[160px]"
+          priority
+        />
+      </Link>
 
       {/* Heading */}
       <div className="text-center space-y-1">

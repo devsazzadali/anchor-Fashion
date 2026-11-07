@@ -10,28 +10,17 @@ import { Badge } from "@/components/ui/badge";
 import { fetchInventoryAction } from "@/app/actions/manager/inventory.actions";
 
 export async function InventoryAlerts() {
-  // FIX ROUND 29 (D6): the alert state must come from the SAME full-set
-  // counts the manager inventory page shows (getInventoryDashboard's
-  // stats cover every inventory level). This widget previously decided
-  // "no alerts" from the first 20 levels only — while the inventory
-  // page reported Low Stock 32 / Out of Stock 8, the dashboard said
-  // "No inventory alerts". The counts now drive both the empty state
-  // and the header line; the item list is drawn from a full fetch and
-  // ordered out-of-stock first.
-  const result = await fetchInventoryAction(1000);
-  const stats = result.data?.stats || { totalItems: 0, lowStock: 0, outOfStock: 0 };
+  const result = await fetchInventoryAction(20);
   const allItems = result.data?.items || [];
 
+  // Filter to only low-stock and out-of-stock items for the alerts panel
   const alerts = allItems
     .filter(
-      (item) => item.status === "Low Stock" || item.status === "Out of Stock"
-    )
-    .sort((a, b) =>
-      a.status === b.status ? a.available - b.available : a.status === "Out of Stock" ? -1 : 1
+      (item: any) => item.status === "Low Stock" || item.status === "Out of Stock"
     )
     .slice(0, 5); // Show top 5 alerts
 
-  if (stats.lowStock + stats.outOfStock === 0) {
+  if (alerts.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -52,11 +41,11 @@ export async function InventoryAlerts() {
       <CardHeader>
         <CardTitle>Inventory Alerts</CardTitle>
         <CardDescription>
-          {stats.outOfStock} out of stock · {stats.lowStock} low stock — products requiring immediate restocking.
+          Products requiring immediate restocking.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        {alerts.map((item) => {
+        {alerts.map((item: any) => {
           const isOut = item.status === "Out of Stock";
           return (
             <div

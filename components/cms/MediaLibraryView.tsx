@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { MediaUploader } from "@/components/cms/MediaUploader";
 import { CMSMediaItem } from "@/types/cms.types";
-import { deleteMedia, seedSampleMedia, uploadMedia } from "@/lib/actions/cms.actions";
+import { deleteMedia, seedSampleMedia, uploadMedia } from "@/actions/cms.actions";
 
 type FilterType = "all" | "image" | "video" | "document";
 type SortOption = "newest" | "oldest" | "name_asc" | "name_desc" | "size_desc" | "size_asc";
@@ -193,8 +193,8 @@ export function MediaLibraryView({ initialMedia }: MediaLibraryViewProps) {
       } else {
         toast.error(res?.error || "Failed to delete file");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to delete file");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete file");
     } finally {
       setDeletingId(null);
     }
@@ -210,8 +210,8 @@ export function MediaLibraryView({ initialMedia }: MediaLibraryViewProps) {
       } else {
         toast.error(res.error || "Failed to seed sample media");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Seeding failed");
+    } catch (err: any) {
+      toast.error(err.message || "Seeding failed");
     } finally {
       setIsSeeding(false);
     }
@@ -246,8 +246,8 @@ export function MediaLibraryView({ initialMedia }: MediaLibraryViewProps) {
       } else {
         toast.error("Upload failed", { id: toastId });
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Upload failed", { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed", { id: toastId });
     }
   };
 

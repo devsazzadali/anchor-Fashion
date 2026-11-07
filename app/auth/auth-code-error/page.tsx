@@ -30,6 +30,7 @@ function AuthCodeErrorContent() {
           });
         }
       } catch (e) {
+        console.error("Failed to parse hash params:", e);
       }
     }
   }, [errorDetails.code, errorDetails.description]);

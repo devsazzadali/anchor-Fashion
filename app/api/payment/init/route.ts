@@ -33,33 +33,35 @@ export async function GET(req: Request) {
     const { data: order, error: orderError } = await db
       .from("orders")
       .select(
-        "id, order_number, grand_total, customer_id, payment_method, status, shipping_address"
+        "id, order_number, grand_total, customer_id, payment_method, status"
       )
       .eq("id", orderId)
       .single();
 
     if (orderError || !order) {
+      console.error(
+        "[Payment Init] Order not found:",
+        orderId,
+        orderError?.message
+      );
       return NextResponse.redirect(
         new URL("/checkout/failed?reason=order_not_found", req.url)
       );
     }
 
-    // Customer name/phone/email for the gateway.
-    // FIX ROUND 28 (M-2): the order_addresses table does not exist —
-    // the address lives in the order's shipping_address JSON. The old
-    // read always resolved null, so gateways got "Customer" / "" / "".
-    const shippingAddr = order.shipping_address || {};
-    const customerName =
-      (
-        [shippingAddr.first_name, shippingAddr.last_name]
-          .filter(Boolean)
-          .join(" ") ||
-        shippingAddr.recipient_name ||
-        shippingAddr.name ||
-        ""
-      ).trim() || "Customer";
-    const customerPhone = shippingAddr.phone || shippingAddr.phone_number || "";
-    const customerEmail = shippingAddr.email || "";
+    // Fetch address details for accurate customer phone, name, email
+    const { data: shippingAddr } = await db
+      .from("order_addresses")
+      .select("*")
+      .eq("order_id", order.id)
+      .eq("address_type", "SHIPPING")
+      .maybeSingle();
+
+    const customerName = shippingAddr
+      ? `${shippingAddr.first_name || ""} ${shippingAddr.last_name || ""}`.trim()
+      : "Customer";
+    const customerPhone = shippingAddr?.phone || "";
+    const customerEmail = shippingAddr?.email || "";
     const totalAmount = Number(order.grand_total) || 0;
 
     // 2. Only process if the order is in PENDING_PAYMENT state
@@ -80,6 +82,9 @@ export async function GET(req: Request) {
       const isConfigured = await BKashService.isConfigured();
 
       if (!isConfigured) {
+        console.warn(
+          "[Payment Init] bKash credentials not configured in environment or settings. Redirecting to success with notice."
+        );
         return NextResponse.redirect(
           new URL(
             `/checkout/success?order_id=${orderId}&notice=payment_pending`,
@@ -130,7 +135,8 @@ export async function GET(req: Request) {
           .eq("id", order.id);
 
         return NextResponse.redirect(paymentData.bkashURL);
-      } catch (bkashErr) {
+      } catch (bkashErr: any) {
+        console.error("[Payment Init] bKash createPayment error:", bkashErr.message);
         return NextResponse.redirect(
           new URL(`/checkout/failed?order_id=${orderId}&reason=bkash_init_failed`, req.url)
         );
@@ -148,6 +154,9 @@ export async function GET(req: Request) {
       const isConfigured = await SSLCommerzService.isConfigured();
 
       if (!isConfigured) {
+        console.warn(
+          "[Payment Init] SSLCommerz credentials not configured in environment or settings. Redirecting to success with notice."
+        );
         return NextResponse.redirect(
           new URL(
             `/checkout/success?order_id=${orderId}&notice=payment_pending`,
@@ -224,7 +233,8 @@ export async function GET(req: Request) {
         }
 
         return NextResponse.redirect(paymentData.GatewayPageURL!);
-      } catch (sslErr) {
+      } catch (sslErr: any) {
+        console.error("[Payment Init] SSLCommerz initiatePayment error:", sslErr.message);
         return NextResponse.redirect(
           new URL(`/checkout/failed?order_id=${orderId}&reason=ssl_init_failed`, req.url)
         );
@@ -241,6 +251,9 @@ export async function GET(req: Request) {
     const credentials = settingsRow?.value as Record<string, string> | null;
 
     if (!credentials) {
+      console.error(
+        `[Payment Init] No credentials configured for method: ${method}`
+      );
       return NextResponse.redirect(
         new URL(
           `/checkout/success?order_id=${orderId}&notice=payment_pending`,
@@ -325,7 +338,7 @@ export async function GET(req: Request) {
       });
       const paypalData = await orderRes.json();
       const approveLink = paypalData.links?.find(
-        (link: { rel?: string; href?: string }) => link.rel === "approve"
+        (link: any) => link.rel === "approve"
       );
       if (approveLink) {
         return NextResponse.redirect(approveLink.href);
@@ -350,7 +363,8 @@ export async function GET(req: Request) {
     return NextResponse.redirect(
       new URL(`/checkout/failed?reason=unknown_method`, req.url)
     );
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[Payment Init] Unexpected error:", error);
     return NextResponse.redirect(
       new URL("/checkout/failed?reason=server_error", req.url)
     );

@@ -17,51 +17,6 @@ interface SizeGuideModalProps {
   onSelectSize?: (size: string) => void;
   availableSizes?: string[];
   trigger?: ReactNode;
-  /** A3-C3: the product's own category (slug and/or name), used to pick
-   * the matching chart. Without it the modal guessed from sizes alone
-   * and a Panjabi (sizes 38–46) matched the waist-size list first, so
-   * its PDP opened the Bottoms/jeans chart. */
-  categoryHint?: string;
-}
-
-/** A3-C3: map a product category (slug or name) to its chart key. */
-function chartKeyForCategory(
-  hint?: string
-): "tops" | "bottoms" | "traditional" | null {
-  if (!hint) return null;
-  const h = hint.toLowerCase();
-  if (
-    h.includes("panjabi") ||
-    h.includes("kurta") ||
-    h.includes("traditional") ||
-    h.includes("ethnic") ||
-    h.includes("kabli") ||
-    h.includes("waistcoat")
-  ) {
-    return "traditional";
-  }
-  if (
-    h.includes("bottom") ||
-    h.includes("jeans") ||
-    h.includes("denim") ||
-    h.includes("pant") ||
-    h.includes("trouser") ||
-    h.includes("chino") ||
-    h.includes("pajama") ||
-    h.includes("lounge")
-  ) {
-    return "bottoms";
-  }
-  if (
-    h.includes("shirt") ||
-    h.includes("polo") ||
-    h.includes("tee") ||
-    h.includes("top") ||
-    h.includes("henley")
-  ) {
-    return "tops";
-  }
-  return null;
 }
 
 const DEFAULT_APPAREL_CHARTS = {
@@ -109,13 +64,11 @@ export function SizeGuideModal({
   onSelectSize,
   availableSizes = [],
   trigger,
-  categoryHint,
 }: SizeGuideModalProps) {
   const [unit, setUnit] = useState<"in" | "cm">("in");
   const [isOpen, setIsOpen] = useState(false);
 
-  // Detect appropriate chart: explicit per-product charts first, then
-  // the product's OWN category (A3-C3), then a size-based guess.
+  // Detect appropriate chart based on available sizes or passed sizeCharts
   const effectiveChart = useMemo(() => {
     if (sizeCharts && sizeCharts.length > 0 && sizeCharts[0].measurements?.columns) {
       return {
@@ -125,27 +78,19 @@ export function SizeGuideModal({
       };
     }
 
-    const byCategory = chartKeyForCategory(categoryHint);
-    if (byCategory) {
-      return DEFAULT_APPAREL_CHARTS[byCategory];
-    }
-
-    // Fallback size-based guess (no category chart known). Traditional
-    // sizes are checked BEFORE waist sizes: panjabi sets run 38–46 and
-    // "38" also appears in the waist list, which is exactly how a
-    // Panjabi PDP used to land on the Bottoms chart.
-    const hasPanjabiSizes = availableSizes.some((s) => ["40", "42", "44", "46"].includes(s.trim()));
-    if (hasPanjabiSizes) {
-      return DEFAULT_APPAREL_CHARTS.traditional;
-    }
-
+    // Auto-detect based on available sizes
     const hasWaistSizes = availableSizes.some((s) => ["28", "30", "32", "34", "36", "38"].includes(s.trim()));
     if (hasWaistSizes) {
       return DEFAULT_APPAREL_CHARTS.bottoms;
     }
 
+    const hasPanjabiSizes = availableSizes.some((s) => ["40", "42", "44", "46"].includes(s.trim()));
+    if (hasPanjabiSizes) {
+      return DEFAULT_APPAREL_CHARTS.traditional;
+    }
+
     return DEFAULT_APPAREL_CHARTS.tops;
-  }, [sizeCharts, availableSizes, categoryHint]);
+  }, [sizeCharts, availableSizes]);
 
   const { columns, rows, name } = effectiveChart;
 

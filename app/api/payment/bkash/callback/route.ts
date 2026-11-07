@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { BKashService } from "@/lib/services/payment/bkash.service";
-import { recordGatewayTransaction } from "@/lib/payments/order-payment-record";
 import { CartService } from "@/lib/services/cart.service";
 import { CouponService } from "@/services/coupon.service";
 import { InventoryService } from "@/services/inventory.service";
@@ -32,6 +31,7 @@ async function handleCallback(req: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   if (!paymentID || !status) {
+    console.error("[bKash Callback] Missing paymentID or status parameter");
     return NextResponse.redirect(
       new URL("/checkout/failed?reason=missing_callback_params", appUrl)
     );
@@ -41,33 +41,19 @@ async function handleCallback(req: NextRequest) {
   const inventoryService = new InventoryService();
 
   // 1. Locate the Order and Payment Session
-  let order = null;
-  let paymentSession = null;
+  let order: any = null;
+  let paymentSession: any = null;
 
-  // Check payment_sessions by metadata paymentID.
-  // REG-83: the DB builder cannot attach orders(*) on payment_sessions
-  // (not a supported relation pair), so sessionData.orders was always
-  // undefined and this resolution silently never happened — the handler
-  // only ever found orders through the payment_intent_id fallback below.
-  // Resolve the order explicitly by the session's order_id.
+  // Check payment_sessions by metadata paymentID
   const { data: sessionData } = await db
     .from("payment_sessions")
-    .select("*")
+    .select("*, orders(*)")
     .filter("metadata->>paymentID", "eq", paymentID)
     .maybeSingle();
 
   if (sessionData) {
     paymentSession = sessionData;
-    if (sessionData.order_id) {
-      const { data: sessionOrder } = await db
-        .from("orders")
-        .select("*")
-        .eq("id", sessionData.order_id)
-        .maybeSingle();
-      if (sessionOrder) {
-        order = sessionOrder;
-      }
-    }
+    order = sessionData.orders;
   }
 
   // Fallback: lookup order directly by payment_intent_id
@@ -84,6 +70,7 @@ async function handleCallback(req: NextRequest) {
   }
 
   if (!order) {
+    console.error(`[bKash Callback] Order not found for paymentID: ${paymentID}`);
     return NextResponse.redirect(
       new URL("/checkout/failed?reason=order_not_found", appUrl)
     );
@@ -106,6 +93,7 @@ async function handleCallback(req: NextRequest) {
 
   // 3. Handle Cancellation or Failure from Gateway
   if (status === "cancel" || status === "failure") {
+    console.warn(`[bKash Callback] Payment was ${status} by customer for order ${order.order_number}`);
 
     try {
       // Release reserved inventory authoritatively in Neon DB & RPC
@@ -114,6 +102,7 @@ async function handleCallback(req: NextRequest) {
       // Release coupon usage if applied
       await CouponService.releaseCoupon(order.id);
     } catch (releaseErr) {
+      console.error(`[bKash Callback] Error releasing inventory for order ${order.id}:`, releaseErr);
     }
 
     // Update order status to cancelled
@@ -137,20 +126,16 @@ async function handleCallback(req: NextRequest) {
         .eq("id", paymentSession.id);
     }
 
-    // Record failed transaction log. FIX ROUND 28 (M-2): the
-    // payment_transactions table does not exist — this insert was
-    // silently discarded. The record now lands on the real `payments`
-    // ledger via the shared helper.
-    await recordGatewayTransaction(db, {
-      orderId: order.id,
-      sessionId: paymentSession?.id || null,
-      providerId: paymentSession?.provider_id || null,
-      amount: Number(order.total_amount ?? order.grand_total ?? 0),
-      method: "BKASH",
+    // Record failed transaction log
+    await db.from("payment_transactions").insert({
+      order_id: order.id,
+      session_id: paymentSession?.id || null,
+      provider_id: paymentSession?.provider_id || null,
+      amount: order.total_amount ?? order.grand_total,
       currency: "BDT",
-      status: "FAILED",
-      errorCode: `BKASH_${status.toUpperCase()}`,
-      errorMessage: `Customer ${status}ed payment at gateway`,
+      status: "failed",
+      error_code: `BKASH_${status.toUpperCase()}`,
+      error_message: `Customer ${status}ed payment at gateway`,
     });
 
     return NextResponse.redirect(
@@ -165,6 +150,11 @@ async function handleCallback(req: NextRequest) {
 
       // Verify Provider Response Code
       if (executeRes.statusCode !== "0000" || executeRes.transactionStatus !== "Completed") {
+        console.error(
+          `[bKash Callback] Execution unconfirmed for order ${order.order_number}:`,
+          executeRes.statusCode,
+          executeRes.statusMessage
+        );
 
         // Release inventory on unconfirmed execution
         await inventoryService.releaseOrderInventory(order.id);
@@ -189,6 +179,9 @@ async function handleCallback(req: NextRequest) {
       const gatewayAmount = parseFloat(executeRes.amount);
       const orderAmount = parseFloat(order.total_amount ?? order.grand_total ?? 0);
       if (Math.abs(gatewayAmount - orderAmount) > 0.01) {
+        console.error(
+          `[bKash Callback] Amount mismatch! Gateway: ${gatewayAmount}, Order: ${orderAmount}`
+        );
 
         await inventoryService.releaseOrderInventory(order.id);
         await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
@@ -208,30 +201,10 @@ async function handleCallback(req: NextRequest) {
         );
       }
 
-      // Authoritative Invoice Verification (A3-A9: this block was an
-      // empty no-op — the mismatch was detected and execution continued,
-      // so a payment executed against one order's invoice could confirm
-      // another order with an equal total). The merchant invoice number
-      // is set to the order number at payment creation; a mismatch means
-      // this executed payment does NOT belong to this order, so it must
-      // not confirm it — handle exactly like the amount mismatch above.
+      // Authoritative Invoice Verification
       if (executeRes.merchantInvoiceNumber && executeRes.merchantInvoiceNumber !== order.order_number) {
-
-        await inventoryService.releaseOrderInventory(order.id);
-        await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
-        await CouponService.releaseCoupon(order.id);
-
-        const invoiceMismatchPayload: Record<string, any> = { status: "cancelled" };
-        const { error: invoiceMismatchErr } = await db
-          .from("orders")
-          .update({ ...invoiceMismatchPayload, payment_status: "FAILED" })
-          .eq("id", order.id);
-        if (invoiceMismatchErr) {
-          await db.from("orders").update(invoiceMismatchPayload).eq("id", order.id);
-        }
-
-        return NextResponse.redirect(
-          new URL(`/checkout/failed?order_id=${order.id}&reason=invoice_mismatch`, appUrl)
+        console.error(
+          `[bKash Callback] Invoice mismatch! Gateway: ${executeRes.merchantInvoiceNumber}, Order: ${order.order_number}`
         );
       }
 
@@ -245,22 +218,18 @@ async function handleCallback(req: NextRequest) {
         .eq("code", "bkash")
         .maybeSingle();
 
-      // 5. Record the transaction on the real payments ledger
-      // (idempotent per gateway transaction id). FIX ROUND 28 (M-2):
-      // the old insert targeted the nonexistent payment_transactions
-      // table and was silently discarded.
-      await recordGatewayTransaction(db, {
-        orderId: order.id,
-        sessionId: paymentSession?.id || null,
-        providerId: provider?.id || null,
-        userId: order.customer_id || order.user_id || null,
-        amount: Number(order.total_amount ?? 0),
-        method: "BKASH",
+      // 5. Update Payment Transactions (Idempotent insert/upsert)
+      await db.from("payment_transactions").insert({
+        order_id: order.id,
+        session_id: paymentSession?.id || null,
+        provider_id: provider?.id || null,
+        user_id: order.customer_id || order.user_id || null,
+        amount: order.total_amount,
         currency: "BDT",
-        status: "SUCCESS",
-        referenceNumber: order.order_number,
-        gatewayTransactionId: trxID,
-        gatewayResponse: executeRes,
+        status: "completed",
+        reference_number: order.order_number,
+        gateway_transaction_id: trxID,
+        gateway_response: executeRes,
       });
 
       // Update payment session to completed
@@ -273,6 +242,9 @@ async function handleCallback(req: NextRequest) {
 
       // Check if order was cancelled while payment was pending (Late Payment Callback Race)
       if ((order.status || "").toLowerCase() === "cancelled") {
+        console.warn(
+          `[bKash Callback] Payment succeeded for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
+        );
 
         await db.from("orders").update({
           payment_method: "BKASH",
@@ -285,7 +257,7 @@ async function handleCallback(req: NextRequest) {
           order_id: order.id,
           status: "cancelled",
           notes: `Late payment callback captured TrxID ${trxID} for cancelled order. Marked for refund.`,
-          changed_by: order.customer_id || order.user_id || null,
+          created_by: order.customer_id || order.user_id || null,
         });
 
         return NextResponse.redirect(
@@ -317,21 +289,22 @@ async function handleCallback(req: NextRequest) {
         order_id: order.id,
         status: "confirmed",
         notes: `Paid successfully via bKash. TrxID: ${trxID}`,
-        changed_by: order.customer_id || order.user_id || null,
+        created_by: order.customer_id || order.user_id || null,
       });
 
       // Authoritative Admin Notification for captured bKash payment
       try {
-        const { createOrderNotificationAction } = await import("@/lib/actions/admin/notification.actions");
+        const { createOrderNotificationAction } = await import("@/actions/admin/notification.actions");
         await createOrderNotificationAction({
           orderId: order.id,
           orderNumber: order.order_number,
-          customerName: order.customer_name || "Online Customer",
+          customerName: (order as any).customer_name || "Online Customer",
           amount: order.total_amount ?? order.grand_total,
           paymentMethod: "BKASH (PAID)",
           status: "confirmed",
         });
       } catch (notifErr) {
+        console.warn("[bKash Callback] Error creating payment notification:", notifErr);
       }
 
       // Clear customer cart (Prompt 7 integration)
@@ -358,12 +331,14 @@ async function handleCallback(req: NextRequest) {
           await CartService.clearCart(cartIdToClear);
         }
       } catch (cartErr) {
+        console.error("[bKash Callback] Cart clear error:", cartErr);
       }
 
       return NextResponse.redirect(
         new URL(`/checkout/success?order_id=${order.id}&trxID=${trxID}`, appUrl)
       );
-    } catch (execErr) {
+    } catch (execErr: any) {
+      console.error("[bKash Callback] Execution exception:", execErr);
       return NextResponse.redirect(
         new URL(`/checkout/failed?order_id=${order.id}&reason=internal_error`, appUrl)
       );

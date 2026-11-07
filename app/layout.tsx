@@ -12,19 +12,10 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-import {
-  getSeoSettings,
-  getStoreInfo,
-  getSocialLinks,
-} from "@/lib/actions/settings.actions";
-import { getSiteUrl } from "@/lib/site-url";
+import { getSeoSettings } from "@/lib/actions/settings.actions";
 
 export async function generateMetadata(): Promise<Metadata> {
   const seo = await getSeoSettings();
-  // FIX2 (OBS-6): canonical base via the shared helper — this layout
-  // previously hardcoded https://anchorfashion.com (a parked domain)
-  // while sitemap/robots used anchorfashion.com.bd. See lib/site-url.ts.
-  const siteUrl = getSiteUrl();
 
   const titleDefault = seo.meta_title || "Anchor Fashion | Premium E-Commerce";
   const desc = seo.meta_description || "Enterprise e-commerce platform for Anchor Fashion.";
@@ -41,16 +32,12 @@ export async function generateMetadata(): Promise<Metadata> {
       ];
 
   return {
-    // REG-69: no title template. The codebase convention (200+ pages) is
-    // that each page authors its COMPLETE title including the brand
-    // suffix ("… | Anchor Fashion"); the old `%s | Anchor Fashion`
-    // template appended the brand a second time on all of them
-    // ("Home | Anchor Fashion Enterprise | Anchor Fashion", every
-    // product page, …). Pages without metadata fall back to this
-    // default unchanged.
-    title: titleDefault,
+    title: {
+      default: titleDefault,
+      template: `%s | ${titleDefault.split("|")[0].trim() || "Anchor Fashion"}`,
+    },
     description: desc,
-    metadataBase: new URL(siteUrl),
+    metadataBase: new URL("https://anchorfashion.com"),
     icons: {
       icon: [
         { url: "/favicon.ico", sizes: "any" },
@@ -69,7 +56,7 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       type: "website",
       locale: "en_US",
-      url: siteUrl,
+      url: "https://anchorfashion.com",
       title: titleDefault,
       description: desc,
       siteName: "Anchor Fashion",
@@ -101,37 +88,16 @@ export async function generateMetadata(): Promise<Metadata> {
       },
     },
     alternates: {
-      canonical: siteUrl,
+      canonical: "https://anchorfashion.com",
     },
   };
 }
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // REG-62: the JSON-LD below takes its contact phone and social links
-  // from the same Admin settings (store_info / social_links) as every
-  // other surface — it previously hardcoded a dummy phone number and
-  // invented social URLs. Settings reads are cached; any failure falls
-  // back to the canonical settings defaults.
-  const [storeInfo, socialLinks] = await Promise.all([
-    getStoreInfo().catch(() => null),
-    getSocialLinks().catch(() => null),
-  ]);
-  const siteUrl = getSiteUrl();
-  const jsonLdPhone = storeInfo?.phone || "+880 1711-223344";
-  const jsonLdSocials = [
-    socialLinks?.facebook,
-    socialLinks?.instagram,
-    socialLinks?.twitter,
-    socialLinks?.youtube,
-    socialLinks?.tiktok,
-  ].filter(
-    (u): u is string => typeof u === "string" && u.startsWith("http")
-  );
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -157,19 +123,23 @@ export default async function RootLayout({
               "@graph": [
                 {
                   "@type": "Organization",
-                  "@id": `${siteUrl}/#organization`,
+                  "@id": "https://anchorfashion.com/#organization",
                   name: "Anchor Fashion",
-                  url: siteUrl,
+                  url: "https://anchorfashion.com",
                   logo: {
                     "@type": "ImageObject",
-                    url: `${siteUrl}/icon.png`,
+                    url: "https://anchorfashion.com/icon.png",
                     width: 512,
                     height: 512,
                   },
-                  sameAs: jsonLdSocials,
+                  sameAs: [
+                    "https://www.facebook.com/anchorfashion",
+                    "https://www.instagram.com/anchorfashion",
+                    "https://twitter.com/anchorfashion",
+                  ],
                   contactPoint: {
                     "@type": "ContactPoint",
-                    telephone: jsonLdPhone,
+                    telephone: "+880-1700-000000",
                     contactType: "customer service",
                     areaServed: "BD",
                     availableLanguage: ["en", "bn"],
@@ -177,17 +147,18 @@ export default async function RootLayout({
                 },
                 {
                   "@type": "WebSite",
-                  "@id": `${siteUrl}/#website`,
-                  url: siteUrl,
+                  "@id": "https://anchorfashion.com/#website",
+                  url: "https://anchorfashion.com",
                   name: "Anchor Fashion",
                   description:
                     "Premium luxury fashion and modern apparel in Bangladesh.",
                   publisher: {
-                    "@id": `${siteUrl}/#organization`,
+                    "@id": "https://anchorfashion.com/#organization",
                   },
                   potentialAction: {
                     "@type": "SearchAction",
-                    target: `${siteUrl}/products?search={search_term_string}`,
+                    target:
+                      "https://anchorfashion.com/products?search={search_term_string}",
                     "query-input": "required name=search_term_string",
                   },
                 },

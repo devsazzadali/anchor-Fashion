@@ -27,6 +27,7 @@ export function LogoutButton({ className, hideText }: LogoutButtonProps) {
       try {
         await authClient.signOut();
       } catch (authErr) {
+        console.warn("SignOut notice:", authErr);
       }
 
       // Clear local storage and stale guest cookies safely
@@ -40,6 +41,7 @@ export function LogoutButton({ className, hideText }: LogoutButtonProps) {
       // Direct full-page navigation cleanly flushes all client caches and session cookies
       window.location.href = "/auth/login";
     } catch (err) {
+      console.error("Logout error:", err);
       window.location.href = "/auth/login";
     }
   }

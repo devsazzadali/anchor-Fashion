@@ -18,7 +18,7 @@ export async function POST(
       return NextResponse.json({ error: "Missing orderId in route" }, { status: 400 });
     }
 
-    let user = null;
+    let user: any = null;
     try {
       const db = await createDbClient();
       const { data, error: authError } = await db.auth.getUser();
@@ -56,24 +56,16 @@ export async function POST(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // FIX ROUND 28 (m-8): staff status comes from the canonical
-    // profiles-table resolver (lib/auth/server::resolveUserRole), NOT
-    // from auth metadata — user_metadata can be user-editable, which
-    // made this gate escalate-able, and the old role names
-    // ("ops_manager", "warehouse_staff") are not roles-table names.
-    const { resolveUserRole } = await import("@/lib/auth/server");
-    const role = (await resolveUserRole(user)).toUpperCase();
+    const role = (user.app_metadata?.role || user.user_metadata?.role || "").toLowerCase();
     const isStaffOrAdmin = [
-      "SUPERADMIN",
-      "SUPER_ADMIN",
-      "ADMIN",
-      "MANAGER",
-      "WAREHOUSE_MANAGER",
-      "MARKETING_MANAGER",
-      "FINANCE_MANAGER",
-      "STAFF",
-      "SUPPORT",
-      "OPERATIONS",
+      "admin",
+      "superadmin",
+      "super_admin",
+      "manager",
+      "ops_manager",
+      "inventory_manager",
+      "staff",
+      "warehouse_staff",
     ].includes(role);
     const isOwner = order.customer_id === user.id || order.created_by === user.id;
 
@@ -101,9 +93,10 @@ export async function POST(
       },
       { status: result.success ? 200 : 400 }
     );
-  } catch (error) {
+  } catch (error: any) {
+    console.error("POST /api/orders/:orderId/send-confirmation-sms exception:", error);
     return NextResponse.json(
-      { error: "Internal Server Error", details: (error as Error).message },
+      { error: "Internal Server Error", details: error.message },
       { status: 500 }
     );
   }

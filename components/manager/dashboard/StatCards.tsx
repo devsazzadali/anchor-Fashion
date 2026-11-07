@@ -54,9 +54,8 @@ export function StatCards({ kpis }: StatCardsProps) {
         <CardContent>
           <div className="text-2xl font-bold">{data.orders.value}</div>
           <p className="text-xs text-muted-foreground">
-            {/* REG-35: the value is today's count; its trend is vs yesterday. */}
             {data.orders.trend.isPositive ? "+" : "-"}
-            {data.orders.trend.value}% vs yesterday
+            {data.orders.trend.value}% from last month
           </p>
         </CardContent>
       </Card>
@@ -68,9 +67,8 @@ export function StatCards({ kpis }: StatCardsProps) {
         <CardContent>
           <div className="text-2xl font-bold">{data.processing.value}</div>
           <p className="text-xs text-muted-foreground">
-            {/* REG-35: a live state count has no period trend — the old
-                "+0% from last month" line was decoration. */}
-            Orders currently in processing states
+            {data.processing.trend.isPositive ? "+" : "-"}
+            {data.processing.trend.value}% from last month
           </p>
         </CardContent>
       </Card>

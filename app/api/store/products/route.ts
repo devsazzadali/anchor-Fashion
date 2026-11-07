@@ -14,43 +14,12 @@ export async function GET(request: Request) {
   const category = searchParams.get('category');
   const search = searchParams.get('search');
   const featured = searchParams.get('featured');
-  // FIX ROUND 29 (D1): explicit id list (comma-separated UUIDs) — the
-  // guest wishlist page resolves its locally saved product ids through
-  // this feed. Non-UUID segments are ignored.
-  const idsParam = searchParams.get('ids');
-  const ids = idsParam
-    ? idsParam
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) =>
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
-        )
-        .slice(0, 100)
-    : [];
-
-  // REG-84: bound the feed. Defaults (limit 500) sit far above the
-  // current catalog size, so today's response is byte-identical; the
-  // cap only bites as the catalog grows. Callers may page explicitly
-  // with ?limit=&offset= (limit clamped to 1000).
-  const limitParam = Number(searchParams.get('limit'));
-  const offsetParam = Number(searchParams.get('offset'));
-  const take =
-    Number.isFinite(limitParam) && limitParam > 0
-      ? Math.min(Math.floor(limitParam), 1000)
-      : 500;
-  const skip =
-    Number.isFinite(offsetParam) && offsetParam > 0
-      ? Math.floor(offsetParam)
-      : 0;
 
   try {
     const products = await prisma.product.findMany({
-      take,
-      skip,
       where: {
         status: 'ACTIVE',
         deletedAt: null,
-        ...(ids.length > 0 ? { id: { in: ids } } : {}),
         ...(featured === 'true' ? { isFeatured: true } : {}),
         ...(search
           ? { name: { contains: search, mode: 'insensitive' as const } }
@@ -77,6 +46,7 @@ export async function GET(request: Request) {
       }))
     );
   } catch (error) {
+    console.error('Unexpected error fetching products:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

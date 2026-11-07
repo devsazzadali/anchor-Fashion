@@ -1,14 +1,14 @@
 import { MetadataRoute } from "next";
 import { CatalogRepository } from "@/repositories/catalog.repository";
-import { getPosts } from "@/lib/actions/blog.actions";
-import { getSiteUrl } from "@/lib/site-url";
+import { getPosts } from "@/actions/blog.actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // FIX2 (OBS-6): canonical base via the shared helper (same value this
-  // file previously computed inline — see lib/site-url.ts).
-  const baseUrl = getSiteUrl();
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL && !process.env.NEXT_PUBLIC_SITE_URL.includes("localhost")
+      ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")
+      : "https://www.anchorfashion.com.bd";
 
   let products: any[] = [];
   let categories: any[] = [];
@@ -30,7 +30,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Fallback gracefully during build step
   }
 
-  const productUrls = products.map((product) => ({
+  const productUrls = products.map((product: any) => ({
     url: `${baseUrl}/products/${product.slug}`,
     lastModified: new Date(
       product.updated_at || product.created_at || new Date()
@@ -39,7 +39,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  const categoryUrls = categories.map((category) => ({
+  const categoryUrls = categories.map((category: any) => ({
     url: `${baseUrl}/categories/${category.slug}`,
     lastModified: new Date(
       category.updated_at || category.created_at || new Date()
@@ -48,7 +48,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.9,
   }));
 
-  const blogUrls = blogPosts.map((post) => ({
+  const blogUrls = blogPosts.map((post: any) => ({
     url: `${baseUrl}/blog/${post.slug}`,
     lastModified: new Date(
       post.updated_at || post.published_at || new Date()

@@ -17,6 +17,7 @@ export function AiDecisionSupport() {
         }
       })
       .catch((err) => {
+        console.error(err);
         setError("Failed to fetch insights");
       });
   }, []);

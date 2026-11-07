@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { ProductActions } from "./product-actions";
 import { cn, formatCurrency } from "@/lib/utils";
 import { priceWithVat } from "@/lib/utils/vat";
@@ -31,8 +31,7 @@ export interface VariantData {
   price?: number | null;
   price_override?: number | null;
   sale_price?: number | null;
-  // Server-computed purchasable stock for this variant (catalog payload).
-  available_stock?: number;
+  stock_quantity?: number;
   is_active?: boolean;
   attributes?: Record<string, string> | string | null;
   variant_attribute_values?: VariantAttributeValueRelational[];
@@ -72,18 +71,11 @@ export interface ProductVariantSelectorProps {
   productSalePrice?: number | null;
   /** Per-product VAT % — displayed prices include VAT (added on top). */
   productVatPercent?: number;
-  /** REG-81: Admin-configured free-shipping threshold (BDT); the
-   *  "Free Express Shipping" claim shows only when the effective price
-   *  reaches it. 0/undefined = no program, no claim. */
-  freeShippingThreshold?: number;
   productSku?: string;
   productImages?: string[];
   productMedia?: ProductMediaItem[];
   flashSale?: FlashSaleInfo | null;
   sizeCharts?: SizeChart[];
-  /** A3-C3: the product's category (slug/name) so the Size Guide opens
-   * the chart for the product's own category. */
-  productCategory?: string;
   onVariantChange?: (info: VariantChangeInfo) => void;
 }
 
@@ -127,28 +119,19 @@ function normalizeAttributes(v: VariantData): Record<string, string> {
 }
 
 /**
- * The variant's purchasable stock, as computed by the server.
- *
- * The catalog payload carries `available_stock` per variant: the sum of
- * quantity_available across the variant's warehouse levels, with reserved
- * units already excluded (reserving decrements quantity_available). That
- * server figure is the only number the PDP may display for the variant —
- * never the product-wide total, never another variant's stock, never an
- * unrelated payload field. If the explicit field is absent, derive the
- * same sum from inventory_levels. A variant with no stock data has 0
- * purchasable units — the same answer checkout gives for it.
+ * Computes authoritative stock from inventory_levels
  */
-function getVariantAvailableStock(v: VariantData): number {
-  if (typeof v.available_stock === "number") {
-    return Math.max(0, v.available_stock);
-  }
-  if (Array.isArray(v.inventory_levels)) {
+function calculateVariantStock(v: VariantData, fallbackStock: number = 0): number {
+  if (Array.isArray(v.inventory_levels) && v.inventory_levels.length > 0) {
     return v.inventory_levels.reduce(
       (sum, lvl) => sum + (lvl.quantity_available || 0),
       0
     );
   }
-  return 0;
+  if (typeof v.stock_quantity === "number") {
+    return v.stock_quantity;
+  }
+  return fallbackStock;
 }
 
 const FASHION_COLOR_MAP: Record<string, string> = {
@@ -284,8 +267,6 @@ export function ProductVariantSelector({
   productMedia = [],
   flashSale = null,
   sizeCharts = [],
-  productCategory,
-  freeShippingThreshold = 0,
   onVariantChange,
 }: ProductVariantSelectorProps) {
   // 1. Process variants with normalized attributes and stock
@@ -293,7 +274,7 @@ export function ProductVariantSelector({
     return (variants || []).map((v) => ({
       raw: v,
       attributes: normalizeAttributes(v),
-      stock: getVariantAvailableStock(v),
+      stock: calculateVariantStock(v, baseStockQuantity),
       isActive: v.is_active ?? true,
     }));
   }, [variants, baseStockQuantity]);
@@ -363,7 +344,7 @@ export function ProductVariantSelector({
       return baseStockQuantity;
     }
     if (matchedVariant) {
-      return getVariantAvailableStock(matchedVariant);
+      return calculateVariantStock(matchedVariant, baseStockQuantity);
     }
     return 0;
   }, [processedVariants, matchedVariant, baseStockQuantity]);
@@ -403,17 +384,6 @@ export function ProductVariantSelector({
       matchedVariant?.price ??
       productPrice;
 
-    // S4-1: the compare-at ("retail") price is the HIGHER of the variant's
-    // regular price and the product's base price. Products published from
-    // inventory carry the selling price as the variant's price_override
-    // while the retail price lives on the product's base_price — comparing
-    // the product sale price only against the variant override made the
-    // struck-through compare-at vanish whenever override == sale price.
-    const regularPrice = Math.max(
-      Number(baseRegularPrice) || 0,
-      Number(productPrice) || 0
-    );
-
     // Flash sale check
     if (flashSale && flashSale.stock_allocated > flashSale.stock_sold) {
       return {
@@ -424,19 +394,19 @@ export function ProductVariantSelector({
     }
 
     // Variant sale price
-    if (matchedVariant?.sale_price && matchedVariant.sale_price < regularPrice) {
+    if (matchedVariant?.sale_price && matchedVariant.sale_price < baseRegularPrice) {
       return {
         effectivePrice: matchedVariant.sale_price,
-        compareAtPrice: regularPrice,
+        compareAtPrice: baseRegularPrice,
         isFlashActive: false,
       };
     }
 
     // Product sale price fallback
-    if (productSalePrice && productSalePrice < regularPrice) {
+    if (productSalePrice && productSalePrice < baseRegularPrice) {
       return {
         effectivePrice: productSalePrice,
-        compareAtPrice: regularPrice,
+        compareAtPrice: baseRegularPrice,
         isFlashActive: false,
       };
     }
@@ -481,35 +451,9 @@ export function ProductVariantSelector({
     return productImages;
   }, [matchedVariant, productMedia, productImages]);
 
-  // Notify parent component of changes.
-  //
-  // The payload is guarded by a value signature: this effect must only
-  // notify when something the parent actually displays has changed.
-  // Without the guard, identity-only churn (e.g. the parent rebuilding
-  // the `productImages` array on every render, which recomputes
-  // `variantGallery` to a new array with identical contents) re-fires
-  // this effect, the parent setStates in response, re-renders, rebuilds
-  // the array again — an infinite render loop ("Maximum update depth
-  // exceeded" in dev; in production the loop silently starves the App
-  // Router's transition-priority navigation commits, which is why Buy
-  // Now / drawer checkout / even plain Links never navigated away from
-  // a product page).
-  const lastNotifiedSignatureRef = useRef<string | null>(null);
+  // Notify parent component of changes
   useEffect(() => {
     if (onVariantChange) {
-      const signature = JSON.stringify({
-        variantId: matchedVariant?.id ?? null,
-        price: effectivePrice,
-        compareAtPrice,
-        sku: currentSku,
-        images: variantGallery,
-        stock: currentStock,
-        isOutOfStock,
-      });
-      if (lastNotifiedSignatureRef.current === signature) {
-        return;
-      }
-      lastNotifiedSignatureRef.current = signature;
       onVariantChange({
         variant: matchedVariant,
         price: effectivePrice,
@@ -589,9 +533,9 @@ export function ProductVariantSelector({
           <span className="text-3xl font-semibold tracking-tight text-gray-950 font-sans">
             {formatCurrency(displayEffectivePrice)}
           </span>
-          {/* Always the final VAT-inclusive price — label uniformly
-              (some products carry 0% VAT). */}
-          <span className="text-xs text-gray-400">incl. VAT</span>
+          {productVatPercent > 0 && (
+            <span className="text-xs text-gray-400">incl. VAT</span>
+          )}
           {displayCompareAtPrice && displayCompareAtPrice > displayEffectivePrice && (
             <>
               <span className="text-lg text-gray-400 line-through">
@@ -651,13 +595,11 @@ export function ProductVariantSelector({
           </span>
         )}
 
-        {freeShippingThreshold > 0 &&
-          effectivePrice >= freeShippingThreshold &&
-          !isOutOfStock && (
-            <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-medium">
-              🚚 Free Express Shipping
-            </span>
-          )}
+        {effectivePrice >= 999 && !isOutOfStock && (
+          <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-medium">
+            🚚 Free Express Shipping
+          </span>
+        )}
       </div>
 
       {/* Dynamic Attribute Selectors (Color, Size, etc.) */}
@@ -688,7 +630,6 @@ export function ProductVariantSelector({
               {dimension.name.toLowerCase() === "size" && (
                 <SizeGuideModal
                   sizeCharts={sizeCharts}
-                  categoryHint={productCategory || productName}
                   availableSizes={dimension.values}
                   selectedSize={selectedValue}
                   onSelectSize={(sizeVal) => {
@@ -834,7 +775,6 @@ export function ProductVariantSelector({
           quantity={quantity}
           onQuantityChange={setQuantity}
           maxQuantity={maxAllowedQuantity}
-          stockQuantity={currentStock}
           isOutOfStock={isOutOfStock}
           validationError={validationError}
         />

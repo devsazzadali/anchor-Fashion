@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send } from "lucide-react";
-import { submitContactMessageAction } from "@/lib/actions/crm.actions";
+import { createLeadAction } from "@/actions/crm.actions";
 
 const contactSchema = z.object({
   name: z.string().trim().min(2, "Full name must be at least 2 characters"),
@@ -43,11 +43,11 @@ export function ContactForm() {
   const onSubmit = async (data: ContactFormValues) => {
     setIsSubmitting(true);
     try {
-      const res = await submitContactMessageAction({
-        name: data.name,
+      const res = await createLeadAction({
+        first_name: data.name,
         email: data.email,
-        subject: data.subject,
-        message: data.message,
+        source: "Contact Us Form",
+        notes: `[Subject: ${data.subject}]\n\n${data.message}`,
       });
 
       if (res?.error) {
@@ -56,8 +56,8 @@ export function ContactForm() {
         toast.success("Thank you! Your message has been sent successfully.");
         reset();
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Something went wrong. Please try again.");
+    } catch (err: any) {
+      toast.error(err.message || "Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

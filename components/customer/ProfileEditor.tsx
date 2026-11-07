@@ -89,8 +89,8 @@ export function ProfileEditor({ profile }: ProfileEditorProps) {
       } else {
         toast.error(res.error || "Failed to upload avatar", { id: toastId });
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload avatar", { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload avatar", { id: toastId });
     } finally {
       setIsUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -115,8 +115,8 @@ export function ProfileEditor({ profile }: ProfileEditorProps) {
         } else {
           toast.error("Failed to update profile");
         }
-      } catch (error) {
-        toast.error((error as Error).message || "Failed to update profile");
+      } catch (error: any) {
+        toast.error(error.message || "Failed to update profile");
       }
     });
   };

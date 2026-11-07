@@ -76,8 +76,8 @@ export function CreateTicketModal() {
         toast.success("Support ticket created successfully");
         reset();
         setOpen(false);
-      } catch (err) {
-        toast.error((err as Error).message || "Something went wrong creating ticket");
+      } catch (err: any) {
+        toast.error(err.message || "Something went wrong creating ticket");
       }
     });
   };

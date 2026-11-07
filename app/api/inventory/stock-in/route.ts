@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { InventoryRepository } from "@/repositories/inventory.repository";
 import { verifyStaff } from "@/lib/security/roles";
-import { authErrorResponse } from "@/lib/api/auth-error";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,9 +16,7 @@ export async function POST(request: NextRequest) {
     const repo = new InventoryRepository();
     const result = await repo.stockIn(body);
     return NextResponse.json({ success: true, data: result }, { status: 201 });
-  } catch (error) {
-    // FIX ROUND 28 (m-1): auth failures must not collapse to 400 —
-    // authErrorResponse maps Unauthorized→401, Forbidden→403, else 400.
-    return authErrorResponse(error, 400);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: error.message?.includes("Forbidden") ? 403 : 400 });
   }
 }

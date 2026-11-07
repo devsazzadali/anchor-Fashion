@@ -125,15 +125,6 @@ export function InventoryMasterHubClient({
         item.name?.toLowerCase().includes(q) ||
         item.sku?.toLowerCase().includes(q) ||
         item.barcode?.toLowerCase().includes(q) ||
-        // REG-42: barcodes (REG-36 EAN-13s) live on VARIANTS, not on the
-        // product row — a variant barcode or variant SKU must surface the
-        // parent product. The payload already carries variants[].barcode/sku
-        // (same fields the server action matches when `search` is passed).
-        (item.variants || []).some(
-          (v: any) =>
-            v.barcode?.toLowerCase().includes(q) ||
-            v.sku?.toLowerCase().includes(q)
-        ) ||
         item.category?.toLowerCase().includes(q);
 
       const matchStatus = statusFilter === "ALL" || item.status === statusFilter;
@@ -146,16 +137,6 @@ export function InventoryMasterHubClient({
     });
   }, [masterItems, search, statusFilter, categoryFilter]);
 
-  // Tab badge: the TRUE catalog total from the server when no client
-  // filter is active (the loaded list used to be capped at 100 rows, so
-  // the badge showed 100 for a 190-product catalog); the filtered count
-  // while searching/filtering.
-  const catalogFiltersActive =
-    Boolean(search) || statusFilter !== "ALL" || categoryFilter !== "ALL";
-  const catalogTabCount = catalogFiltersActive
-    ? filteredCatalog.length
-    : (initialMasterData?.total ?? filteredCatalog.length);
-
   // Handle Publish Toggle
   const handleTogglePublish = async (productId: string) => {
     try {
@@ -167,8 +148,8 @@ export function InventoryMasterHubClient({
       } else {
         toast.error(res.error || "Failed to update publish status.");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to update.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update.");
     } finally {
       setTogglingId(null);
     }
@@ -340,14 +321,14 @@ export function InventoryMasterHubClient({
         <Card className="border border-border bg-card shadow-xs hover:border-border/80 transition-all rounded-xl">
           <CardContent className="p-4 space-y-1">
             <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-              <span>Available Stock</span>
+              <span>Total In Stock</span>
               <Warehouse className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             <div className="text-2xl font-bold text-foreground tracking-tight font-sans">
               {(finSummary.totalInStockUnits ?? 0).toLocaleString()}
             </div>
             <p className="text-[11px] text-muted-foreground font-medium">
-              +{(finSummary.totalReservedUnits ?? 0).toLocaleString()} reserved · {((finSummary.totalInStockUnits ?? 0) + (finSummary.totalReservedUnits ?? 0)).toLocaleString()} total units
+              +{(branchSummary.overallUnitsSent ?? 0).toLocaleString()} across {branchSummary.branchesCount ?? 5} branches
             </p>
           </CardContent>
         </Card>
@@ -419,7 +400,7 @@ export function InventoryMasterHubClient({
           <TabsList className="bg-muted p-1 rounded-xl">
             <TabsTrigger value="catalog" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs">
               <Boxes className="h-3.5 w-3.5" />
-              Master Inventory Catalog ({catalogTabCount})
+              Master Inventory Catalog ({filteredCatalog.length})
             </TabsTrigger>
             <TabsTrigger value="branches" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs">
               <Building2 className="h-3.5 w-3.5" />

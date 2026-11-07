@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
 import { TrackingService } from "@/services/shipping/tracking.service";
-import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/shipping/track/[trackingNumber]
  * Public tracking endpoint — no authentication required.
  * Used by the customer tracking page.
- *
- * Accepts either a courier tracking number OR an Anchor order number
- * (AF-YYYYMMDD-XXXX) — the only identifier a guest receives at checkout.
- * An order that already has a shipment resolves to that shipment's
- * timeline; an order with no shipment yet returns its order status with
- * an explicit "not shipped yet" state instead of a misleading not-found.
  */
 export async function GET(
   _req: Request,
@@ -33,90 +26,24 @@ export async function GET(
       "tracking_number"
     );
 
-    if (timeline) {
-      // Cache for 2 minutes — short TTL for near-real-time tracking
+    if (!timeline) {
       return NextResponse.json(
-        { success: true, data: timeline },
-        {
-          headers: {
-            "Cache-Control": "public, max-age=120, stale-while-revalidate=60",
-          },
-        }
+        { error: "Tracking information not found for this number" },
+        { status: 404 }
       );
     }
 
-    // Not a courier tracking number — try an order number.
-    // FIX2 (R30 OBS-3): totalAmount deliberately NOT selected — this is
-    // an unauthenticated endpoint keyed only by the (guessable) order
-    // number, so it returns the minimum the tracking UI needs: status
-    // and timeline facts, never money amounts.
-    const order = await prisma.order.findFirst({
-      where: {
-        orderNumber: { equals: trackingNumber.trim(), mode: "insensitive" },
-      },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        createdAt: true,
-      },
-    });
-
-    if (order) {
-      const shipment = await prisma.shipment.findFirst({
-        where: { orderId: order.id },
-        orderBy: { createdAt: "desc" },
-        select: { trackingNumber: true, status: true },
-      });
-
-      if (shipment?.trackingNumber) {
-        const shipmentTimeline = await trackingService.getTrackingTimeline(
-          shipment.trackingNumber,
-          "tracking_number"
-        );
-        if (shipmentTimeline) {
-          return NextResponse.json(
-            { success: true, data: shipmentTimeline },
-            {
-              headers: {
-                "Cache-Control":
-                  "public, max-age=120, stale-while-revalidate=60",
-              },
-            }
-          );
-        }
-      }
-
-      // "Shipped" is a fact about the ORDER's lifecycle, not only about
-      // the courier row: an order that reached SHIPPED / DELIVERED /
-      // COMPLETED has by definition been shipped, even when its shipment
-      // row carries no courier tracking number (or predates shipment-row
-      // creation). Deriving the flag from the tracking number alone made
-      // delivered orders claim "not been shipped yet" on the tracking
-      // page. When a tracking number DOES exist, the timeline branch
-      // above has already taken precedence and returned it.
-      const SHIPPED_STATUSES = ["SHIPPED", "DELIVERED", "COMPLETED"];
-      return NextResponse.json({
-        success: true,
-        data: {
-          orderInfo: {
-            orderNumber: order.orderNumber,
-            status: order.status,
-            placedAt: order.createdAt.toISOString(),
-            shipped:
-              Boolean(shipment?.trackingNumber) ||
-              SHIPPED_STATUSES.includes(order.status),
-            trackingNumber: shipment?.trackingNumber ?? null,
-          },
-        },
-      });
-    }
-
+    // Cache for 2 minutes — short TTL for near-real-time tracking
     return NextResponse.json(
-      { error: "Tracking information not found for this number" },
-      { status: 404 }
+      { success: true, data: timeline },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=120, stale-while-revalidate=60",
+        },
+      }
     );
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[Tracking API] Error:", err);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

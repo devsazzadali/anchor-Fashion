@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { SSLCommerzService } from "@/lib/services/payment/sslcommerz.service";
-import { recordGatewayTransaction } from "@/lib/payments/order-payment-record";
 import { CartService } from "@/lib/services/cart.service";
 import { CouponService } from "@/services/coupon.service";
 
@@ -38,6 +37,7 @@ export async function POST(req: NextRequest) {
     const status = (payload.status || "").toUpperCase();
 
     if (!valId || !tranId) {
+      console.error("[SSLCommerz IPN] Missing val_id or tran_id in payload:", payload);
       return NextResponse.json(
         { error: "Missing required parameters (val_id, tran_id)" },
         { status: 400 }
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
     const db = createAdminDbClient();
 
     // 1. Locate Order and Payment Session
-    let order = null;
-    let paymentSession = null;
+    let order: any = null;
+    let paymentSession: any = null;
 
     if (payload.value_a) {
       const { data: orderById } = await db
@@ -62,24 +62,13 @@ export async function POST(req: NextRequest) {
     if (!order && tranId) {
       const { data: sessionData } = await db
         .from("payment_sessions")
-        .select("*")
+        .select("*, orders(*)")
         .filter("metadata->>tran_id", "eq", tranId)
         .maybeSingle();
 
       if (sessionData) {
         paymentSession = sessionData;
-        // REG-83: orders(*) never attaches on payment_sessions — resolve
-        // the order explicitly by the session's order_id.
-        if (sessionData.order_id) {
-          const { data: sessionOrder } = await db
-            .from("orders")
-            .select("*")
-            .eq("id", sessionData.order_id)
-            .maybeSingle();
-          if (sessionOrder) {
-            order = sessionOrder;
-          }
-        }
+        order = sessionData.orders;
       }
     }
 
@@ -94,19 +83,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (!order) {
+      console.error(`[SSLCommerz IPN] Order not found for tran_id: ${tranId}`);
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    }
-
-    // A3-A1: if the order was located via value_a / intent fallback, the
-    // payment session for this tran_id may not have been resolved yet —
-    // resolve it now; the failure-branch gate below binds against it.
-    if (!paymentSession && tranId) {
-      const { data: sessionData } = await db
-        .from("payment_sessions")
-        .select("*")
-        .filter("metadata->>tran_id", "eq", tranId)
-        .maybeSingle();
-      if (sessionData) paymentSession = sessionData;
     }
 
     // 2. Idempotency Guard: If order is already paid/confirmed, acknowledge immediately
@@ -135,41 +113,9 @@ export async function POST(req: NextRequest) {
       } catch (_) {}
     };
 
-    // A3-A1: a FAILED/CANCELLED notification is destructive (cancels the
-    // order, releases inventory + coupon), so it must be authenticated
-    // BEFORE any state change: (1) tran_id must be bound to a real
-    // payment_session belonging to THIS order, and (2) the payload's
-    // verify_sign must validate against the store password. An
-    // unauthenticated failure post is rejected with NO state change —
-    // previously this branch ran before any gateway validation, so
-    // anyone who could guess an order number could mass-cancel the
-    // day's pending orders.
-    const isValidatedFailureNotification = async (): Promise<boolean> => {
-      try {
-        if (!paymentSession || paymentSession.order_id !== order.id) {
-          return false;
-        }
-        const sessionTranId = (paymentSession.metadata)?.tran_id;
-        if (!sessionTranId || sessionTranId !== tranId) return false;
-        if (!payload.verify_sign || !payload.verify_key) return false;
-        const config = await SSLCommerzService.getConfig();
-        return SSLCommerzService.verifySignature(payload, config.store_passwd);
-      } catch {
-        return false;
-      }
-    };
-
     // 3. Handle Failure or Cancellation notifications from IPN
     if (status === "FAILED" || status === "CANCELLED") {
-      if (!(await isValidatedFailureNotification())) {
-        return NextResponse.json(
-          {
-            status: "IGNORED",
-            error: "Failure notification could not be validated; no state changed",
-          },
-          { status: 401 }
-        );
-      }
+      console.warn(`[SSLCommerz IPN] Received ${status} notification for order ${order.order_number}`);
 
       await safeRollback();
 
@@ -195,10 +141,18 @@ export async function POST(req: NextRequest) {
     const valRes = await SSLCommerzService.validateTransaction(valId, tranId);
 
     if (valRes.status !== "VALID" && valRes.status !== "VALIDATED") {
-      // A3-A1: a rejected validation proves nothing about the order — a
-      // forged val_id lands here too. Do NOT cancel the order or release
-      // inventory/coupon on an unvalidated notification; the order stays
-      // pending_payment and expires by its reservation window.
+      console.error(
+        `[SSLCommerz IPN] Transaction validation failed for order ${order.order_number}:`,
+        valRes.status
+      );
+
+      await safeRollback();
+
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "FAILED" })
+        .eq("id", order.id);
+
       return NextResponse.json(
         { error: "Validation server rejected transaction" },
         { status: 400 }
@@ -209,6 +163,9 @@ export async function POST(req: NextRequest) {
     const gatewayAmount = parseFloat(valRes.amount);
     const orderAmount = parseFloat(order.total_amount ?? order.grand_total ?? 0);
     if (isNaN(gatewayAmount) || Math.abs(gatewayAmount - orderAmount) > 0.01) {
+      console.error(
+        `[SSLCommerz IPN] Amount mismatch! Gateway: ${valRes.amount}, Order: ${orderAmount}`
+      );
 
       await safeRollback();
 
@@ -228,6 +185,9 @@ export async function POST(req: NextRequest) {
       (verifiedCurrency === "BDT" && (expectedCurrency === "USD" || expectedCurrency === "BDT"));
 
     if (!isCurrencyMatch) {
+      console.error(
+        `[SSLCommerz IPN] Currency mismatch! Gateway: ${verifiedCurrency}, Order: ${expectedCurrency}`
+      );
 
       await safeRollback();
 
@@ -248,24 +208,18 @@ export async function POST(req: NextRequest) {
       .eq("code", "sslcommerz")
       .maybeSingle();
 
-    // 5. Record the transaction on the real payments ledger
-    // (idempotent per gateway transaction id). FIX ROUND 28 (M-2): the
-    // old insert targeted the nonexistent payment_transactions table —
-    // after a fully validated payment the ledger row was silently
-    // dropped. recordGatewayTransaction logs a durable server error if
-    // the write ever fails instead of dropping silently.
-    await recordGatewayTransaction(db, {
-      orderId: order.id,
-      sessionId: paymentSession?.id || null,
-      providerId: provider?.id || null,
-      userId: order.customer_id || order.user_id || null,
-      amount: Number(order.total_amount ?? order.grand_total ?? 0),
-      method: "SSLCOMMERZ",
+    // 5. Update Payment Transactions (Idempotent)
+    await db.from("payment_transactions").insert({
+      order_id: order.id,
+      session_id: paymentSession?.id || null,
+      provider_id: provider?.id || null,
+      user_id: order.customer_id || order.user_id || null,
+      amount: order.total_amount ?? order.grand_total,
       currency: expectedCurrency,
-      status: "SUCCESS",
-      referenceNumber: tranId || order.order_number,
-      gatewayTransactionId: confirmedTrxId,
-      gatewayResponse: valRes,
+      status: "completed",
+      reference_number: tranId || order.order_number,
+      gateway_transaction_id: confirmedTrxId,
+      gateway_response: valRes,
     });
 
     if (paymentSession?.id) {
@@ -285,6 +239,9 @@ export async function POST(req: NextRequest) {
 
     // Check if order was cancelled while payment was pending (Late Payment Callback Race)
     if ((order.status || "").toLowerCase() === "cancelled") {
+      console.warn(
+        `[SSLCommerz IPN] Payment verified for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
+      );
 
       await db.from("orders").update({
         payment_method: "SSLCOMMERZ",
@@ -297,7 +254,7 @@ export async function POST(req: NextRequest) {
         order_id: order.id,
         status: "cancelled",
         notes: `Late IPN captured TrxID ${confirmedTrxId} for cancelled order. Marked for refund.`,
-        changed_by: order.customer_id || order.user_id || null,
+        created_by: order.customer_id || order.user_id || null,
       });
 
       return NextResponse.json({
@@ -332,21 +289,22 @@ export async function POST(req: NextRequest) {
       order_id: order.id,
       status: "confirmed",
       notes: `Paid successfully via SSLCommerz IPN (${valRes.card_type || "Cards/Mobile Banking"}). TrxID: ${confirmedTrxId}, ValID: ${valId}`,
-      changed_by: order.customer_id || order.user_id || null,
+      created_by: order.customer_id || order.user_id || null,
     });
 
     // Authoritative Admin Notification for captured payment via IPN
     try {
-      const { createOrderNotificationAction } = await import("@/lib/actions/admin/notification.actions");
+      const { createOrderNotificationAction } = await import("@/actions/admin/notification.actions");
       await createOrderNotificationAction({
         orderId: order.id,
         orderNumber: order.order_number,
-        customerName: order.customer_name || "Online Customer",
+        customerName: (order as any).customer_name || "Online Customer",
         amount: order.total_amount ?? order.grand_total,
         paymentMethod: "SSLCOMMERZ (IPN)",
         status: "confirmed",
       });
     } catch (notifErr) {
+      console.warn("[SSLCommerz IPN] Error creating payment notification:", notifErr);
     }
 
     // Clear cart
@@ -372,6 +330,7 @@ export async function POST(req: NextRequest) {
         await CartService.clearCart(cartIdToClear);
       }
     } catch (cartErr) {
+      console.error("[SSLCommerz IPN] Cart clear error:", cartErr);
     }
 
     // Trigger Order Confirmation SMS asynchronously
@@ -379,6 +338,7 @@ export async function POST(req: NextRequest) {
       const { AlphaSmsService } = await import("@/lib/services/sms/alpha-sms.service");
       AlphaSmsService.triggerOrderConfirmationSmsAsync(order.id);
     } catch (smsErr) {
+      console.error("[SSLCommerz IPN] SMS trigger error:", smsErr);
     }
 
     return NextResponse.json({
@@ -386,9 +346,10 @@ export async function POST(req: NextRequest) {
       message: "IPN verified and payment processed successfully",
       trxID: confirmedTrxId,
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[SSLCommerz IPN] Unexpected exception:", error);
     return NextResponse.json(
-      { error: "Internal server error processing IPN", details: (error as Error).message },
+      { error: "Internal server error processing IPN", details: error.message },
       { status: 500 }
     );
   }

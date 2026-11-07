@@ -1,10 +1,10 @@
 import { MetadataRoute } from "next";
-import { getSiteUrl } from "@/lib/site-url";
 
 export default function robots(): MetadataRoute.Robots {
-  // FIX2 (OBS-6): canonical base via the shared helper (same value this
-  // file previously computed inline — see lib/site-url.ts).
-  const baseUrl = getSiteUrl();
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL && !process.env.NEXT_PUBLIC_SITE_URL.includes("localhost")
+      ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")
+      : "https://www.anchorfashion.com.bd";
 
   return {
     rules: {

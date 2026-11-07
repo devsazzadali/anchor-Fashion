@@ -17,6 +17,7 @@ export function RealTimeCommandCenter() {
         }
       })
       .catch((err) => {
+        console.error(err);
         setError("Failed to fetch analytics data");
       });
   }, []);

@@ -111,10 +111,7 @@ export function PremiumMobileMenu({
   user: propUser,
   cartItemCount: propCartCount,
   wishlistItemCount: propWishlistCount,
-  // REG-62: the fallback is the canonical store_info default — the same
-  // value settings.actions uses — never a divergent private number. In
-  // practice the header always passes the live settings phone.
-  contactPhone = "+880 1711-223344",
+  contactPhone = "+880 1812-998877",
   announcementBar,
   triggerButton,
 }: PremiumMobileMenuProps) {
@@ -194,6 +191,7 @@ export function PremiumMobileMenu({
       try {
         await authClient.signOut();
       } catch (authErr) {
+        console.warn("SignOut notice:", authErr);
       }
       try {
         localStorage.removeItem("anchor_user_password");
@@ -771,7 +769,7 @@ export function PremiumMobileMenu({
                 </h4>
 
                 <a
-                  href={`https://wa.me/${contactPhone.replace(/\D/g, "")}?text=${encodeURIComponent(
+                  href={`https://wa.me/8801812998877?text=${encodeURIComponent(
                     "Hello Anchor Fashion Concierge, I would like bespoke assistance with clothing and styling."
                   )}`}
                   target="_blank"

@@ -16,17 +16,9 @@ import { ShoppingBag, Loader2, ArrowRight, Heart } from "lucide-react";
 import Image from "next/image";
 
 import { usePersonalizationStore } from "@/stores/use-personalization-store";
-import { totalVatAmount, priceWithVat } from "@/lib/utils/vat";
-import { formatCurrency } from "@/lib/utils";
+import { totalVatAmount } from "@/lib/utils/vat";
 
-export function CartDrawer({
-  freeShippingThreshold = 0,
-}: {
-  /** REG-81: from Admin → Settings (store_info.free_shipping_threshold),
-   *  passed by the server layouts via getFreeShippingThreshold().
-   *  0 = no free-shipping program — the meter is hidden, never faked. */
-  freeShippingThreshold?: number;
-}) {
+export function CartDrawer() {
   const { cart, isSheetOpen, setSheetOpen, isLoading } = useCartStore();
   const router = useRouter();
 
@@ -63,11 +55,8 @@ export function CartDrawer({
     }))
   );
 
-  const FREE_SHIPPING_THRESHOLD = freeShippingThreshold;
-  const progress =
-    FREE_SHIPPING_THRESHOLD > 0
-      ? Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100)
-      : 0;
+  const FREE_SHIPPING_THRESHOLD = 999;
+  const progress = Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
   const amountNeeded = FREE_SHIPPING_THRESHOLD - subtotal;
   
   const { recentlyViewed } = usePersonalizationStore();
@@ -132,13 +121,12 @@ export function CartDrawer({
             </div>
           ) : (
             <div className="flex h-full flex-col">
-              {/* Free Shipping Progress (only when a threshold is configured) */}
-              {FREE_SHIPPING_THRESHOLD > 0 && (
+              {/* Free Shipping Progress */}
               <div className="mb-4 bg-gray-50 p-4 rounded-lg">
                 <div className="mb-2 flex items-center justify-between text-xs font-medium text-[#1A1A1A]">
                   <span>
-                    {amountNeeded > 0
-                      ? `You're only ${formatCurrency(amountNeeded)} away from Free Shipping`
+                    {amountNeeded > 0 
+                      ? `You're only ৳${amountNeeded.toLocaleString()} away from Free Shipping` 
                       : "🎉 You've unlocked Free Shipping!"}
                   </span>
                 </div>
@@ -149,7 +137,6 @@ export function CartDrawer({
                   />
                 </div>
               </div>
-              )}
 
               <ScrollArea className="flex-1 pr-4">
                 <div className="space-y-4">
@@ -171,7 +158,7 @@ export function CartDrawer({
                              <Image src={upsell.product_media?.[0]?.url || "/images/placeholder.webp"} alt={upsell.name} fill sizes="(max-width: 768px) 50vw, 200px" className="object-cover" />
                            </div>
                            <p className="truncate text-xs font-medium">{upsell.name}</p>
-                           <p className="text-[10px] text-gray-500">{formatCurrency(priceWithVat(Number(upsell.base_price) || 0, (upsell as any).vat_percent ?? 0))} incl. VAT</p>
+                           <p className="text-[10px] text-gray-500">৳{upsell.base_price}</p>
                         </div>
                       ))}
                     </div>
@@ -184,21 +171,17 @@ export function CartDrawer({
 
         {cart && cart.items && cart.items.length > 0 && (
           <div className="mt-auto space-y-4 border-t pt-4 bg-background z-10 relative">
-            {/* REG-50: totals follow the same VAT rule as the product
-                prices — the subtotal is the VAT-inclusive merchandise
-                total and the VAT row states how much of it is VAT
-                (informational, never added twice). */}
             <div className="flex items-center justify-between font-medium text-foreground">
-              <span>Subtotal (incl. VAT)</span>
-              <span>{formatCurrency(subtotal + vatAmount)}</span>
+              <span>Subtotal</span>
+              <span>৳{subtotal.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-foreground">
-              <span>VAT included</span>
-              <span>{formatCurrency(vatAmount)}</span>
+              <span>VAT</span>
+              <span>৳{vatAmount.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between font-semibold text-foreground">
               <span>Total incl. VAT</span>
-              <span>{formatCurrency(subtotal + vatAmount)}</span>
+              <span>৳{(subtotal + vatAmount).toLocaleString()}</span>
             </div>
             <p className="text-xs text-gray-500">
               Shipping calculated at checkout.

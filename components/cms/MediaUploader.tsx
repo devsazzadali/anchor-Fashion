@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, Loader2 } from "lucide-react";
-import { uploadMedia } from "@/lib/actions/cms.actions";
+import { uploadMedia } from "@/actions/cms.actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -61,8 +61,9 @@ export function MediaUploader({
       } else {
         toast.error("Upload failed");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to upload files. Please try again.");
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      toast.error(err.message || "Failed to upload files. Please try again.");
     } finally {
       setLoading(false);
       setUploadCount(null);

@@ -79,7 +79,7 @@ export async function GET(req: Request) {
     // Delivery rate
     const terminalShipments = deliveryRate.data ?? [];
     const deliveredCount = terminalShipments.filter(
-      (s: { status?: string }) => s.status === "delivered"
+      (s: any) => s.status === "delivered"
     ).length;
     const deliveryRatePercent =
       terminalShipments.length > 0
@@ -104,7 +104,8 @@ export async function GET(req: Request) {
         total: Object.values(statusMap).reduce((a, b) => a + b, 0),
       },
     });
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[Analytics API]", err);
     return authErrorResponse(err);
   }
 }

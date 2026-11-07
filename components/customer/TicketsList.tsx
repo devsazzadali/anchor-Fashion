@@ -64,8 +64,8 @@ export function TicketsList({ initialTickets }: { initialTickets: any[] }) {
         toast.success("Support ticket created successfully");
         reset();
         setIsOpen(false);
-      } catch (error) {
-        toast.error((error as Error).message || "Failed to create ticket");
+      } catch (error: any) {
+        toast.error(error.message || "Failed to create ticket");
       }
     });
   };

@@ -80,7 +80,7 @@ export function InventoryPickerModal({
       getCategoriesAction({}).then((res) => {
         if (res.success && res.data) {
           setCategories(
-            res.data.map((c) => ({
+            res.data.map((c: any) => ({
               id: c.id,
               name: c.name,
               slug: c.slug,
@@ -214,6 +214,7 @@ export function InventoryPickerModal({
         }
       }
     } catch (err) {
+      console.error("Failed to load inventory:", err);
     } finally {
       setIsLoading(false);
     }

@@ -40,6 +40,7 @@ export function ProductReviews({
         setHelpfulVoted(JSON.parse(stored));
       }
     } catch (e) {
+      console.error("Failed to load voted reviews from localStorage:", e);
     }
   }, []);
 
@@ -104,6 +105,7 @@ export function ProductReviews({
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       } catch (err) {
+        console.error("Failed to save to localStorage:", err);
       }
       return updated;
     });
@@ -131,6 +133,7 @@ export function ProductReviews({
         setVoteCounts((prev) => ({ ...prev, [id]: res.helpful_votes! }));
       }
     } catch (err) {
+      console.error("Failed to vote helpful:", err);
       // Revert on error
       setVoteCounts((prev) => ({ ...prev, [id]: currentCount }));
       setHelpfulVoted((prev) => {

@@ -2,11 +2,6 @@ import { NextResponse } from "next/server";
 import { CourierGatewayService } from "@/services/courier/courier-gateway.service";
 import { ShippingService } from "@/services/shipping/shipping.service";
 import { CourierProviderCode } from "@/types/shipping.types";
-import {
-  getPresentedWebhookSecret,
-  sharedSecretMatches,
-} from "@/lib/webhooks/shared-secret";
-import { resolveCourierWebhookSecret } from "@/lib/webhooks/configured-secret";
 
 /**
  * POST /api/webhooks/courier/[provider]
@@ -19,29 +14,6 @@ export async function POST(
 ) {
   const { provider } = await params;
   const providerCode = provider as CourierProviderCode;
-
-  // ── Webhook authenticity (REG-76: fail CLOSED) ─────────────────────
-  // This route previously forwarded ANY unauthenticated POST into
-  // shipment/order status mutation: the gateway providers ignore the
-  // signature argument, so anyone who knew a shipment's tracking code
-  // could forge a "Delivered"/"Cancelled" update. Mirror the dedicated
-  // /api/webhooks/pathao route (REG-70): the caller must present the
-  // configured <PROVIDER>_WEBHOOK_SECRET (header `x-webhook-secret` or
-  // `?token=`), and the call is rejected before any parsing or mutation
-  // when the secret is unset or wrong.
-  const webhookSecret = await resolveCourierWebhookSecret(provider);
-  if (!webhookSecret) {
-    return NextResponse.json(
-      { success: false, message: "Webhook not configured" },
-      { status: 401 }
-    );
-  }
-  if (!sharedSecretMatches(getPresentedWebhookSecret(req), webhookSecret)) {
-    return NextResponse.json(
-      { success: false, message: "Invalid webhook secret" },
-      { status: 401 }
-    );
-  }
 
   try {
     const rawBody = await req.text();
@@ -69,6 +41,10 @@ export async function POST(
     );
 
     if (!result.success) {
+      console.error(
+        `[Webhook:${providerCode}] Processing failed:`,
+        result.error
+      );
       return NextResponse.json(
         { error: result.error?.message },
         { status: 400 }
@@ -82,7 +58,8 @@ export async function POST(
     }
 
     return NextResponse.json({ received: true, provider: providerCode });
-  } catch (err) {
+  } catch (err: any) {
+    console.error(`[Webhook:${providerCode}] Unexpected error:`, err);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

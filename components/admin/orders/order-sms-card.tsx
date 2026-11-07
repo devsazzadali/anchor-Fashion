@@ -78,8 +78,8 @@ export function OrderSmsCard({
         toast.error(res.error || "Failed to dispatch SMS.");
         await fetchLogs();
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred.");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred.");
     } finally {
       setIsResending(false);
     }

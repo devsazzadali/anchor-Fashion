@@ -13,17 +13,11 @@ import { jost } from "@/lib/fonts";
 
 interface CartClientProps {
   initialCart: Cart | null;
-  /** REG-81: Admin-configured free-shipping threshold (BDT) from
-   *  store_info via getFreeShippingThreshold(); 0 = no program, the
-   *  meter is hidden rather than faked against a hardcoded 999. */
-  freeShippingThreshold?: number;
 }
 
-export function CartClient({
-  initialCart,
-  freeShippingThreshold = 0,
-}: CartClientProps) {
-  const FREE_SHIPPING_THRESHOLD = freeShippingThreshold;
+const FREE_SHIPPING_THRESHOLD = 999;
+
+export function CartClient({ initialCart }: CartClientProps) {
   const { cart, fetchCart } = useCartStore();
 
   // Use store cart if available, otherwise use initial server-fetched cart
@@ -64,10 +58,7 @@ export function CartClient({
     }))
   );
 
-  const progress =
-    FREE_SHIPPING_THRESHOLD > 0
-      ? Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100)
-      : 0;
+  const progress = Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
   const amountNeeded = FREE_SHIPPING_THRESHOLD - subtotal;
 
   if (items.length === 0) {
@@ -114,8 +105,7 @@ export function CartClient({
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
         {/* Cart Items List */}
         <div className="lg:col-span-8">
-          {/* Free Shipping Meter (only when a threshold is configured) */}
-          {FREE_SHIPPING_THRESHOLD > 0 && (
+          {/* Free Shipping Meter */}
           <div className="mb-6 rounded-xl border border-gray-100 bg-gray-50/80 p-4">
             <div className="mb-2 flex items-center justify-between text-xs font-medium text-gray-900">
               <span className="flex items-center gap-1.5">
@@ -135,7 +125,6 @@ export function CartClient({
               />
             </div>
           </div>
-          )}
 
           <div className="divide-y divide-gray-100 border-t border-b border-gray-100">
             {items.map((item) => (
@@ -152,13 +141,10 @@ export function CartClient({
             </h2>
 
             <div className="mt-4 space-y-3 text-xs sm:text-sm">
-              {/* REG-50: same VAT rule as the product prices — subtotal
-                  is VAT-inclusive; the VAT row states the included
-                  portion (informational, not added twice). */}
               <div className="flex justify-between text-gray-600">
-                <span>Subtotal (incl. VAT) ({totalQuantity} items)</span>
+                <span>Subtotal ({totalQuantity} items)</span>
                 <span className="font-semibold text-gray-900">
-                  {formatCurrency(subtotal + vatAmount)}
+                  {formatCurrency(subtotal)}
                 </span>
               </div>
               <div className="flex justify-between text-gray-600">
@@ -172,7 +158,7 @@ export function CartClient({
                 </span>
               </div>
               <div className="flex justify-between text-gray-600">
-                <span>VAT included</span>
+                <span>VAT</span>
                 <span className="font-semibold text-gray-900">
                   {formatCurrency(vatAmount)}
                 </span>
@@ -180,7 +166,7 @@ export function CartClient({
             </div>
 
             <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4 text-sm sm:text-base font-bold text-gray-900">
-              <span>Estimated Total (incl. VAT)</span>
+              <span>Estimated Total</span>
               <span className="text-lg">{formatCurrency(subtotal + vatAmount)}</span>
             </div>
 

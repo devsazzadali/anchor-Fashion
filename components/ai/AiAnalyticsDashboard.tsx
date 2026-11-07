@@ -17,6 +17,7 @@ export function AiAnalyticsDashboard() {
       const json = await res.json();
       setData(json);
     } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }

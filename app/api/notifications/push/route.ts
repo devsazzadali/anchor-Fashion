@@ -22,22 +22,20 @@ export async function POST(req: Request) {
       );
     }
 
-    // FIX ROUND 28 (M-4): push_subscriptions real columns are
-    // (id, user_id, endpoint, keys, created_at) — the keys live in ONE
-    // JSON column. The old payload's top-level p256dh / auth /
-    // user_agent / last_used_at columns do not exist, so the builder
-    // discarded the whole upsert while this route still returned
-    // 201 "Subscription saved" (production table: 0 rows).
-    const { data: saved, error } = await db.from("push_subscriptions").upsert(
+    const { error } = await db.from("push_subscriptions").upsert(
       {
         user_id: session.user.id,
         endpoint,
-        keys: { p256dh: keys.p256dh, auth: keys.auth },
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+        user_agent: userAgent || req.headers.get("user-agent"),
+        last_used_at: new Date().toISOString(),
       },
       { onConflict: "endpoint" }
     );
 
-    if (error || !saved || (Array.isArray(saved) && saved.length === 0)) {
+    if (error) {
+      console.error("Failed to save push subscription:", error);
       return NextResponse.json(
         { message: "Internal Server Error" },
         { status: 500 }
@@ -49,6 +47,7 @@ export async function POST(req: Request) {
       { status: 201 }
     );
   } catch (error) {
+    console.error("Push subscription error:", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
       { status: 500 }
@@ -80,6 +79,7 @@ export async function DELETE(req: Request) {
       .eq("endpoint", endpoint);
 
     if (error) {
+      console.error("Failed to remove push subscription:", error);
       return NextResponse.json(
         { message: "Internal Server Error" },
         { status: 500 }
@@ -91,6 +91,7 @@ export async function DELETE(req: Request) {
       { status: 200 }
     );
   } catch (error) {
+    console.error("Push subscription delete error:", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
       { status: 500 }

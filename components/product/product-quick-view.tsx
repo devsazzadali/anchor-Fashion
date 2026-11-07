@@ -11,12 +11,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { priceWithVat } from "@/lib/utils/vat";
 import { useCartStore } from "@/stores/use-cart-store";
 import { useWishlistStore } from "@/stores/use-wishlist-store";
 import { useSession } from "@/hooks/use-session";
 import { authClient } from "@/lib/auth/client";
-
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ADMIN_ROLES } from "@/lib/constants/auth";
 import {
@@ -44,6 +43,7 @@ export function ProductQuickView({
   isOpen,
   onClose,
 }: ProductQuickViewProps) {
+  const router = useRouter();
   const { user } = useSession();
   const { addItem: addCartItem } = useCartStore();
   const { wishlist, addItem: addWishlistItem, removeItemByProductId } = useWishlistStore();
@@ -92,15 +92,6 @@ export function ProductQuickView({
     product.discount ??
     (hasDiscount ? Math.round(((comparePrice - price) / comparePrice) * 100) : null);
 
-  // Display prices follow the card/PDP rule (REG-50): VAT-inclusive and
-  // labelled "incl. VAT". `price`/`comparePrice` above stay pre-VAT —
-  // they only feed the discount-ratio math; the cart recomputes totals
-  // from product data, never from these display figures.
-  const vatPercent = Number(product.vat_percent ?? product.vatPercent ?? 0);
-  const displayPrice = priceWithVat(price, vatPercent);
-  const displayComparePrice =
-    comparePrice > 0 ? priceWithVat(comparePrice, vatPercent) : comparePrice;
-
   // Variants extraction
   const variants = product.variants || [];
   const sizes: string[] = Array.from(
@@ -141,8 +132,12 @@ export function ProductQuickView({
       currentUser = res?.data?.user ?? null;
     }
 
-    // A3-C5: guests save to the device (local) wishlist — see
-    // product-card.tsx. No login redirect.
+    if (!currentUser) {
+      toast.info("Please log in to add items to your wishlist.");
+      onClose();
+      router.push(`/auth/login?next=${encodeURIComponent(`/product/${product.slug}`)}`);
+      return;
+    }
 
     const role = currentUser?.user_metadata?.role || currentUser?.app_metadata?.role || "CUSTOMER";
     if (ADMIN_ROLES.includes(role)) {
@@ -170,8 +165,27 @@ export function ProductQuickView({
       return;
     }
 
-    // No login gate here either: guests add to the same cookie-based
-    // guest cart as the PDP and product cards (see product-card.tsx).
+    let currentUser = user;
+    if (!currentUser) {
+      const res = await authClient.getSession();
+      currentUser = res?.data?.user ?? null;
+    }
+
+    if (!currentUser) {
+      toast.info("Please log in to add items to your cart.", {
+        action: {
+          label: "Login",
+          onClick: () => {
+            onClose();
+            router.push(`/auth/login?next=${encodeURIComponent(`/product/${product.slug}`)}`);
+          },
+        },
+      });
+      onClose();
+      router.push(`/auth/login?next=${encodeURIComponent(`/product/${product.slug}`)}`);
+      return;
+    }
+
     // If sizes exist and none selected, remind user
     if (sizes.length > 0 && !selectedSize) {
       toast.error("Please select a size first");
@@ -304,12 +318,11 @@ export function ProductQuickView({
               {/* Price & Savings */}
               <div className="flex items-baseline gap-3 border-b border-zinc-100 pb-4">
                 <span className="text-2xl font-semibold text-zinc-900">
-                  {formatCurrency(displayPrice)}
+                  {formatCurrency(price)}
                 </span>
-                <span className="text-xs text-zinc-400">incl. VAT</span>
                 {hasDiscount && (
                   <span className="text-base text-zinc-400 line-through">
-                    {formatCurrency(displayComparePrice)}
+                    {formatCurrency(comparePrice)}
                   </span>
                 )}
                 {hasDiscount && discountPercent && (
@@ -410,7 +423,7 @@ export function ProductQuickView({
                 ) : (
                   <>
                     <ShoppingBag className="h-4 w-4 transition-transform group-hover:scale-110" />
-                    Add To Cart • {formatCurrency(displayPrice * quantity)}
+                    Add To Cart • {formatCurrency(price * quantity)}
                   </>
                 )}
               </Button>

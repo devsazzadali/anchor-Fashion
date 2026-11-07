@@ -36,6 +36,7 @@ export async function GET(request: Request) {
           cookieStore.delete("af_guest_session");
         }
       } catch (mergeErr) {
+        console.error("Cart merge error in auth callback:", mergeErr);
       }
 
       const role = String((user as any)?.role || "").toUpperCase();
@@ -70,6 +71,7 @@ export async function GET(request: Request) {
       }
     }
   } catch (err) {
+    console.error("Auth callback session verification error:", err);
   }
 
   // If no active session was resolved, redirect to next or login

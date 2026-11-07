@@ -51,7 +51,7 @@ export function RevenueChart({ data = [] }: RevenueChartProps) {
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(value) => `৳${value}`}
+                tickFormatter={(value) => `$${value}`}
               />
               <Tooltip
                 cursor={{ fill: "hsl(var(--muted)/0.5)" }}
@@ -59,7 +59,6 @@ export function RevenueChart({ data = [] }: RevenueChartProps) {
                   borderRadius: "8px",
                   border: "1px solid hsl(var(--border))",
                 }}
-                formatter={(value) => [`৳${Number(value).toLocaleString()}`, "Sales"]}
               />
               <Bar
                 dataKey="total"

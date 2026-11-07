@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { createAdminDbClient } from "@/lib/db/client";
 import { SSLCommerzService } from "@/lib/services/payment/sslcommerz.service";
-import { recordGatewayTransaction } from "@/lib/payments/order-payment-record";
 import { CartService } from "@/lib/services/cart.service";
 import { CouponService } from "@/services/coupon.service";
 import { InventoryService } from "@/services/inventory.service";
@@ -49,6 +48,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         }
       }
     } catch (parseErr) {
+      console.warn("[SSLCommerz Callback] Error reading body:", parseErr);
     }
   }
 
@@ -62,8 +62,8 @@ async function handleSSLCommerzCallback(req: NextRequest) {
   const inventoryService = new InventoryService();
 
   // 1. Locate Order and Payment Session
-  let order = null;
-  let paymentSession = null;
+  let order: any = null;
+  let paymentSession: any = null;
 
   // Try lookup by custom parameter value_a (order.id)
   if (orderIdFromCustom) {
@@ -77,27 +77,18 @@ async function handleSSLCommerzCallback(req: NextRequest) {
     }
   }
 
-  // Lookup in payment_sessions by tran_id.
-  // REG-83: same dropped-embed defect as the bKash callback — orders(*)
-  // never attaches on payment_sessions; resolve by order_id explicitly.
+  // Lookup in payment_sessions by tran_id
   if (tranId) {
     const { data: sessionData } = await db
       .from("payment_sessions")
-      .select("*")
+      .select("*, orders(*)")
       .filter("metadata->>tran_id", "eq", tranId)
       .maybeSingle();
 
     if (sessionData) {
       paymentSession = sessionData;
-      if (!order && sessionData.order_id) {
-        const { data: sessionOrder } = await db
-          .from("orders")
-          .select("*")
-          .eq("id", sessionData.order_id)
-          .maybeSingle();
-        if (sessionOrder) {
-          order = sessionOrder;
-        }
+      if (!order && sessionData.orders) {
+        order = sessionData.orders;
       }
     }
   }
@@ -116,6 +107,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
   }
 
   if (!order) {
+    console.error(`[SSLCommerz Callback] Order not found for tran_id: ${tranId}, value_a: ${orderIdFromCustom}`);
     return NextResponse.redirect(
       new URL("/checkout/failed?reason=order_not_found", appUrl),
       303
@@ -154,39 +146,8 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
   // 3. Handle Cancellation or Failure from Gateway
   if (action === "cancel" || status === "CANCELLED" || action === "fail" || status === "FAILED") {
-    // A3-A1: this branch is destructive (cancels the order, releases
-    // inventory + coupon), so the notification must be authenticated
-    // BEFORE any state change: (1) tran_id must be bound to a real
-    // payment_session belonging to THIS order, and (2) the payload's
-    // verify_sign must validate against the store password. A genuine
-    // gateway fail/cancel redirect always carries both; an
-    // unauthenticated hit (e.g. ?action=cancel&tran_id=<order number>)
-    // is ignored with NO state change — the customer still lands on the
-    // failure page, but the order stays pending_payment.
-    const sessionBound =
-      !!paymentSession &&
-      paymentSession.order_id === order.id &&
-      (paymentSession.metadata)?.tran_id === tranId;
-    let signatureValid = false;
-    try {
-      if (payload.verify_sign && payload.verify_key) {
-        const config = await SSLCommerzService.getConfig();
-        signatureValid = SSLCommerzService.verifySignature(
-          payload,
-          config.store_passwd
-        );
-      }
-    } catch {
-      signatureValid = false;
-    }
-    if (!sessionBound || !signatureValid) {
-      return NextResponse.redirect(
-        new URL(`/checkout/failed?order_id=${order.id}&reason=unvalidated_callback`, appUrl),
-        303
-      );
-    }
-
     const isCancel = action === "cancel" || status === "CANCELLED";
+    console.warn(`[SSLCommerz Callback] Payment ${isCancel ? "cancelled" : "failed"} for order ${order.order_number}`);
 
     try {
       // Release reserved inventory authoritatively in Neon DB & RPC
@@ -195,6 +156,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
       // Release coupon usage if applied
       await CouponService.releaseCoupon(order.id);
     } catch (releaseErr) {
+      console.error(`[SSLCommerz Callback] Error releasing inventory for order ${order.id}:`, releaseErr);
     }
 
     // Update order status to cancelled
@@ -218,22 +180,18 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         .eq("id", paymentSession.id);
     }
 
-    // Record transaction audit log. FIX ROUND 28 (M-2): the
-    // payment_transactions table does not exist — this insert was
-    // silently discarded. The record now lands on the real `payments`
-    // ledger via the shared helper.
-    await recordGatewayTransaction(db, {
-      orderId: order.id,
-      sessionId: paymentSession?.id || null,
-      providerId: paymentSession?.provider_id || null,
-      amount: Number(order.total_amount ?? order.grand_total ?? 0),
-      method: "SSLCOMMERZ",
+    // Record transaction audit log
+    await db.from("payment_transactions").insert({
+      order_id: order.id,
+      session_id: paymentSession?.id || null,
+      provider_id: paymentSession?.provider_id || null,
+      amount: order.total_amount ?? order.grand_total,
       currency: order.currency || "BDT",
-      status: "FAILED",
-      referenceNumber: tranId || order.order_number,
-      errorCode: `SSLCOMMERZ_${isCancel ? "CANCELLED" : "FAILED"}`,
-      errorMessage: payload.failedreason || payload.error || `Customer ${isCancel ? "cancelled" : "failed"} payment at gateway`,
-      gatewayResponse: payload,
+      status: isCancel ? "cancelled" : "failed",
+      reference_number: tranId || order.order_number,
+      error_code: `SSLCOMMERZ_${isCancel ? "CANCELLED" : "FAILED"}`,
+      error_message: payload.failedreason || payload.error || `Customer ${isCancel ? "cancelled" : "failed"} payment at gateway`,
+      gateway_response: payload,
     });
 
     return NextResponse.redirect(
@@ -245,6 +203,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
   // 4. Handle Success -> Authoritative Server-Side Validation
   if (action === "success" || status === "VALID" || status === "VALIDATED") {
     if (!valId) {
+      console.error(`[SSLCommerz Callback] Missing val_id in success callback for order ${order.order_number}`);
       return NextResponse.redirect(
         new URL(`/checkout/failed?order_id=${order.id}&reason=missing_val_id`, appUrl),
         303
@@ -257,12 +216,21 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
       // Verify Provider Status
       if (valRes.status !== "VALID" && valRes.status !== "VALIDATED") {
-        // A3-A1: a rejected validation proves nothing about the order —
-        // a forged val_id lands here too. Do NOT cancel the order or
-        // release inventory/coupon on an unvalidated notification; the
-        // order stays pending_payment and expires by its reservation
-        // window. (The amount/currency checks below run only on a
-        // VALIDATED gateway response and keep their handling.)
+        console.error(
+          `[SSLCommerz Callback] Transaction validation failed for order ${order.order_number}:`,
+          valRes.status,
+          valRes.error
+        );
+
+        await inventoryService.releaseOrderInventory(order.id);
+        await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
+        await CouponService.releaseCoupon(order.id);
+
+        await db
+          .from("orders")
+          .update({ status: "cancelled", payment_status: "FAILED" })
+          .eq("id", order.id);
+
         return NextResponse.redirect(
           new URL(`/checkout/failed?order_id=${order.id}&reason=validation_failed`, appUrl),
           303
@@ -273,6 +241,9 @@ async function handleSSLCommerzCallback(req: NextRequest) {
       const gatewayAmount = parseFloat(valRes.amount);
       const orderAmount = parseFloat(order.total_amount ?? order.grand_total ?? 0);
       if (isNaN(gatewayAmount) || Math.abs(gatewayAmount - orderAmount) > 0.01) {
+        console.error(
+          `[SSLCommerz Callback] Security Alert: Amount mismatch! Gateway: ${valRes.amount}, Order: ${orderAmount}`
+        );
 
         await inventoryService.releaseOrderInventory(order.id);
         await db.rpc("release_order_inventory", { p_order_id: order.id }).catch(() => {});
@@ -297,6 +268,9 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         (verifiedCurrency === "BDT" && (expectedCurrency === "USD" || expectedCurrency === "BDT"));
 
       if (!isCurrencyMatch) {
+        console.error(
+          `[SSLCommerz Callback] Security Alert: Currency mismatch! Gateway: ${verifiedCurrency}, Order: ${expectedCurrency}`
+        );
 
         await db.rpc("release_order_inventory", { p_order_id: order.id });
         await CouponService.releaseCoupon(order.id);
@@ -314,6 +288,9 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
       // Authoritative Transaction ID Verification
       if (valRes.tran_id && tranId && valRes.tran_id !== tranId) {
+        console.warn(
+          `[SSLCommerz Callback] Transaction ID mismatch warning! Gateway: ${valRes.tran_id}, Payload: ${tranId}`
+        );
       }
 
       const confirmedTrxId = valRes.bank_tran_id || valId;
@@ -326,22 +303,18 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         .eq("code", "sslcommerz")
         .maybeSingle();
 
-      // 5. Record the transaction on the real payments ledger
-      // (idempotent per gateway transaction id). FIX ROUND 28 (M-2):
-      // the old insert targeted the nonexistent payment_transactions
-      // table and was silently discarded.
-      await recordGatewayTransaction(db, {
-        orderId: order.id,
-        sessionId: paymentSession?.id || null,
-        providerId: provider?.id || null,
-        userId: order.customer_id || order.user_id || null,
-        amount: Number(order.total_amount ?? order.grand_total ?? 0),
-        method: "SSLCOMMERZ",
+      // 5. Update Payment Transactions (Idempotent insert)
+      await db.from("payment_transactions").insert({
+        order_id: order.id,
+        session_id: paymentSession?.id || null,
+        provider_id: provider?.id || null,
+        user_id: order.customer_id || order.user_id || null,
+        amount: order.total_amount ?? order.grand_total,
         currency: expectedCurrency,
-        status: "SUCCESS",
-        referenceNumber: tranId || order.order_number,
-        gatewayTransactionId: confirmedTrxId,
-        gatewayResponse: valRes,
+        status: "completed",
+        reference_number: tranId || order.order_number,
+        gateway_transaction_id: confirmedTrxId,
+        gateway_response: valRes,
       });
 
       // Update payment session to completed
@@ -362,6 +335,9 @@ async function handleSSLCommerzCallback(req: NextRequest) {
 
       // Check if order was cancelled while payment was pending (Late Payment Callback Race)
       if ((order.status || "").toLowerCase() === "cancelled") {
+        console.warn(
+          `[SSLCommerz Callback] Payment succeeded for order ${order.order_number}, but order is already CANCELLED. Setting payment_status to REFUND_PENDING.`
+        );
 
         await db.from("orders").update({
           payment_method: "SSLCOMMERZ",
@@ -374,7 +350,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
           order_id: order.id,
           status: "cancelled",
           notes: `Late payment callback captured TrxID ${confirmedTrxId} for cancelled order. Marked for refund.`,
-          changed_by: order.customer_id || order.user_id || null,
+          created_by: order.customer_id || order.user_id || null,
         });
 
         return NextResponse.redirect(
@@ -408,21 +384,22 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         order_id: order.id,
         status: "confirmed",
         notes: `Paid successfully via SSLCommerz (${valRes.card_type || "Cards/Mobile Banking"}). TrxID: ${confirmedTrxId}, ValID: ${valId}`,
-        changed_by: order.customer_id || order.user_id || null,
+        created_by: order.customer_id || order.user_id || null,
       });
 
       // Authoritative Admin Notification for captured payment
       try {
-        const { createOrderNotificationAction } = await import("@/lib/actions/admin/notification.actions");
+        const { createOrderNotificationAction } = await import("@/actions/admin/notification.actions");
         await createOrderNotificationAction({
           orderId: order.id,
           orderNumber: order.order_number,
-          customerName: order.customer_name || "Online Customer",
+          customerName: (order as any).customer_name || "Online Customer",
           amount: order.total_amount ?? order.grand_total,
           paymentMethod: "SSLCOMMERZ (PAID)",
           status: "confirmed",
         });
       } catch (notifErr) {
+        console.warn("[SSLCommerz Callback] Error creating payment notification:", notifErr);
       }
 
       // Clear customer cart (Prompt 7 integration)
@@ -449,6 +426,7 @@ async function handleSSLCommerzCallback(req: NextRequest) {
           await CartService.clearCart(cartIdToClear);
         }
       } catch (cartErr) {
+        console.error("[SSLCommerz Callback] Cart clear error:", cartErr);
       }
 
       // Trigger Order Confirmation SMS asynchronously
@@ -456,13 +434,15 @@ async function handleSSLCommerzCallback(req: NextRequest) {
         const { AlphaSmsService } = await import("@/lib/services/sms/alpha-sms.service");
         AlphaSmsService.triggerOrderConfirmationSmsAsync(order.id);
       } catch (smsErr) {
+        console.error("[SSLCommerz Callback] SMS trigger error:", smsErr);
       }
 
       return NextResponse.redirect(
         new URL(`/checkout/success?order_id=${order.id}&trxID=${confirmedTrxId}`, appUrl),
         303
       );
-    } catch (execErr) {
+    } catch (execErr: any) {
+      console.error("[SSLCommerz Callback] Validation execution exception:", execErr);
       return NextResponse.redirect(
         new URL(`/checkout/failed?order_id=${order.id}&reason=internal_error`, appUrl),
         303

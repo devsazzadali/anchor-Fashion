@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UserPlus, Loader2, Copy, CheckCircle2, Eye, EyeOff } from "lucide-react";
-import { createUserAction } from "@/lib/actions/users.actions";
+import { createUserAction } from "@/actions/users.actions";
 import { toast } from "sonner";
 
 const userSchema = z.object({
@@ -92,8 +92,8 @@ export function AddUserDialog({
       } else {
         toast.error(res.error || "Error creating user");
       }
-    } catch (err) {
-      toast.error((err as Error).message || "An unexpected error occurred");
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }

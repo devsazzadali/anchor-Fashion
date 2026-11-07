@@ -32,13 +32,7 @@ import {
   Plus,
   Minus,
   Zap,
-  AlertTriangle,
 } from "lucide-react";
-
-/** A label can only be printed when the variant carries a real barcode.
- *  Barcode-less variants are excluded from printing (never substitute a
- *  dummy/shared number — a printed sticker must scan back to its variant). */
-const hasBarcode = (l: BarcodeLabelData) => !!l.barcode?.trim();
 
 export interface BarcodeLabelData {
   productName: string;
@@ -101,8 +95,7 @@ export function PrintBarcodeModal({
         // Default print quantity matches actual stock quantity (or 1 if stock is 0 or undefined)
         const defQty = typeof l.stock === "number" && l.stock > 0 ? l.stock : 1;
         initialQty[l.sku] = defQty;
-        // Barcode-less variants start unselected: they can never be printed.
-        if (hasBarcode(l)) initialSelected.add(l.sku);
+        initialSelected.add(l.sku);
       });
 
       setQuantities(initialQty);
@@ -147,20 +140,11 @@ export function PrintBarcodeModal({
     });
   }, [labels, filterColor, filterSize, searchQuery]);
 
-  // Variants without a barcode (within the current filter view) — excluded
-  // from printing and surfaced in a visible notice instead of being printed
-  // with a fake/shared number.
-  const noBarcodeLabels = useMemo(
-    () => filteredLabels.filter((l) => !hasBarcode(l)),
-    [filteredLabels]
-  );
-
   // Flat list of all printable stickers
   const printableStickers = useMemo(() => {
     const result: Array<{ label: BarcodeLabelData; index: number; totalForVariant: number }> = [];
 
     filteredLabels.forEach((lbl) => {
-      if (!hasBarcode(lbl)) return;
       if (!selectedSkus.has(lbl.sku)) return;
       const count = quantities[lbl.sku] ?? 0;
       for (let i = 0; i < count; i++) {
@@ -183,9 +167,6 @@ export function PrintBarcodeModal({
   };
 
   const handleToggleSku = (sku: string) => {
-    // Barcode-less variants can never be selected for print.
-    const lbl = labels.find((l) => l.sku === sku);
-    if (lbl && !hasBarcode(lbl)) return;
     setSelectedSkus((prev) => {
       const next = new Set(prev);
       if (next.has(sku)) {
@@ -199,10 +180,7 @@ export function PrintBarcodeModal({
 
   const handleSelectAll = (select: boolean) => {
     if (select) {
-      // Only barcoded variants are selectable for print.
-      setSelectedSkus(
-        new Set(filteredLabels.filter(hasBarcode).map((l) => l.sku))
-      );
+      setSelectedSkus(new Set(filteredLabels.map((l) => l.sku)));
     } else {
       setSelectedSkus(new Set());
     }
@@ -222,7 +200,7 @@ export function PrintBarcodeModal({
       updated[l.sku] = typeof l.stock === "number" && l.stock > 0 ? l.stock : 1;
     });
     setQuantities(updated);
-    setSelectedSkus(new Set(labels.filter(hasBarcode).map((l) => l.sku)));
+    setSelectedSkus(new Set(labels.map((l) => l.sku)));
   };
 
   // Quick Action: Set 1 copy for each
@@ -466,13 +444,11 @@ export function PrintBarcodeModal({
                     variant="ghost"
                     size="sm"
                     onClick={() =>
-                      handleSelectAll(
-                        selectedSkus.size !== filteredLabels.filter(hasBarcode).length
-                      )
+                      handleSelectAll(selectedSkus.size !== filteredLabels.length)
                     }
                     className="h-7 text-xs gap-1.5 cursor-pointer px-2"
                   >
-                    {selectedSkus.size === filteredLabels.filter(hasBarcode).length ? (
+                    {selectedSkus.size === filteredLabels.length ? (
                       <CheckSquare className="h-4 w-4 text-emerald-600" />
                     ) : (
                       <Square className="h-4 w-4 text-muted-foreground" />
@@ -487,8 +463,7 @@ export function PrintBarcodeModal({
 
               <div className="divide-y divide-border">
                 {filteredLabels.map((lbl) => {
-                  const noBarcode = !hasBarcode(lbl);
-                  const isChecked = !noBarcode && selectedSkus.has(lbl.sku);
+                  const isChecked = selectedSkus.has(lbl.sku);
                   const qty = quantities[lbl.sku] ?? 0;
                   const stock = lbl.stock ?? 0;
 
@@ -503,8 +478,7 @@ export function PrintBarcodeModal({
                         <button
                           type="button"
                           onClick={() => handleToggleSku(lbl.sku)}
-                          disabled={noBarcode}
-                          className="cursor-pointer text-foreground hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="cursor-pointer text-foreground hover:text-emerald-600"
                         >
                           {isChecked ? (
                             <CheckSquare className="h-5 w-5 text-emerald-600" />
@@ -530,14 +504,7 @@ export function PrintBarcodeModal({
                           </div>
                           <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
                             <span className="font-mono">SKU: {lbl.sku}</span>
-                            {noBarcode ? (
-                              <span className="inline-flex items-center gap-1 font-bold text-red-600">
-                                <AlertTriangle className="h-3 w-3" />
-                                No barcode — excluded from print
-                              </span>
-                            ) : (
-                              <span className="font-mono">Barcode: {lbl.barcode}</span>
-                            )}
+                            <span className="font-mono">Barcode: {lbl.barcode}</span>
                             <span className="text-emerald-600 font-semibold">
                               Warehouse Stock: {stock} units
                             </span>
@@ -556,7 +523,7 @@ export function PrintBarcodeModal({
                             variant="ghost"
                             size="icon"
                             onClick={() => handleUpdateQty(lbl.sku, qty - 1)}
-                            disabled={qty <= 0 || noBarcode}
+                            disabled={qty <= 0}
                             className="h-7 w-7 rounded-none rounded-l-lg cursor-pointer"
                           >
                             <Minus className="h-3 w-3" />
@@ -566,7 +533,6 @@ export function PrintBarcodeModal({
                             min={0}
                             max={1000}
                             value={qty}
-                            disabled={noBarcode}
                             onChange={(e) =>
                               handleUpdateQty(
                                 lbl.sku,
@@ -580,7 +546,6 @@ export function PrintBarcodeModal({
                             variant="ghost"
                             size="icon"
                             onClick={() => handleUpdateQty(lbl.sku, qty + 1)}
-                            disabled={noBarcode}
                             className="h-7 w-7 rounded-none rounded-r-lg cursor-pointer"
                           >
                             <Plus className="h-3 w-3" />
@@ -590,7 +555,6 @@ export function PrintBarcodeModal({
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={noBarcode}
                           onClick={() => {
                             setSelectedSkus(new Set([lbl.sku]));
                             handleUpdateQty(lbl.sku, 1);
@@ -621,27 +585,6 @@ export function PrintBarcodeModal({
                   Mode: {isThermal ? "Thermal Roll (1 per page)" : "A4 Sheet (Dense Page)"}
                 </span>
               </div>
-
-              {/* No-barcode exclusion notice: these variants are NOT printed —
-                  a sticker must carry the variant's real barcode. */}
-              {noBarcodeLabels.length > 0 && (
-                <div className="mb-3 px-3 py-2 bg-amber-500/10 border border-amber-500/40 rounded-lg flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
-                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-px" />
-                  <span>
-                    <strong>
-                      {noBarcodeLabels.length} variant
-                      {noBarcodeLabels.length === 1 ? " has" : "s have"} no
-                      barcode and {noBarcodeLabels.length === 1 ? "is" : "are"}{" "}
-                      excluded from printing:
-                    </strong>{" "}
-                    <span className="font-mono">
-                      {noBarcodeLabels.map((l) => l.sku).join(", ")}
-                    </span>
-                    . Assign a barcode from the product editor, then reopen
-                    this dialog to print {noBarcodeLabels.length === 1 ? "it" : "them"}.
-                  </span>
-                </div>
-              )}
 
               {printableStickers.length === 0 ? (
                 <div className="p-12 text-center bg-background rounded-xl border border-dashed text-muted-foreground text-sm">
@@ -778,16 +721,14 @@ export function PrintBarcodeModal({
                           boxSizing: "border-box",
                         }}
                       >
-                        {/* STICKER LAYOUT (owner spec, final): header = brand +
-                            SMALL product name (modest bold, 1 line, truncated)
-                            + a subtle second line with Color · Size (left) and
-                            the SKU (right); middle = full-width barcode with
-                            the number directly under the bars; bottom = price
-                            ONLY, a full-width band at the original size. */}
-                        {/* Header: brand, small product name, Color·Size | SKU */}
-                        <div className="leading-tight">
+                        {/* REDESIGNED STICKER (owner spec): brand + product name
+                            centered on top, barcode alone in the middle spanning
+                            the FULL width (nothing on either side), and a
+                            bottom row of SKU | Color/Size | Price. */}
+                        {/* Top: Brand centered, product name centered under it */}
+                        <div className="text-center leading-tight">
                           <div
-                            className={`text-center font-black uppercase text-zinc-950 ${
+                            className={`font-black uppercase text-zinc-950 ${
                               paperMode === "thermal_50_25"
                                 ? "text-[8.5px] tracking-[0.22em]"
                                 : "text-[9.5px] tracking-[0.24em]"
@@ -796,33 +737,27 @@ export function PrintBarcodeModal({
                             {lbl.brandName || "Anchor Fashion"}
                           </div>
                           <div
-                            className={`text-center font-bold text-zinc-900 truncate tracking-tight ${
-                              paperMode === "thermal_50_25" ? "text-[8px]" : "text-[9.5px]"
+                            className={`font-bold text-zinc-900 line-clamp-2 tracking-tight ${
+                              paperMode === "thermal_50_25" ? "text-[9.5px]" : "text-[10.5px]"
                             }`}
                           >
                             {displayName}
                           </div>
-                          <div className="flex items-baseline justify-between gap-1 tracking-tight">
-                            <span className="min-w-0 truncate text-[8px] font-semibold text-zinc-600">
+                          {/* Color · Size sit above the barcode (owner allowed
+                              the size/color texts above or below it): at 50mm
+                              wide, SKU + Color/Size + Price cannot share one
+                              row without clipping the SKU. */}
+                          {(colorText || sizeText) && (
+                            <div className="text-[8.5px] font-semibold text-zinc-700 tracking-tight">
                               {[colorText, sizeText].filter(Boolean).join(" · ")}
-                            </span>
-                            <span className="shrink-0 font-mono text-[7.5px] font-semibold text-zinc-500">
-                              {/* REG-41: print the VARIANT SKU — the SKU this
-                                  barcode belongs to. Every label builder sets
-                                  `sku` to the variant SKU and `styleCode` to
-                                  the base product SKU; preferring styleCode
-                                  printed the base SKU on variant stickers. */}
-                              {lbl.sku}
-                            </span>
-                          </div>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Middle: full-width centered barcode, number under the bars.
-                            Only the variant's REAL barcode is ever rendered —
-                            barcode-less variants are excluded before this point. */}
+                        {/* Middle: full-width centered barcode, number under the bars */}
                         <div className="barcode-svg-clean flex w-full items-center justify-center my-auto px-[1mm]">
                           <ClientBarcode
-                            value={lbl.barcode}
+                            value={lbl.barcode || "040050336332"}
                             format="CODE128"
                             width={1.4}
                             height={paperMode === "thermal_50_25" ? 19 : 25}
@@ -835,9 +770,12 @@ export function PrintBarcodeModal({
                           />
                         </div>
 
-                        {/* Bottom: price ONLY, full-width band, original size */}
-                        <div className="border-t border-zinc-200/90 pt-[0.8mm] leading-none text-center">
-                          <span className="text-[9.5px] font-black tracking-tight text-zinc-950 whitespace-nowrap">
+                        {/* Bottom row: SKU/Style | Price (Inc.VAT) */}
+                        <div className="flex items-end justify-between gap-1 border-t border-zinc-200/90 pt-[0.8mm] leading-none">
+                          <span className="flex-1 min-w-0 text-left font-mono font-bold text-[8px] text-zinc-900 tracking-tight truncate">
+                            {lbl.styleCode || lbl.sku}
+                          </span>
+                          <span className="shrink-0 text-[9.5px] font-black tracking-tight text-zinc-950 whitespace-nowrap">
                             TK.{Number(lbl.price || 0).toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,

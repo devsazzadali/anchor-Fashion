@@ -2,16 +2,8 @@ import Link from "next/link";
 import { CreditCard, ShieldCheck, Mail, MapPin, Phone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { getStoreInfo } from "@/lib/actions/settings.actions";
 
-export async function Footer() {
-  // REG-62: contact details come from the canonical store_info settings
-  // (this component previously hardcoded a divergent phone, email and
-  // address that Admin edits never reached).
-  const storeInfo = await getStoreInfo().catch(() => null);
-  const contactPhone = storeInfo?.phone || "+880 1711-223344";
-  const contactEmail = storeInfo?.email || "support@anchorfashion.com";
-  const contactAddress = storeInfo?.address || "Dhaka, Bangladesh";
+export function Footer() {
   return (
     <footer className="bg-[#111111] text-white">
       {/* Newsletter & Trust Bar */}
@@ -103,14 +95,14 @@ export async function Footer() {
             <div className="space-y-3 text-sm text-zinc-400">
               <div className="flex items-center gap-3">
                 <MapPin className="h-4 w-4" />{" "}
-                <span>{contactAddress}</span>
+                <span>Gulshan Avenue, Dhaka, Bangladesh</span>
               </div>
               <div className="flex items-center gap-3">
-                <Phone className="h-4 w-4" /> <span>{contactPhone}</span>
+                <Phone className="h-4 w-4" /> <span>+880 9638-000000</span>
               </div>
               <div className="flex items-center gap-3">
                 <Mail className="h-4 w-4" />{" "}
-                <span>{contactEmail}</span>
+                <span>support@anchorfashion.com.bd</span>
               </div>
             </div>
           </div>
