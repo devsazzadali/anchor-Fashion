@@ -169,6 +169,61 @@ export class CodRiskService {
       console.warn("[CodRiskService] Could not retrieve order history, proceeding cautiously:", dbErr);
     }
 
+    // Phone-keyed history: the same phone number is the same customer
+    // history even across accounts (and for guest checkouts, which have
+    // no account at all). The scoring reasons have always spoken of
+    // "phone/account" history — until now only the account half was
+    // real, so a repeat fraud phone under a fresh account scored as a
+    // first-timer. Match on the last 10 digits of the phone recorded in
+    // each order's shipping_address JSON.
+    try {
+      const phoneDigits = this.normalizePhone(input.phone || "");
+      const suffix10 = phoneDigits.slice(-10);
+      if (suffix10.length === 10) {
+        const phoneRows = await prisma.$queryRaw<
+          Array<{
+            id: string;
+            status: string;
+            total_amount: any;
+            created_at: Date;
+            cancelled_at: Date | null;
+            delivered_at: Date | null;
+          }>
+        >`
+          SELECT id, status, total_amount, created_at, cancelled_at, delivered_at
+          FROM orders
+          WHERE RIGHT(
+            regexp_replace(
+              COALESCE(shipping_address->>'phone', shipping_address->>'recipient_phone', ''),
+              '\\D', '', 'g'
+            ), 10
+          ) = ${suffix10}
+          ORDER BY created_at DESC
+          LIMIT 50
+        `;
+        const seen = new Set(pastOrders.map((o) => o.id));
+        for (const o of phoneRows) {
+          if (seen.has(o.id)) continue;
+          seen.add(o.id);
+          pastOrders.push({
+            id: o.id,
+            status: (o.status || "").toLowerCase(),
+            grand_total: Number(o.total_amount) || 0,
+            created_at: new Date(o.created_at).toISOString(),
+            cancelled_at: o.cancelled_at ? new Date(o.cancelled_at).toISOString() : null,
+            delivered_at: o.delivered_at ? new Date(o.delivered_at).toISOString() : null,
+          });
+        }
+        pastOrders.sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        pastOrders = pastOrders.slice(0, 50);
+      }
+    } catch (phoneErr) {
+      console.warn("[CodRiskService] Could not retrieve phone-keyed order history:", phoneErr);
+    }
+
     // -------------------------------------------------------------
     // Signal 2: Evaluate Customer History (Rule B & Trust Credit)
     // -------------------------------------------------------------

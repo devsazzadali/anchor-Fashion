@@ -51,7 +51,14 @@ export class ShipmentRepository {
       const { error: itemError } = await db
         .from("shipment_items")
         .insert(
-          items.map((item) => ({ ...item, shipment_id: shipment.id })) as any
+          items.map((item) => ({
+            // Callers pass the CreateShipmentInput shape (camelCase
+            // orderItemId); persisted rows carry order_item_id.
+            order_item_id:
+              (item as any).order_item_id ?? (item as any).orderItemId ?? null,
+            quantity: (item as any).quantity ?? 1,
+            shipment_id: shipment.id,
+          })) as any
         );
 
       if (itemError)
@@ -330,12 +337,42 @@ export class ShipmentRepository {
     source: "system" | "admin" | "webhook" | "customer" = "system"
   ): Promise<void> {
     const db = this.getAdminClient();
+    const isUuid =
+      !!triggeredBy &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        triggeredBy
+      );
     await db.from("shipment_events").insert({
       shipment_id: shipmentId,
       event_type: eventType,
       payload,
-      triggered_by: triggeredBy ?? null,
+      triggered_by: isUuid ? triggeredBy : null,
       source,
+      // Mirror into the table's long-standing columns so readers of the
+      // base shape (status/notes) see the same event.
+      status: eventType,
+      notes: JSON.stringify(payload).slice(0, 1000),
     } as any);
+  }
+
+  /**
+   * Get shipment by courier consignment ID (the provider's booking
+   * reference — the primary key webhooks and sync jobs match on).
+   */
+  async getShipmentByConsignmentId(
+    consignmentId: string
+  ): Promise<Shipment | null> {
+    const db = this.getAdminClient();
+
+    const { data, error } = await db
+      .from("shipments")
+      .select("*")
+      .eq("consignment_id", consignmentId)
+      .maybeSingle();
+
+    if (error?.code === "PGRST116") return null;
+    if (error)
+      throw new Error(`Get shipment by consignment failed: ${error.message}`);
+    return data as Shipment | null;
   }
 }

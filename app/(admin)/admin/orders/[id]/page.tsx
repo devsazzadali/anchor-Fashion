@@ -544,6 +544,68 @@ export default function AdminOrderDetailsPage() {
                   </span>
                 </div>
               )}
+              <div className="py-1 border-b">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    External Check (BDCourier):
+                  </span>
+                  {!order.fraud_check_status ? (
+                    <span className="text-muted-foreground">Not run</span>
+                  ) : order.fraud_check_status === "ok" ? (
+                    <Badge variant="secondary" className="text-[10px] uppercase font-mono">
+                      Checked
+                    </Badge>
+                  ) : order.fraud_check_status === "not_configured" ? (
+                    <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                      Not configured
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                      {order.fraud_check_status}
+                    </Badge>
+                  )}
+                </div>
+                {order.fraud_check_status === "ok" && order.fraud_check_result && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {order.fraud_check_result.successRatio != null && (
+                      <>
+                        Success ratio:{" "}
+                        <span
+                          className={
+                            order.fraud_check_result.successRatio < 50
+                              ? "font-semibold text-red-600"
+                              : "font-semibold text-emerald-600"
+                          }
+                        >
+                          {order.fraud_check_result.successRatio}%
+                        </span>
+                      </>
+                    )}
+                    {order.fraud_check_result.totalParcels != null && (
+                      <>
+                        {" "}· {order.fraud_check_result.deliveredParcels ?? 0}/
+                        {order.fraud_check_result.totalParcels} parcels delivered
+                      </>
+                    )}
+                    {order.fraud_check_result.riskVerdict && (
+                      <> · {order.fraud_check_result.riskVerdict}</>
+                    )}
+                  </p>
+                )}
+                {order.fraud_check_status === "not_configured" && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Add the store&apos;s BDCourier API key in Settings → Fraud
+                    Checks to activate the external phone check.
+                  </p>
+                )}
+                {(order.fraud_check_status === "unavailable" ||
+                  order.fraud_check_status === "skipped") &&
+                  order.fraud_check_result?.reason && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {order.fraud_check_result.reason}
+                    </p>
+                  )}
+              </div>
               {Array.isArray(order.risk_reasons) && order.risk_reasons.length > 0 && (
                 <div className="pt-2">
                   <p className="text-xs font-semibold text-muted-foreground mb-1.5">

@@ -13,6 +13,7 @@ import {
   Truck,
   Mail,
   ShieldCheck,
+  ShieldAlert,
   Layout,
   ChevronRight,
   Store,
@@ -80,6 +81,14 @@ const settingsSections = [
     description: "Password policies, login audit logs, and session management.",
     href: "/admin/settings/security",
     icon: ShieldCheck,
+  },
+  {
+    title: "Fraud Checks",
+    description:
+      "COD fraud shield thresholds, OTP rules, and the external BDCourier phone check.",
+    href: "/admin/settings/fraud",
+    icon: ShieldAlert,
+    badge: "Live",
   },
   {
     title: "Analytics & Tracking",

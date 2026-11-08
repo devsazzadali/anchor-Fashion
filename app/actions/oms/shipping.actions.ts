@@ -159,7 +159,26 @@ export async function dispatchOrderAction(
     // 6. Create Shipment
     const recipientName = `${firstName} ${lastName}`.trim();
     const addressLine2 = rawAddress.address_line2 || rawAddress.address_line_2 || rawAddress.addressLine2 || "";
-    
+
+    // Record the courier cost: resolve the delivery zone from the
+    // order's address (the same resolution checkout used) and pass it
+    // through, so createShipment prices the courier charge from the
+    // zone instead of leaving shipping_charge at 0.
+    let deliveryZoneCode: string | undefined;
+    try {
+      const { OrderService: CheckoutOrderService } = await import(
+        "@/lib/services/order.service"
+      );
+      const zone = await CheckoutOrderService.zoneForAddress({
+        city: rawAddress.city,
+        state: rawAddress.state,
+        district: rawAddress.district,
+      });
+      deliveryZoneCode = zone?.code || undefined;
+    } catch (zoneErr) {
+      console.warn("[dispatchOrderAction] Zone resolution failed:", zoneErr);
+    }
+
     const shipmentInput = {
       orderId: orderId,
       courierProviderCode: courierCode,
@@ -168,6 +187,7 @@ export async function dispatchOrderAction(
       recipientAddress: addressLine + (addressLine2 ? `, ${addressLine2}` : ""),
       recipientCity: rawAddress.city || undefined,
       recipientDistrict: rawAddress.state || rawAddress.district || undefined,
+      deliveryZoneCode,
       isCOD: isCOD,
       codAmount: codAmount,
       items: (orderDetails.items || []).map((item: any) => ({

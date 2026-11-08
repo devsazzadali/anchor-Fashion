@@ -436,7 +436,8 @@ export async function fetchReturnByIdAction(
 }
 
 export async function markReturnReceivedAction(
-  returnId: string
+  returnId: string,
+  itemConditions: Record<string, "good" | "damaged" | "defective"> = {}
 ): Promise<ActionResponse<{ returnId: string }>> {
   // SECURITY: server actions are public endpoints; authorize every call.
   await verifyStaff();
@@ -444,7 +445,7 @@ export async function markReturnReceivedAction(
     await requireBranchAccess(returnId);
     const user = await getCurrentUser();
     const service = new ReturnsService();
-    await service.markReturnReceived(returnId, user?.id);
+    await service.markReturnReceived(returnId, user?.id, itemConditions);
 
     revalidatePath("/admin/orders/returns");
     revalidatePath(`/admin/orders/returns/${returnId}`);

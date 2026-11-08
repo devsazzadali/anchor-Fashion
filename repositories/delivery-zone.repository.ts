@@ -254,11 +254,27 @@ export class DeliveryZoneRepository {
       p_is_cod: isCOD,
     });
 
-    if (error) {
-      console.error("calculateCharge RPC failed:", error);
-      return 0;
+    // The stored function does not exist in the current database; the RPC
+    // layer then reports a boolean success payload instead of a charge.
+    // Only a genuinely numeric result counts as a courier charge.
+    const rpcCharge =
+      typeof data === "number"
+        ? data
+        : Array.isArray(data) && data.length > 0
+          ? Number((data[0] as any)?.calculate_shipping_charge)
+          : NaN;
+    if (!error && Number.isFinite(rpcCharge)) {
+      return rpcCharge;
     }
 
-    return Number(data ?? 0);
+    // Fall back to the zone's flat rate — the only pricing model the
+    // delivery_zones table carries.
+    const zone = await this.getZoneById(zoneId);
+    if (zone) {
+      return Number((zone as any).rate ?? 0);
+    }
+
+    console.error("calculateCharge failed and zone not found:", zoneId, error);
+    return 0;
   }
 }

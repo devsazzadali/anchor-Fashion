@@ -35,6 +35,22 @@ export class OrderService {
 
     // Check for referral qualification and loyalty points
     const lowerStatus = newStatus.toLowerCase();
+
+    // A SHIPPED order must have a shipment record behind it. Transitions
+    // that bypass dispatch (manual status updates, webhook sync) used to
+    // leave orders SHIPPED/DELIVERED with no shipment row at all — the
+    // admin and the customer were shown a courier reality that did not
+    // exist. Ensure one now (never submits anything to a provider).
+    if (lowerStatus === "shipped") {
+      try {
+        await this.ensureShipmentForShippedOrder(order);
+      } catch (shipErr) {
+        console.error(
+          `[OrderService] Failed to ensure shipment for shipped order ${id}:`,
+          shipErr
+        );
+      }
+    }
     if (lowerStatus === "delivered" || lowerStatus === "completed") {
       try {
         const { ReferralService } = await import("@/services/referral.service");
@@ -105,6 +121,19 @@ export class OrderService {
           await import("@/lib/notifications/order-notifications");
         if (lowerStatus === "delivered" || lowerStatus === "completed") {
           await sendOrderCompletionInvoiceEmail(id);
+          // The completion SMS (with the invoice link) accompanies the
+          // completion email — previously email was the only channel.
+          try {
+            const { AlphaSmsService } = await import(
+              "@/lib/services/sms/alpha-sms.service"
+            );
+            AlphaSmsService.triggerOrderCompletionSmsAsync(id);
+          } catch (smsErr) {
+            console.error(
+              `[OrderService] Failed to trigger completion SMS for order ${id}:`,
+              smsErr
+            );
+          }
         }
         await notifyStaffOrderEvent({
           kind: "status_change",
@@ -123,6 +152,101 @@ export class OrderService {
     })();
 
     return updated;
+  }
+
+  /**
+   * Guarantee a live shipment row exists for an order entering SHIPPED.
+   * A leftover 'created' draft (from a failed dispatch) is advanced;
+   * otherwise a fresh record is built from the order's own dispatch data.
+   * Cancelled shipments never count — an order whose only shipment was
+   * cancelled gets a real row. No provider API is ever called here.
+   */
+  private async ensureShipmentForShippedOrder(order: any): Promise<void> {
+    const { createAdminDbClient } = await import("@/lib/db/client");
+    const db = createAdminDbClient();
+
+    const { data: shipments } = await db
+      .from("shipments")
+      .select("id, status, consignment_id")
+      .eq("order_id", order.id)
+      .neq("status", "cancelled");
+
+    const rows = (shipments || []) as any[];
+    const hasLive = rows.some(
+      (s) => s.status !== "created" || s.consignment_id
+    );
+    if (hasLive) return;
+
+    const { ShipmentRepository } = await import(
+      "@/repositories/shipment.repository"
+    );
+    const shipmentRepo = new ShipmentRepository();
+
+    const draft = rows.find((s) => s.status === "created" && !s.consignment_id);
+    if (draft) {
+      await shipmentRepo.updateShipment(draft.id, {
+        status: "shipped",
+        shipped_at: new Date().toISOString(),
+      } as any);
+      return;
+    }
+
+    const addr = ((order as any).shipping_address || {}) as any;
+    const recipientName =
+      addr.recipient_name ||
+      [addr.first_name, addr.last_name].filter(Boolean).join(" ") ||
+      "Customer";
+    const isCod =
+      String(order.payment_method || "").toUpperCase() === "COD" &&
+      order.payment_status !== "paid";
+
+    // The mapped OMS order does not carry the order's courier/tracking
+    // columns — read them from the raw row so the created shipment
+    // reflects whatever dispatch data the order already has.
+    let orderCourier: string | undefined;
+    let orderTracking: string | undefined;
+    try {
+      const { prisma } = await import("@/lib/prisma");
+      const raw = await prisma.order.findUnique({
+        where: { id: order.id },
+        select: { courier: true, trackingNumber: true },
+      });
+      orderCourier = raw?.courier || undefined;
+      orderTracking = raw?.trackingNumber || undefined;
+    } catch {
+      // Non-fatal — the shipment is still created below.
+    }
+
+    const { ShippingService } = await import(
+      "@/services/shipping/shipping.service"
+    );
+    const shippingService = new ShippingService();
+    const items = await this.orderItemsRepo.getOrderItems(order.id);
+
+    const shipment = await shippingService.createShipment({
+      orderId: order.id,
+      courierProviderCode: (orderCourier as any) || undefined,
+      recipientName,
+      recipientPhone: addr.phone || addr.recipient_phone || "",
+      recipientAddress: addr.address_line_1 || addr.address || "",
+      recipientCity: addr.city || undefined,
+      recipientDistrict: addr.state || addr.district || undefined,
+      isCOD: isCod,
+      codAmount: isCod ? Number(order.total_amount || 0) : 0,
+      items: (items || []).map((item: any) => ({
+        orderItemId: item.id,
+        sku: item.sku,
+        productName: item.product_name,
+        quantity: item.quantity,
+        unitPrice: Number(item.unit_price || 0),
+      })),
+    });
+
+    await shipmentRepo.updateShipment(shipment.id, {
+      status: "shipped",
+      shipped_at: new Date().toISOString(),
+      ...(orderTracking ? { tracking_number: orderTracking } : {}),
+    } as any);
   }
 
   async getOrderDetails(id: string, dbClient?: any) {

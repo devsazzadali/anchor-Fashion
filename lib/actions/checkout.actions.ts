@@ -207,11 +207,18 @@ export async function processCheckoutAction(
 
     const guestEmail = parsedData.information.email;
 
-    // 2. Compute authoritative server-side order summary
+    // 2. Compute authoritative server-side order summary.
+    // The summary MUST resolve the delivery zone from the same shipping
+    // address placeOrder uses — previously this call omitted the address,
+    // so the risk/OTP step priced delivery by shipping METHOD while the
+    // order itself was priced by ADDRESS, and the two totals could
+    // diverge for the same checkout.
     const summary = await OrderService.calculateSummary(
       cartId,
       userId,
-      parsedData.shipping.shipping_method
+      parsedData.shipping.shipping_method,
+      checkoutSessionId,
+      parsedData.information.shipping_address
     );
 
     let riskMetadata: {
@@ -347,6 +354,23 @@ export async function processCheckoutAction(
         );
       }
     })();
+
+    // External fraud check by phone (BDCourier, settings-driven). Runs
+    // for every placed order; while the owner has not supplied the
+    // store's own API key it records an honest "not_configured" status
+    // on the order instead of a fabricated result. Fire-and-forget —
+    // it can never block or fail checkout.
+    try {
+      const { ExternalFraudService } = await import(
+        "@/lib/services/fraud/external-fraud.service"
+      );
+      ExternalFraudService.triggerForOrder(
+        order.id,
+        parsedData.information.shipping_address.phone || ""
+      );
+    } catch (fraudErr) {
+      console.warn("[Checkout] External fraud check trigger failed:", fraudErr);
+    }
 
     // 5. If Manual Payment (bKash, Nagad, Rocket, Bank Transfer), record transaction for Admin Approval
     const methodUpper = (order.payment_method || "").toUpperCase();

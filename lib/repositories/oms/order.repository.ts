@@ -294,6 +294,11 @@ function mapPrismaOrderToOms(record: any): Order {
     verification_status: record.verificationStatus ?? null,
     verification_verified_at:
       record.verificationVerifiedAt?.toISOString?.() ?? null,
+    confirmation_sms_sent: record.confirmationSmsSent ?? false,
+    completion_sms_sent: record.completionSmsSent ?? false,
+    fraud_check_status: record.fraudCheckStatus ?? null,
+    fraud_check_result: (record.fraudCheckResult as any) ?? null,
+    fraud_checked_at: record.fraudCheckedAt?.toISOString?.() ?? null,
     created_at: record.createdAt?.toISOString(),
     updated_at: record.updatedAt?.toISOString(),
     placed_at: record.createdAt?.toISOString() || null,

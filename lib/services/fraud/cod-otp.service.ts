@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { createAdminDbClient } from "@/lib/db/client";
 import { EmailProvider } from "@/lib/notifications/EmailProvider";
+import { AlphaSmsService } from "@/lib/services/sms/alpha-sms.service";
 import { CodRiskService } from "./cod-risk.service";
 
 export interface VerificationSession {
@@ -38,8 +39,43 @@ export class DefaultSmsProvider implements ISmsProvider {
   }
 }
 
+/**
+ * Phone channel backed by the store's Alpha SMS service — the same
+ * gateway (and the same sms_logs discipline) as the order confirmation
+ * and completion SMS. Test-mode sends are the gateway's own simulated
+ * sends and are recorded as such in the log response payload.
+ */
+export class AlphaSmsProvider implements ISmsProvider {
+  async sendSms(to: string, message: string) {
+    const result = await AlphaSmsService.sendSMS({
+      to,
+      message,
+      type: "COD_OTP",
+    });
+    return {
+      success: result.success,
+      messageId: result.requestId || undefined,
+      error: result.success ? undefined : result.error || "SMS dispatch failed",
+    };
+  }
+}
+
 export class CodOtpService {
-  private static smsProvider: ISmsProvider = new DefaultSmsProvider();
+  /**
+   * The phone channel is the Alpha-backed provider whenever the SMS
+   * channel is available; otherwise the honest not-configured stub
+   * (email remains the working channel in that case).
+   */
+  private static getSmsProvider(): ISmsProvider {
+    try {
+      if (AlphaSmsService.isChannelAvailable()) {
+        return new AlphaSmsProvider();
+      }
+    } catch {
+      // Fall through to the stub.
+    }
+    return new DefaultSmsProvider();
+  }
 
   /**
    * Derive a stable HMAC secret for OTP hashing
@@ -109,9 +145,22 @@ export class CodOtpService {
     const now = Date.now();
     const expiresAt = now + config.otp_expiry_minutes * 60 * 1000;
 
-    // Determine primary target: prioritize email where Resend is live
-    const targetType: "email" | "phone" = params.email ? "email" : "phone";
-    const targetValue = params.email ? params.email.toLowerCase().trim() : (params.phone || "").trim();
+    // Determine primary target. COD verification is a phone-first flow:
+    // when the customer gave a phone number AND the SMS gateway is live,
+    // the code is announced as sent to the phone. When SMS is not live,
+    // email is the honest primary target (it is dispatched in parallel
+    // either way, so no customer is ever stranded).
+    const phoneIsLive =
+      !!params.phone && AlphaSmsService.isLiveConfigured();
+    const targetType: "email" | "phone" = phoneIsLive
+      ? "phone"
+      : params.email
+        ? "email"
+        : "phone";
+    const targetValue =
+      targetType === "phone"
+        ? (params.phone || "").trim()
+        : params.email.toLowerCase().trim();
 
     // Check existing session for resend cooldown and limits
     let session = await this.getSession(params.sessionId);
@@ -240,10 +289,10 @@ export class CodOtpService {
       }
     }
 
-    // 2. SMS Dispatch attempt (with graceful provider notification)
+    // 2. SMS Dispatch attempt via the configured phone channel
     if (params.phone) {
       try {
-        await this.smsProvider.sendSms(
+        await this.getSmsProvider().sendSms(
           params.phone,
           `Anchor Fashion: Your order verification code is ${rawOtp}. Valid for ${config.otp_expiry_minutes} mins.`
         );

@@ -17,6 +17,7 @@ import {
   CancelShipmentData,
 } from "@/schemas/shipping.schema";
 import { verifyStaff } from "@/lib/security/roles";
+import { createAdminDbClient } from "@/lib/db/client";
 
 // ---------------------------------------------------------------------------
 // Shared response type
@@ -341,6 +342,78 @@ export async function getTrackingTimelineAction(
     if (!timeline)
       return { success: false, error: "Tracking information not found" };
     return { success: true, data: timeline };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Public order lookup by ORDER NUMBER + PHONE — the two things a
+ * customer actually has (the confirmation SMS carries the order number,
+ * not a courier tracking number). Verifies the phone against the
+ * order's shipping address before revealing anything; a mismatch and a
+ * missing order return the same message so the endpoint cannot be used
+ * to probe which order numbers exist.
+ */
+export async function trackOrderByNumberAction(
+  orderNumber: string,
+  phone: string
+): Promise<ActionResponse<any>> {
+  const num = (orderNumber || "").trim();
+  const digits = (phone || "").replace(/\D/g, "");
+  if (!num || digits.length < 10) {
+    return {
+      success: false,
+      error:
+        "Enter your order number and the phone number used for the order.",
+    };
+  }
+
+  const NOT_FOUND =
+    "We could not find an order matching that order number and phone number.";
+
+  try {
+    const db = createAdminDbClient();
+    const { data: order } = await db
+      .from("orders")
+      .select("id, order_number, status, created_at, shipping_address")
+      .ilike("order_number", num)
+      .maybeSingle();
+
+    if (!order) return { success: false, error: NOT_FOUND };
+
+    const addr = ((order as any).shipping_address || {}) as any;
+    const addrPhone = String(
+      addr.phone || addr.recipient_phone || ""
+    ).replace(/\D/g, "");
+    if (!addrPhone || addrPhone.slice(-10) !== digits.slice(-10)) {
+      return { success: false, error: NOT_FOUND };
+    }
+
+    const { data: shipments } = await db
+      .from("shipments")
+      .select(
+        "tracking_number, status, courier_provider_code, courier, estimated_delivery"
+      )
+      .eq("order_id", order.id)
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const s = (shipments || [])[0] as any;
+
+    return {
+      success: true,
+      data: {
+        orderNumber: order.order_number,
+        status: order.status,
+        placedAt: order.created_at,
+        trackingNumber: s?.tracking_number || null,
+        shipmentStatus: s?.status || null,
+        courierName: s?.courier_provider_code || s?.courier || null,
+        estimatedDelivery: s?.estimated_delivery || null,
+      },
+    };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

@@ -482,6 +482,11 @@ model Order {
   riskLevel             String?              @map("risk_level") @db.VarChar(20)
   riskScore             Int?                 @map("risk_score")
   riskReasons           Json?                @map("risk_reasons")
+  confirmationSmsSent   Boolean              @default(false) @map("confirmation_sms_sent")
+  completionSmsSent     Boolean              @default(false) @map("completion_sms_sent")
+  fraudCheckStatus      String?              @map("fraud_check_status") @db.VarChar(30)
+  fraudCheckResult      Json?                @map("fraud_check_result")
+  fraudCheckedAt        DateTime?            @map("fraud_checked_at") @db.Timestamptz(6)
   verificationStatus    String?              @map("verification_status") @db.VarChar(20)
   verificationVerifiedAt DateTime?           @map("verification_verified_at") @db.Timestamptz(6)
   createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -987,6 +992,20 @@ model Return {
   reason       String?
   notes        String?
   refundAmount Decimal      @default(0) @map("refund_amount") @db.Decimal(12, 2)
+  refundStatus    String?   @map("refund_status") @db.VarChar(30)
+  refundMethod    String?   @map("refund_method") @db.VarChar(50)
+  exchangeRequested Boolean @default(false) @map("exchange_requested")
+  exchangeVariantId String? @map("exchange_variant_id") @db.Uuid
+  photoUrls       Json?     @map("photo_urls")
+  shipmentId      String?   @map("shipment_id") @db.Uuid
+  rejectionReason String?   @map("rejection_reason")
+  approvedAt      DateTime? @map("approved_at") @db.Timestamptz(6)
+  rejectedAt      DateTime? @map("rejected_at") @db.Timestamptz(6)
+  receivedAt      DateTime? @map("received_at") @db.Timestamptz(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  inventorySyncedAt DateTime? @map("inventory_synced_at") @db.Timestamptz(6)
+  pickedUpAt      DateTime? @map("picked_up_at") @db.Timestamptz(6)
+  inspectedAt     DateTime? @map("inspected_at") @db.Timestamptz(6)
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   items        ReturnItem[]
@@ -1007,6 +1026,9 @@ model ReturnItem {
   reason      String?
   condition   String   @default("good")
   restocked   Boolean  @default(false)
+  sku         String?  @db.VarChar(100)
+  productName String?  @map("product_name") @db.VarChar(255)
+  refundAmount Decimal @default(0) @map("refund_amount") @db.Decimal(12, 2)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   return      Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
   variant     Variant? @relation(fields: [variantId], references: [id])
@@ -1071,6 +1093,12 @@ model Shipment {
   specialInstructions String?   @map("special_instructions")
   createdBy           String?   @map("created_by") @db.Uuid
   shipmentNumber      String?   @map("shipment_number") @db.VarChar(100)
+  consignmentId       String?   @map("consignment_id") @db.VarChar(255)
+  labelUrl            String?   @map("label_url")
+  updatedBy           String?   @map("updated_by") @db.Uuid
+  providerStatus      String?   @map("provider_status") @db.VarChar(50)
+  failureReason       String?   @map("failure_reason")
+  labelGeneratedAt    DateTime? @map("label_generated_at") @db.Timestamptz(6)
   order               Order?          @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   items               ShipmentItem[]
   labels              ShipmentLabel[]
@@ -1078,6 +1106,7 @@ model Shipment {
   @@index([orderId], map: "idx_shipments_order_id")
   @@index([status], map: "idx_shipments_status")
   @@index([trackingNumber], map: "idx_shipments_tracking_number")
+  @@index([consignmentId], map: "idx_shipments_consignment_id")
   @@map("shipments")
 }
 
@@ -1101,6 +1130,9 @@ model ShipmentLabel {
   courier        String?   @db.VarChar(100)
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   printCount     Int?      @default(0) @map("print_count")
+  labelType      String?   @map("label_type") @db.VarChar(50)
+  labelData      String?   @map("label_data")
+  printedAt      DateTime? @map("printed_at") @db.Timestamptz(6)
   shipment       Shipment? @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([shipmentId], map: "idx_shipment_labels_shipment_id")
@@ -1252,13 +1284,21 @@ model coupon_usages {
 }
 
 model courier_api_logs {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  courier     String?   @db.VarChar(50)
-  endpoint    String?
-  request     Json?
-  response    Json?
-  status_code Int?
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courier        String?   @db.VarChar(50)
+  endpoint       String?
+  request        Json?
+  response       Json?
+  status_code    Int?
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  courier_code   String?   @db.VarChar(50)
+  method         String?   @db.VarChar(20)
+  success        Boolean?
+  response_time_ms Int?
+  request_id     String?   @db.VarChar(100)
+  error_message  String?
+  payload        Json?
+  response_data  Json?
 }
 
 model courier_providers {
@@ -1614,6 +1654,10 @@ model shipment_events {
   location    String?   @db.VarChar(255)
   notes       String?
   created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  event_type  String?   @db.VarChar(100)
+  payload     Json?
+  triggered_by String?  @db.Uuid
+  source      String?   @db.VarChar(50)
 }
 
 model shipment_tracking_events {
@@ -1623,6 +1667,10 @@ model shipment_tracking_events {
   timestamp   DateTime? @default(now()) @db.Timestamptz(6)
   location    String?   @db.VarChar(255)
   notes       String?
+  event_time  DateTime? @db.Timestamptz(6)
+  status_description String?
+  tracking_number String? @db.VarChar(255)
+  provider_raw Json?
 }
 
 model shipping_rates {
@@ -1642,6 +1690,13 @@ model sms_logs {
   status     String?   @default("SENT") @db.VarChar(50)
   response   String?
   created_at DateTime? @default(now()) @db.Timestamptz(6)
+  phone      String?   @db.VarChar(50)
+  order_id   String?   @db.Uuid
+  type       String?   @db.VarChar(50)
+  provider   String?   @db.VarChar(50)
+  request_id String?   @db.VarChar(100)
+  error_message String?
+  updated_at DateTime? @db.Timestamptz(6)
 }
 
 model support_agents {

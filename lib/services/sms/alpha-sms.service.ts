@@ -48,6 +48,36 @@ export class AlphaSmsService {
     return { valid: true, normalized: cleaned };
   }
 
+  /** Whether SMS dispatch is switched on at all (SMS_ENABLED). */
+  static isSmsEnabled(): boolean {
+    return process.env.SMS_ENABLED !== "false";
+  }
+
+  /**
+   * Whether the SMS channel can be exercised at all: dispatch enabled and
+   * an API key present. Sends may still run in Alpha test mode (no key
+   * value validity is judged here — sendSMS decides and logs test-mode
+   * sends as simulated), but with no key at all the channel is absent.
+   */
+  static isChannelAvailable(): boolean {
+    return this.isSmsEnabled() && !!(process.env.ALPHA_SMS_API_KEY || "");
+  }
+
+  /**
+   * Whether a REAL Alpha SMS send can happen right now: dispatch enabled,
+   * a non-placeholder API key present, and test mode off. Callers that
+   * must promise the customer a channel (e.g. COD OTP target selection)
+   * use this to decide whether the phone channel is genuinely usable.
+   */
+  static isLiveConfigured(): boolean {
+    const apiKey = process.env.ALPHA_SMS_API_KEY || "";
+    if (!this.isSmsEnabled()) return false;
+    if (!apiKey) return false;
+    if (apiKey.includes("placeholder") || apiKey.includes("your_")) return false;
+    if (process.env.SMS_TEST_MODE === "true") return false;
+    return true;
+  }
+
   /**
    * Send a single SMS via Alpha SMS REST API
    * Handles normalization, test mode, timeout, provider errors, and database logging.
@@ -687,6 +717,273 @@ export class AlphaSmsService {
   }
 
   /**
+   * Formats the order completion (delivered) message, carrying the same
+   * public invoice link as the confirmation SMS.
+   */
+  static formatOrderCompletionMessage(details: {
+    customerName: string;
+    orderNumber: string;
+    totalAmount?: number | string | null;
+    invoiceUrl?: string | null;
+    brandName?: string;
+  }): string {
+    const {
+      customerName,
+      orderNumber,
+      totalAmount,
+      invoiceUrl,
+      brandName = BRAND_NAME,
+    } = details;
+
+    const lines: string[] = [];
+    lines.push(`Dear ${(customerName || "Customer").trim()},`);
+    lines.push(`Good news! Your order #${orderNumber} has been delivered.`);
+
+    if (totalAmount !== undefined && totalAmount !== null) {
+      const numAmount =
+        typeof totalAmount === "number"
+          ? Math.round(totalAmount)
+          : Number(totalAmount) || 0;
+      lines.push(`Order total: BDT ${numAmount.toLocaleString("en-US")}`);
+    }
+
+    if (invoiceUrl) {
+      lines.push(`Invoice: ${invoiceUrl}`);
+    }
+
+    lines.push(`Thank you for shopping with ${brandName}.`);
+    return lines.join("\n");
+  }
+
+  /**
+   * Send order completion SMS when an order is delivered/completed.
+   * Mirrors the confirmation SMS discipline: status guard, duplicate
+   * protection via orders.completion_sms_sent + the SENT log, the same
+   * phone/name resolution, and an order note on success. Never throws.
+   */
+  static async sendOrderCompletionSMS(
+    orderId: string,
+    options?: { force?: boolean }
+  ): Promise<SmsSendResult> {
+    try {
+      const db = await createAdminDbClient();
+
+      const { data: order, error: orderErr } = await db
+        .from("orders")
+        .select("*")
+        .eq("id", orderId)
+        .maybeSingle();
+
+      if (orderErr || !order) {
+        const msg = `Order not found with ID: ${orderId} (${orderErr?.message || "No order record"})`;
+        console.warn(`[Alpha SMS] ${msg}`);
+        return {
+          success: false,
+          status: "FAILED",
+          phone: "",
+          message: "",
+          error: msg,
+        };
+      }
+
+      const currentStatus = (order.status || "").toLowerCase();
+      if (currentStatus !== "delivered" && currentStatus !== "completed") {
+        const msg = `Order ${order.order_number} is in status '${order.status}', NOT 'DELIVERED'/'COMPLETED'. Completion SMS aborted.`;
+        console.warn(`[Alpha SMS] ${msg}`);
+        return {
+          success: false,
+          status: "SKIPPED",
+          phone: "",
+          message: "",
+          skipped: true,
+          reason: msg,
+        };
+      }
+
+      if (!options?.force && order.completion_sms_sent === true) {
+        const msg = `Completion SMS already sent for order ${order.order_number} (completion_sms_sent = true). Skipping duplicate.`;
+        console.warn(`[Alpha SMS] ${msg}`);
+        return {
+          success: true,
+          status: "SKIPPED",
+          phone: "",
+          message: "",
+          skipped: true,
+          reason: msg,
+        };
+      }
+
+      if (!options?.force) {
+        const priorSentLog = await this.checkPriorSentLog(
+          order.id,
+          "ORDER_COMPLETION"
+        );
+        if (priorSentLog) {
+          await this.markOrderCompletionSmsSent(order.id);
+          return {
+            success: true,
+            status: "SKIPPED",
+            phone: priorSentLog.phone,
+            message: priorSentLog.message,
+            requestId: priorSentLog.request_id,
+            skipped: true,
+            reason: `Completion SMS already logged as SENT for order ${order.order_number}. Skipping duplicate.`,
+          };
+        }
+      }
+
+      // Resolve recipient phone + name (same chain as the confirmation SMS:
+      // order_addresses rows first, then the order's shipping_address JSON,
+      // then the customer profile).
+      let addresses: any[] = [];
+      try {
+        const { data: addrList, error: addrErr } = await db
+          .from("order_addresses")
+          .select("*")
+          .eq("order_id", orderId);
+        if (!addrErr && addrList && addrList.length > 0) {
+          addresses = addrList;
+        }
+      } catch {
+        // Ignored — JSON fallback below covers storefront orders.
+      }
+
+      const shippingAddr =
+        addresses.find(
+          (a: any) => (a.address_type || "").toUpperCase() === "SHIPPING"
+        ) || addresses[0];
+      const shippingJson = ((order as any).shipping_address || {}) as any;
+
+      let phone =
+        shippingAddr?.phone ||
+        (order as any).phone ||
+        (order as any).customer_phone ||
+        shippingJson.phone ||
+        shippingJson.phone_number ||
+        "";
+
+      if (!phone && order.customer_id) {
+        try {
+          const { data: profile } = await db
+            .from("profiles")
+            .select("phone, first_name, last_name")
+            .eq("id", order.customer_id)
+            .maybeSingle();
+          if (profile?.phone) phone = profile.phone;
+        } catch {
+          // Ignored
+        }
+      }
+
+      if (!phone) {
+        const msg = `No phone number found for order ${order.order_number}. Cannot send completion SMS.`;
+        console.warn(`[Alpha SMS] ${msg}`);
+        await this.recordSmsLog({
+          order_id: order.id,
+          phone: "UNKNOWN",
+          message: "",
+          type: "ORDER_COMPLETION",
+          status: "FAILED",
+          provider: "ALPHA_SMS",
+          error_message: msg,
+        });
+        return {
+          success: false,
+          status: "FAILED",
+          phone: "",
+          message: "",
+          error: msg,
+        };
+      }
+
+      const firstName =
+        shippingAddr?.first_name?.trim() || shippingJson.first_name?.trim() || "";
+      const lastName =
+        shippingAddr?.last_name?.trim() || shippingJson.last_name?.trim() || "";
+      let customerName = [firstName, lastName].filter(Boolean).join(" ");
+      if (!customerName && order.customer_id) {
+        try {
+          const { data: profile } = await db
+            .from("profiles")
+            .select("first_name, last_name")
+            .eq("id", order.customer_id)
+            .maybeSingle();
+          if (profile) {
+            customerName = [profile.first_name, profile.last_name]
+              .filter(Boolean)
+              .join(" ");
+          }
+        } catch {
+          // Ignored
+        }
+      }
+      if (!customerName) customerName = "Valued Customer";
+      const orderNumber = order.order_number || order.id.slice(0, 8);
+
+      const appUrl = (
+        process.env.NEXT_PUBLIC_APP_URL || "https://anchorfashion.com"
+      ).replace(/\/+$/, "");
+      const invoiceUrl = (order as any).invoice_token
+        ? `${appUrl}/invoice/${(order as any).invoice_token}`
+        : `${appUrl}/account/orders/${order.id}/invoice`;
+
+      const message = this.formatOrderCompletionMessage({
+        customerName,
+        orderNumber,
+        totalAmount: order.grand_total ?? order.total_amount,
+        invoiceUrl,
+      });
+
+      const result = await this.sendSMS({
+        to: phone,
+        message,
+        orderId: order.id,
+        type: "ORDER_COMPLETION",
+      });
+
+      if (result.success && result.status === "SENT") {
+        await this.markOrderCompletionSmsSent(order.id);
+        try {
+          await db.from("order_notes").insert({
+            order_id: order.id,
+            note: `[SMS Notification] Completion SMS sent to ${result.phone} via Alpha SMS (Request ID: ${result.requestId || "N/A"})`,
+            is_customer_visible: false,
+          });
+        } catch {
+          // Ignored
+        }
+      }
+
+      return result;
+    } catch (err: any) {
+      console.error("[Alpha SMS] sendOrderCompletionSMS exception:", err);
+      return {
+        success: false,
+        status: "FAILED",
+        phone: "",
+        message: "",
+        error: err.message || "Unknown error during order completion SMS dispatch",
+      };
+    }
+  }
+
+  /**
+   * Asynchronous fire-and-forget completion SMS (used by the OMS status
+   * service alongside the completion invoice email).
+   */
+  static triggerOrderCompletionSmsAsync(orderId: string) {
+    if (!orderId) return;
+
+    Promise.resolve().then(async () => {
+      try {
+        await this.sendOrderCompletionSMS(orderId);
+      } catch (err) {
+        console.error("[Alpha SMS] Background completion SMS dispatch error:", err);
+      }
+    });
+  }
+
+  /**
    * Record SMS in database
    * Dual-strategy: tries `sms_logs` table first; if schema cache reports table missing,
    * falls back to `communication_logs` table so logs are never lost.
@@ -711,13 +1008,21 @@ export class AlphaSmsService {
         .from("sms_logs")
         .insert({
           order_id: entry.order_id || null,
+          // `recipient` is the table's original NOT NULL column; `phone`
+          // is its explicit twin used by the admin SMS views.
+          recipient: entry.phone,
           phone: entry.phone,
           message: entry.message,
           type: entry.type,
           status: entry.status,
           provider: entry.provider,
           request_id: entry.request_id || null,
-          response: entry.response || null,
+          response:
+            entry.response == null
+              ? null
+              : typeof entry.response === "string"
+                ? entry.response
+                : JSON.stringify(entry.response),
           error_message: entry.error_message || null,
           created_at: nowIso,
           updated_at: nowIso,
@@ -791,9 +1096,34 @@ export class AlphaSmsService {
   }
 
   /**
+   * Update orders table marking completion_sms_sent = true
+   */
+  private static async markOrderCompletionSmsSent(orderId: string) {
+    const db = await createAdminDbClient();
+    try {
+      const { error } = await db
+        .from("orders")
+        .update({
+          completion_sms_sent: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", orderId);
+
+      if (error) {
+        console.warn("[Alpha SMS] Note on updating completion_sms_sent:", error.message);
+      }
+    } catch (err: any) {
+      console.warn("[Alpha SMS] Exception updating completion_sms_sent:", err?.message);
+    }
+  }
+
+  /**
    * Check if a prior SENT log exists for this order
    */
-  private static async checkPriorSentLog(orderId: string): Promise<any | null> {
+  private static async checkPriorSentLog(
+    orderId: string,
+    type: string = "ORDER_CONFIRMATION"
+  ): Promise<any | null> {
     const db = await createAdminDbClient();
 
     // Check sms_logs
@@ -802,7 +1132,7 @@ export class AlphaSmsService {
         .from("sms_logs")
         .select("*")
         .eq("order_id", orderId)
-        .eq("type", "ORDER_CONFIRMATION")
+        .eq("type", type)
         .eq("status", "SENT")
         .order("created_at", { ascending: false })
         .limit(1)
@@ -819,6 +1149,7 @@ export class AlphaSmsService {
         .from("communication_logs")
         .select("*")
         .filter("metadata->>order_id", "eq", orderId)
+        .filter("metadata->>sms_type", "eq", type)
         .eq("type", "SMS")
         .eq("status", "SENT")
         .order("created_at", { ascending: false })

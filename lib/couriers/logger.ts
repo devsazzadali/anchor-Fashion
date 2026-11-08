@@ -47,6 +47,7 @@ export async function logCourierApiCall(entry: CourierApiLogEntry): Promise<void
     const sanitizedResponse = sanitizeLogData(entry.responseData);
 
     const { error } = await db.from("courier_api_logs").insert({
+      courier: entry.courierCode,
       courier_code: entry.courierCode,
       method: entry.method,
       endpoint: entry.endpoint,

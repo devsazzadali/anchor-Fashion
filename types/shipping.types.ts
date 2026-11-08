@@ -228,7 +228,16 @@ export interface ReturnRequest {
   notes: string | null;
   refund_status?: "PENDING" | "PROCESSING" | "APPROVED" | "PROCESSED" | "REJECTED" | "FAILED" | null;
   refund_amount?: number | null;
-  refund_method?: "ORIGINAL_PAYMENT" | "WALLET" | "MANUAL" | null;
+  refund_method?:
+    | "ORIGINAL_PAYMENT"
+    | "WALLET"
+    | "MANUAL"
+    | "MANUAL_BANK"
+    | "MANUAL_CASH"
+    | "GATEWAY_CONFIRMED"
+    | "BKASH"
+    | "SSLCOMMERZ"
+    | null;
   exchange_requested?: boolean;
   exchange_variant_id?: string | null;
   rejection_reason?: string | null;

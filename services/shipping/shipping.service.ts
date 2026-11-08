@@ -143,13 +143,46 @@ export class ShippingService {
 
       for (const item of shipment.items || []) {
         try {
+          // shipment_items carry no variant reference of their own, and
+          // reduceStock needs the variant ID (the atomic_reduce_stock RPC
+          // keys on it) — resolve it from the order item the shipment
+          // line was created from, falling back to the item's SKU.
+          let variantId: string | undefined;
+          const { prisma } = await import("@/lib/prisma");
+          if ((item as any).order_item_id) {
+            const orderItem = await prisma.orderItem.findUnique({
+              where: { id: (item as any).order_item_id },
+              select: { variantId: true, sku: true },
+            });
+            variantId = orderItem?.variantId || undefined;
+            if (!variantId && orderItem?.sku) {
+              const v = await prisma.variant.findUnique({
+                where: { sku: orderItem.sku },
+                select: { id: true },
+              });
+              variantId = v?.id || undefined;
+            }
+          }
+          if (!variantId && (item as any).sku) {
+            const v = await prisma.variant.findUnique({
+              where: { sku: (item as any).sku },
+              select: { id: true },
+            });
+            variantId = v?.id || undefined;
+          }
+          if (!variantId) {
+            console.error(
+              `Cannot reduce stock for shipment item ${item.id}: no variant resolvable`
+            );
+            continue;
+          }
           await inventoryService.reduceStock(
-            item.sku,
+            variantId,
             warehouseId,
             item.quantity
           );
         } catch (err) {
-          console.error(`Failed to reduce stock for variant ${item.sku}`, err);
+          console.error(`Failed to reduce stock for shipment item ${item.id}`, err);
         }
       }
     }
@@ -395,7 +428,7 @@ export class ShippingService {
     // Update shipment status if provider status maps to a different state
     const updates_payload: Record<string, any> = { provider_status: status };
     if (estimatedDelivery)
-      updates_payload.estimated_delivery_date = estimatedDelivery;
+      updates_payload.estimated_delivery = estimatedDelivery;
 
     return this.shipmentRepo.updateShipment(shipmentId, updates_payload);
   }
@@ -407,13 +440,20 @@ export class ShippingService {
     event: NormalizedWebhookEvent,
     source: string
   ): Promise<void> {
-    // Find shipment by tracking number
-    const shipment = await this.shipmentRepo.getShipmentByTrackingNumber(
-      event.trackingNumber
-    );
+    // Match by consignment ID first — it is the provider's stable booking
+    // reference; the tracking number is only a fallback (it can be absent
+    // or change while the consignment ID never does).
+    let shipment = event.consignmentId
+      ? await this.shipmentRepo.getShipmentByConsignmentId(event.consignmentId)
+      : null;
+    if (!shipment && event.trackingNumber) {
+      shipment = await this.shipmentRepo.getShipmentByTrackingNumber(
+        event.trackingNumber
+      );
+    }
     if (!shipment) {
       console.warn(
-        `[ShippingService] No shipment found for tracking: ${event.trackingNumber}`
+        `[ShippingService] No shipment found for consignment: ${event.consignmentId || "n/a"} / tracking: ${event.trackingNumber}`
       );
       return;
     }

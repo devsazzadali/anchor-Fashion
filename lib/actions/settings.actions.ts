@@ -371,6 +371,133 @@ export async function updateSecuritySettings(config: SecuritySettingsConfig) {
   }
 }
 
+export async function getCodFraudSettings(): Promise<
+  import("@/lib/services/fraud/cod-risk.service").CodFraudConfig
+> {
+  const { CodRiskService } = await import(
+    "@/lib/services/fraud/cod-risk.service"
+  );
+  return CodRiskService.getConfig();
+}
+
+export async function updateCodFraudSettings(
+  config: import("@/lib/services/fraud/cod-risk.service").CodFraudConfig
+) {
+  try {
+    await verifySuperAdmin();
+    const { DEFAULT_COD_FRAUD_CONFIG } = await import(
+      "@/lib/services/fraud/cod-risk.service"
+    );
+    const num = (v: any, fallback: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const clean = {
+      enabled: !!config.enabled,
+      cod_high_value_threshold: num(
+        config.cod_high_value_threshold,
+        DEFAULT_COD_FRAUD_CONFIG.cod_high_value_threshold
+      ),
+      otp_required_for_high_value: !!config.otp_required_for_high_value,
+      otp_required_for_first_order: !!config.otp_required_for_first_order,
+      max_cod_risk_score: num(
+        config.max_cod_risk_score,
+        DEFAULT_COD_FRAUD_CONFIG.max_cod_risk_score
+      ),
+      otp_expiry_minutes: num(
+        config.otp_expiry_minutes,
+        DEFAULT_COD_FRAUD_CONFIG.otp_expiry_minutes
+      ),
+      otp_max_attempts: num(
+        config.otp_max_attempts,
+        DEFAULT_COD_FRAUD_CONFIG.otp_max_attempts
+      ),
+      otp_resend_cooldown_seconds: num(
+        config.otp_resend_cooldown_seconds,
+        DEFAULT_COD_FRAUD_CONFIG.otp_resend_cooldown_seconds
+      ),
+      duplicate_order_window_minutes: num(
+        config.duplicate_order_window_minutes,
+        DEFAULT_COD_FRAUD_CONFIG.duplicate_order_window_minutes
+      ),
+    };
+
+    const db = createAdminDbClient();
+    const { error } = await db.from("settings").upsert(
+      {
+        key: "cod_fraud_settings",
+        value: clean as any,
+        category: "fraud",
+        description: "COD fraud shield: risk thresholds and OTP rules",
+      },
+      { onConflict: "key" }
+    );
+    if (error) throw error;
+
+    revalidatePath("/admin/settings/fraud");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[updateCodFraudSettings]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getExternalFraudSettings(): Promise<
+  import("@/lib/services/fraud/external-fraud.service").FraudCheckSettings
+> {
+  const { ExternalFraudService } = await import(
+    "@/lib/services/fraud/external-fraud.service"
+  );
+  return ExternalFraudService.getSettings();
+}
+
+export async function updateExternalFraudSettings(
+  config: import("@/lib/services/fraud/external-fraud.service").FraudCheckSettings
+) {
+  try {
+    await verifySuperAdmin();
+    const { DEFAULT_FRAUD_CHECK_SETTINGS } = await import(
+      "@/lib/services/fraud/external-fraud.service"
+    );
+    const num = (v: any, fallback: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const clean = {
+      provider: String(config.provider || "bdcourier").trim() || "bdcourier",
+      enabled: !!config.enabled,
+      // The store's OWN BDCourier key — stored only in this settings row,
+      // read server-side only, never returned to any client surface
+      // outside this admin settings page.
+      api_key: String(config.api_key || "").trim(),
+      success_ratio_warn_below: num(
+        config.success_ratio_warn_below,
+        DEFAULT_FRAUD_CHECK_SETTINGS.success_ratio_warn_below
+      ),
+      timeout_ms: num(config.timeout_ms, DEFAULT_FRAUD_CHECK_SETTINGS.timeout_ms),
+    };
+
+    const db = createAdminDbClient();
+    const { error } = await db.from("settings").upsert(
+      {
+        key: "fraud_check_settings",
+        value: clean as any,
+        category: "fraud",
+        description:
+          "External fraud check by phone (BDCourier). Add the store API key and set enabled=true to activate.",
+      },
+      { onConflict: "key" }
+    );
+    if (error) throw error;
+
+    revalidatePath("/admin/settings/fraud");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[updateExternalFraudSettings]", error);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function getEmailSettings(): Promise<EmailSettingsConfig> {
   const db = await createDbClient();
   try {

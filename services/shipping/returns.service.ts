@@ -601,11 +601,64 @@ export class ReturnsService {
       }
     }
 
+    // The return may only be marked inventory_synced once EVERY item has
+    // been resolved by inspection: restocked back into sellable stock, or
+    // recorded with a not-restockable condition (damaged/defective).
+    // Items still carrying the un-inspected "unknown" condition block the
+    // flip — the previous behaviour flipped the flag unconditionally, so
+    // returns showed as synced while nothing had been restocked.
+    const freshItems = await this.returnRepo.getReturnItems(returnId);
+    const unresolved = freshItems.filter(
+      (i) =>
+        !i.restocked &&
+        i.condition !== "damaged" &&
+        i.condition !== "defective"
+    );
+
+    if (unresolved.length > 0) {
+      // Persist the inspection timestamp for the conditions that WERE
+      // supplied above, then surface exactly what is missing.
+      await this.returnRepo.updateReturn(returnId, {
+        inspected_at: new Date().toISOString(),
+      });
+      throw new Error(
+        `Inventory sync incomplete: ${unresolved.length} item(s) still need an inspection result (good = restock, damaged/defective = quarantine) before this return can be marked inventory synced.`
+      );
+    }
+
     return this.returnRepo.atomicUpdateStatus(returnId, ["approved", "received", "inventory_synced"], {
       status: "inventory_synced",
       inventory_synced_at: new Date().toISOString(),
       inspected_at: new Date().toISOString(),
     }, adminUserId);
+  }
+
+  /**
+   * WalletService.topUp records its ledger row generically
+   * (reference_type TOP_UP, no reference). A refund credit must be
+   * traceable to the return that caused it, so the row is relabelled
+   * with the return reference immediately after the credit lands.
+   */
+  private async labelWalletRefundTransaction(
+    transactionId: string | undefined,
+    returnId: string
+  ): Promise<void> {
+    if (!transactionId) return;
+    try {
+      const db = createAdminDbClient();
+      await db
+        .from("wallet_transactions")
+        .update({
+          reference_type: "RETURN_REFUND",
+          reference_id: returnId,
+        } as any)
+        .eq("id", transactionId);
+    } catch (err) {
+      console.warn(
+        "[ReturnsService] Could not label wallet refund transaction:",
+        err
+      );
+    }
   }
 
   /**
@@ -659,16 +712,21 @@ export class ReturnsService {
         throw new Error("Customer ID required for wallet credit refund.");
       }
 
-      await WalletService.topUp({
+      const topUpResult = await WalletService.topUp({
         userId: returnRecord.customer_id,
         amount: refundAmount,
         paymentMethod: "RETURN_STORE_CREDIT",
         paymentRef: returnRecord.return_number,
         description: `Store credit refund for return ${returnRecord.return_number}`,
       });
+      await this.labelWalletRefundTransaction(
+        topUpResult?.transaction?.id,
+        returnId
+      );
 
       await this.returnRepo.updateReturn(returnId, {
         refund_status: "PROCESSED",
+        refund_method: "WALLET",
         completed_at: new Date().toISOString(),
         status: "completed",
       });
@@ -717,6 +775,7 @@ export class ReturnsService {
           if (res.refundTrxID) {
             await this.returnRepo.updateReturn(returnId, {
               refund_status: "PROCESSED",
+              refund_method: "BKASH",
               completed_at: new Date().toISOString(),
               status: "completed",
               internal_note: `bKash refund completed. TrxID: ${res.refundTrxID}`,
@@ -762,6 +821,7 @@ export class ReturnsService {
           if (res.status === "success" || res.refund_ref_id) {
             await this.returnRepo.updateReturn(returnId, {
               refund_status: "PROCESSED",
+              refund_method: "SSLCOMMERZ",
               completed_at: new Date().toISOString(),
               status: "completed",
               internal_note: `SSLCommerz refund initiated. Ref: ${res.refund_ref_id || res.trans_id}`,
@@ -821,6 +881,13 @@ export class ReturnsService {
         notes: input.customerNote || null,
         customer_note: input.customerNote || null,
         refund_method: input.refundMethod || "ORIGINAL_PAYMENT",
+        // The refund paths settle returns.refund_amount; without this the
+        // record carried 0 and every refund settled nothing. It is the sum
+        // of the per-item refund amounts declared on the request.
+        refund_amount: input.items.reduce(
+          (sum, item) => sum + Number(item.refundAmount || 0),
+          0
+        ),
         exchange_requested: Boolean(input.exchangeRequested),
         exchange_variant_id: input.exchangeVariantId || null,
         photo_urls: input.photoUrls || [],
@@ -892,12 +959,34 @@ export class ReturnsService {
   }
 
   /**
-   * Mark return as received at warehouse.
+   * Mark return as received at warehouse. When the warehouse inspection
+   * results are supplied with the receive step, each item's condition is
+   * persisted here — the restock step then acts on the recorded
+   * conditions instead of guessing.
    */
-  async markReturnReceived(returnId: string, updatedBy?: string): Promise<ReturnRequest> {
+  async markReturnReceived(
+    returnId: string,
+    updatedBy?: string,
+    itemConditions: Record<string, "good" | "damaged" | "defective"> = {}
+  ): Promise<ReturnRequest> {
+    const entries = Object.entries(itemConditions);
+    if (entries.length > 0) {
+      const db = createAdminDbClient();
+      for (const [itemId, condition] of entries) {
+        await db
+          .from("return_items")
+          .update({ condition } as any)
+          .eq("id", itemId)
+          .eq("return_id", returnId);
+      }
+    }
+
     return this.returnRepo.atomicUpdateStatus(returnId, ["approved", "pickup_scheduled", "picked_up", "in_transit"], {
       status: "received",
       received_at: new Date().toISOString(),
+      ...(entries.length > 0
+        ? { inspected_at: new Date().toISOString() }
+        : {}),
     }, updatedBy);
   }
 
@@ -939,13 +1028,17 @@ export class ReturnsService {
     // 1. If wallet refund selected, credit wallet
     if (chosenMethod === "WALLET" && returnRecord.customer_id && refundAmount > 0) {
       try {
-        await WalletService.topUp({
+        const topUpResult = await WalletService.topUp({
           userId: returnRecord.customer_id,
           amount: refundAmount,
           paymentMethod: "RETURN_STORE_CREDIT",
           paymentRef: returnRecord.return_number,
           description: `Store credit refund for return ${returnRecord.return_number}`,
         });
+        await this.labelWalletRefundTransaction(
+          topUpResult?.transaction?.id,
+          returnRecord.id
+        );
       } catch (err: any) {
         console.warn("[resolveReturnWithRefund] Wallet topup warning:", err.message);
       }
@@ -955,6 +1048,7 @@ export class ReturnsService {
     await this.returnRepo.updateReturn(returnRecord.id, {
       status: "completed",
       refund_status: "PROCESSED",
+      refund_method: chosenMethod,
       completed_at: new Date().toISOString(),
       internal_note: options?.note || `Refund settled (${chosenMethod}) by admin. Amount: ৳${refundAmount}.`,
     });

@@ -62,6 +62,10 @@ export interface Order {
   branch_id?: string;
   notes?: string | null;
   confirmation_sms_sent?: boolean;
+  completion_sms_sent?: boolean;
+  fraud_check_status?: string | null;
+  fraud_check_result?: Record<string, any> | null;
+  fraud_checked_at?: string | null;
   customer_name?: string | null;
   customer_phone?: string | null;
   customer_city?: string | null;

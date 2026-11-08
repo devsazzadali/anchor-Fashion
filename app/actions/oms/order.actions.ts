@@ -285,6 +285,43 @@ export async function cancelCustomerOrderAction(
       refundStatus = "failed/pending";
     }
 
+    // 6b. OMS consequence parity: a customer self-cancel must produce the
+    // same consequences as a staff-side cancellation — loyalty points
+    // reversed and staff notified by email. Previously this path skipped
+    // both, so self-cancelled orders kept their earned points and staff
+    // never learned about the cancellation.
+    try {
+      const loyaltyUserId = (order as any).customerId || order.profileId;
+      const pointsToReverse = Math.floor(Number(order.subtotal || 0) / 100);
+      if (loyaltyUserId && pointsToReverse > 0) {
+        const { LoyaltyService } = await import("@/services/loyalty.service");
+        await LoyaltyService.reversePoints({
+          userId: loyaltyUserId,
+          referenceId: order.id,
+          pointsToReverse,
+          reason: "Order CANCELLED",
+        });
+      }
+    } catch (loyaltyErr) {
+      console.error(`[cancelCustomerOrderAction] Failed to reverse loyalty for order ${order.id}`, loyaltyErr);
+    }
+
+    void (async () => {
+      try {
+        const { notifyStaffOrderEvent } = await import(
+          "@/lib/notifications/order-notifications"
+        );
+        await notifyStaffOrderEvent({
+          kind: "status_change",
+          orderId: order.id,
+          status: "CANCELLED",
+          previousStatus: order.status ? String(order.status).toUpperCase() : null,
+        });
+      } catch (staffMailErr) {
+        console.warn("[cancelCustomerOrderAction] Staff cancel email failed:", staffMailErr);
+      }
+    })();
+
     // 7. Write Order Status History (Audit Idempotency via single winner update)
     try {
       await prisma.orderStatusHistory.create({

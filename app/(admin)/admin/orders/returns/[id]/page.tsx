@@ -34,6 +34,28 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
   const resolveRefund = useResolveReturnRefund();
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [itemConditions, setItemConditions] = useState<
+    Record<string, "good" | "damaged" | "defective">
+  >({});
+
+  const INSPECTED = ["good", "damaged", "defective"];
+  const canInspect = ["approved", "picked_up", "in_transit", "received"].includes(
+    returnReq?.status || ""
+  );
+  // Conditions chosen in the inspection selects win; an item already
+  // carrying a real inspection result keeps it. Un-inspected items are
+  // left out — the server refuses to sync inventory until every item
+  // has an inspection result.
+  const collectConditions = () => {
+    const out: Record<string, "good" | "damaged" | "defective"> = {};
+    for (const item of returnReq?.items || []) {
+      const chosen =
+        itemConditions[item.id] ||
+        (INSPECTED.includes(item.condition) ? item.condition : undefined);
+      if (chosen) out[item.id] = chosen;
+    }
+    return out;
+  };
 
   if (isLoading) {
     return (
@@ -136,6 +158,33 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
                       <p className="font-medium">{item.product_name}</p>
                       <p className="text-sm text-muted-foreground">SKU: {item.sku} • Qty: {item.quantity}</p>
                       <p className="text-sm text-muted-foreground mt-1">Condition: <span className="capitalize">{item.condition}</span></p>
+                      {canInspect && !item.restocked && (
+                        <select
+                          className="mt-2 block rounded-md border bg-background px-2 py-1.5 text-sm"
+                          value={
+                            itemConditions[item.id] ??
+                            (INSPECTED.includes(item.condition)
+                              ? item.condition
+                              : "")
+                          }
+                          onChange={(e) =>
+                            setItemConditions((prev) => ({
+                              ...prev,
+                              [item.id]: e.target.value as
+                                | "good"
+                                | "damaged"
+                                | "defective",
+                            }))
+                          }
+                        >
+                          <option value="" disabled>
+                            Inspect: set condition…
+                          </option>
+                          <option value="good">Good — restock to inventory</option>
+                          <option value="damaged">Damaged — quarantine</option>
+                          <option value="defective">Defective — quarantine</option>
+                        </select>
+                      )}
                     </div>
                     <div className="text-right">
                       <p className="font-semibold">৳{item.refund_amount?.toFixed(2) || "0.00"}</p>
@@ -207,23 +256,21 @@ export default function AdminReturnDetailPage({ params }: { params: Promise<{ id
               )}
 
               {(returnReq.status === "approved" || returnReq.status === "picked_up" || returnReq.status === "in_transit") && (
-                <Button 
-                  className="w-full" 
+                <Button
+                  className="w-full"
                   disabled={isProcessing}
-                  onClick={() => handleAction(markReceived, id, "Return marked as received")}
+                  onClick={() => handleAction(markReceived, { returnId: id, itemConditions: collectConditions() }, "Return marked as received")}
                 >
                   Mark Received at Warehouse
                 </Button>
               )}
 
               {returnReq.status === "received" && (
-                <Button 
-                  className="w-full" 
+                <Button
+                  className="w-full"
                   disabled={isProcessing}
                   onClick={() => {
-                    // In a real flow, you'd have a modal to select condition for each item. 
-                    // For simplicity, we just pass an empty obj to use existing item conditions.
-                    handleAction(syncInventory, id, "Inventory synced");
+                    handleAction(syncInventory, { returnId: id, itemConditions: collectConditions() }, "Inventory synced");
                   }}
                 >
                   Inspect & Sync Inventory

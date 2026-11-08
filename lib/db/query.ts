@@ -14,8 +14,11 @@
  * - Table alias: order_shipments→shipments.
  * - Filters on inventory_levels.bin_id are ignored (the column is not part of
  *   the inventory model; filters referencing it historically matched all).
- * - Unknown tables/columns resolve to an empty success result instead of
- *   throwing, so optional modules degrade gracefully.
+ * - Unknown tables/columns in READS and filters resolve to an empty
+ *   success result instead of throwing, so optional modules degrade
+ *   gracefully. WRITES behave differently: unknown keys are stripped and
+ *   logged loudly while the valid columns are applied, and a write with
+ *   no valid column left fails with an error (see toCamelData).
  * - Per-table write sanitizers below mirror the database's real column sets
  *   (some callers pass legacy/extra keys that must not reach the DB).
  */
@@ -226,10 +229,15 @@ function sanitizeStockMovementsInsert(item: any) {
 const RETURNS_ALLOWED = new Set([
   "id", "return_number", "order_id", "customer_id", "status", "reason",
   "notes", "refund_amount", "created_at", "updated_at",
+  "refund_status", "refund_method", "exchange_requested",
+  "exchange_variant_id", "photo_urls", "shipment_id", "rejection_reason",
+  "approved_at", "rejected_at", "received_at", "completed_at",
+  "inventory_synced_at", "picked_up_at", "inspected_at",
 ]);
 const RETURN_ITEMS_ALLOWED = new Set([
   "id", "return_id", "order_item_id", "variant_id", "quantity", "reason",
-  "condition", "restocked", "created_at",
+  "condition", "restocked", "created_at", "sku", "product_name",
+  "refund_amount",
 ]);
 
 function sanitizeReturns(item: any, isUpdate: boolean) {
@@ -554,7 +562,26 @@ export class DbQueryBuilder implements PromiseLike<any> {
   }
 
   or(filterStr: string) {
-    const parts = filterStr.split(",");
+    // Split on top-level commas only: an in.(a,b,c) list contains commas
+    // of its own, and a naive split shreds it into bogus column names
+    // (which used to poison the whole query — e.g. the returns refund
+    // lock's "refund_status.in.(PENDING),refund_status.is.null").
+    const parts: string[] = [];
+    {
+      let depth = 0;
+      let current = "";
+      for (const ch of filterStr) {
+        if (ch === "(") depth++;
+        else if (ch === ")") depth = Math.max(0, depth - 1);
+        if (ch === "," && depth === 0) {
+          parts.push(current);
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+      if (current) parts.push(current);
+    }
     const orFrags: any[] = [];
     for (const part of parts) {
       const [col, op, ...rest] = part.split(".");
@@ -562,6 +589,27 @@ export class DbQueryBuilder implements PromiseLike<any> {
       const r = this.resolve(col);
       if (!r) { this.poisoned = true; return this; }
       const field = r.meta.field;
+      if (op === "in") {
+        const items = val
+          .trim()
+          .replace(/^\(|\)$/g, "")
+          .split(",")
+          .map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
+          .filter((s) => s.length > 0);
+        const coerced = items.map((it) => coerceValue(r.meta, it));
+        if (coerced.includes(INVALID)) { this.poisoned = true; return this; }
+        orFrags.push({ [field]: { in: coerced } });
+        continue;
+      }
+      if (op === "is") {
+        if (val === "null") { orFrags.push({ [field]: null }); continue; }
+        if (val === "true" || val === "false") {
+          orFrags.push({ [field]: val === "true" });
+          continue;
+        }
+        this.poisoned = true;
+        return this;
+      }
       if (op === "ilike" || op === "like") {
         if (r.meta.type !== "String") { this.poisoned = true; return this; }
         const mode = op === "ilike" ? { mode: "insensitive" as const } : {};
@@ -666,22 +714,63 @@ export class DbQueryBuilder implements PromiseLike<any> {
     return out;
   }
 
-  /** Map a snake_case payload object to Prisma data (camelCase fields). */
-  private toCamelData(item: Record<string, any>): Record<string, any> | null {
+  /**
+   * Map a snake_case payload object to Prisma data (camelCase fields).
+   *
+   * Unknown columns and un-coercible values are DROPPED and reported in
+   * `dropped` — they never void the rest of the write. (The previous
+   * behaviour returned null for the whole payload, so a single legacy key
+   * silently discarded every valid column alongside it: courier bookings,
+   * refund state and lifecycle timestamps were lost while callers were
+   * told the write succeeded.) Callers log the dropped keys loudly and
+   * fail the write when nothing valid remains.
+   */
+  private toCamelData(item: Record<string, any>): {
+    data: Record<string, any>;
+    dropped: string[];
+  } {
     const data: Record<string, any> = {};
+    const dropped: string[] = [];
     for (const key of Object.keys(item)) {
       const fm = this.meta!.fields[key];
-      if (!fm) return null; // unknown column → caller treats as graceful empty
+      if (!fm) {
+        dropped.push(key);
+        continue;
+      }
       let val = item[key];
       if (val === undefined) continue;
       if (val !== null && !fm.list && fm.type !== "Json") {
         const v = coerceValue(fm, val);
-        if (v === INVALID) return null;
+        if (v === INVALID) {
+          dropped.push(key);
+          continue;
+        }
         val = v;
       }
       data[fm.field] = val;
     }
-    return data;
+    return { data, dropped };
+  }
+
+  /** Loud server-side record of columns a write tried to use that the
+   *  schema does not have (or whose values could not be coerced). */
+  private logDroppedKeys(context: string, dropped: string[]) {
+    if (dropped.length === 0) return;
+    console.error(
+      `[db] ${context} on table "${this.tableName}": dropped unknown/invalid column(s) [${dropped.join(", ")}]; the remaining columns were applied. Add the missing column(s) to the schema instead of relying on this.`
+    );
+  }
+
+  /** Error result for a write whose payload contains no valid column. */
+  private noValidColumns(context: string, dropped: string[]) {
+    this.logDroppedKeys(context, dropped);
+    return {
+      data: this.isSingle ? null : [],
+      error: {
+        code: "42703",
+        message: `${context} on table "${this.tableName}" has no valid columns (dropped: ${dropped.join(", ") || "none"})`,
+      },
+    };
   }
 
   private applyRowFixups(rows: any[]) {
@@ -724,6 +813,16 @@ export class DbQueryBuilder implements PromiseLike<any> {
 
   private async attachRelations(rows: any[]) {
     if (!rows || rows.length === 0) return rows;
+    const snakeify = (table: string, row: any) => {
+      const meta = DB_TABLES[table];
+      if (!meta || !row) return serializePlain(row);
+      const out: Record<string, any> = {};
+      for (const col of Object.keys(meta.fields)) {
+        const f = meta.fields[col].field;
+        if (f in row) out[col] = serializePlain(row[f]);
+      }
+      return out;
+    };
     try {
       if (
         (this.tableName === "profiles" || this.tableName === "customer_profiles") &&
@@ -811,6 +910,158 @@ export class DbQueryBuilder implements PromiseLike<any> {
                 row.product_media = mediaMap.get(row.id) || [];
               }
             } catch {}
+          }
+        }
+      }
+      if (
+        this.tableName === "returns" &&
+        this.selectCols.includes("return_items")
+      ) {
+        const returnIds = rows.map((r) => r.id).filter(Boolean);
+        if (returnIds.length > 0) {
+          const items = await prisma.returnItem.findMany({
+            where: { returnId: { in: returnIds } },
+          });
+          const itemMap = new Map<string, any[]>();
+          for (const it of items as any[]) {
+            const snake = snakeify("return_items", it);
+            if (!itemMap.has(snake.return_id)) itemMap.set(snake.return_id, []);
+            itemMap.get(snake.return_id)!.push(snake);
+          }
+          for (const row of rows) {
+            row.items = itemMap.get(row.id) || [];
+          }
+        }
+      }
+
+      if (this.tableName === "shipments") {
+        const shipmentIds = rows.map((r) => r.id).filter(Boolean);
+        if (shipmentIds.length > 0) {
+          if (this.selectCols.includes("shipment_items")) {
+            const items = await prisma.shipmentItem.findMany({
+              where: { shipmentId: { in: shipmentIds } },
+            });
+            const itemMap = new Map<string, any[]>();
+            for (const it of items as any[]) {
+              const snake = snakeify("shipment_items", it);
+              if (!itemMap.has(snake.shipment_id))
+                itemMap.set(snake.shipment_id, []);
+              itemMap.get(snake.shipment_id)!.push(snake);
+            }
+            for (const row of rows) row.items = itemMap.get(row.id) || [];
+          }
+          if (this.selectCols.includes("shipment_tracking_events")) {
+            const events = await (prisma as any).shipment_tracking_events.findMany({
+              where: { shipment_id: { in: shipmentIds } },
+            });
+            const evMap = new Map<string, any[]>();
+            for (const ev of events as any[]) {
+              const snake = serializePlain(ev);
+              if (!evMap.has(snake.shipment_id))
+                evMap.set(snake.shipment_id, []);
+              evMap.get(snake.shipment_id)!.push(snake);
+            }
+            for (const row of rows) {
+              const list = evMap.get(row.id) || [];
+              list.sort(
+                (a: any, b: any) =>
+                  new Date(b.event_time || b.timestamp || 0).getTime() -
+                  new Date(a.event_time || a.timestamp || 0).getTime()
+              );
+              row.tracking_events = list;
+            }
+          }
+          if (this.selectCols.includes("shipment_labels")) {
+            const labels = await prisma.shipmentLabel.findMany({
+              where: { shipmentId: { in: shipmentIds } },
+            });
+            const labelMap = new Map<string, any[]>();
+            for (const lb of labels as any[]) {
+              const snake = snakeify("shipment_labels", lb);
+              if (!labelMap.has(snake.shipment_id))
+                labelMap.set(snake.shipment_id, []);
+              labelMap.get(snake.shipment_id)!.push(snake);
+            }
+            for (const row of rows) {
+              const list = labelMap.get(row.id) || [];
+              list.sort(
+                (a: any, b: any) =>
+                  new Date(b.created_at || 0).getTime() -
+                  new Date(a.created_at || 0).getTime()
+              );
+              row.labels = list;
+            }
+          }
+          if (this.selectCols.includes("shipment_events")) {
+            const events = await (prisma as any).shipment_events.findMany({
+              where: { shipment_id: { in: shipmentIds } },
+            });
+            const evMap = new Map<string, any[]>();
+            for (const ev of events as any[]) {
+              const snake = serializePlain(ev);
+              if (!evMap.has(snake.shipment_id))
+                evMap.set(snake.shipment_id, []);
+              evMap.get(snake.shipment_id)!.push(snake);
+            }
+            for (const row of rows) {
+              const list = evMap.get(row.id) || [];
+              list.sort(
+                (a: any, b: any) =>
+                  new Date(b.created_at || 0).getTime() -
+                  new Date(a.created_at || 0).getTime()
+              );
+              row.events = list;
+            }
+          }
+          if (this.selectCols.includes("orders")) {
+            const orderIds = [
+              ...new Set(rows.map((r) => r.order_id).filter(Boolean)),
+            ];
+            if (orderIds.length > 0) {
+              const orders = await prisma.order.findMany({
+                where: { id: { in: orderIds } },
+              });
+              const orderMap = new Map(
+                (orders as any[]).map((o) => [o.id, snakeify("orders", o)])
+              );
+              for (const row of rows) {
+                row.order = orderMap.get(row.order_id) || null;
+              }
+            }
+          }
+          if (this.selectCols.includes("courier_providers")) {
+            const codes = [
+              ...new Set(
+                rows.map((r) => r.courier_provider_code).filter(Boolean)
+              ),
+            ];
+            if (codes.length > 0) {
+              const providers = await (prisma as any).courier_providers.findMany({
+                where: { code: { in: codes } },
+              });
+              const provMap = new Map(
+                (providers as any[]).map((p) => [p.code, serializePlain(p)])
+              );
+              for (const row of rows) {
+                row.courier = provMap.get(row.courier_provider_code) || null;
+              }
+            }
+          }
+          if (this.selectCols.includes("delivery_zones")) {
+            const zoneIds = [
+              ...new Set(rows.map((r) => r.delivery_zone_id).filter(Boolean)),
+            ];
+            if (zoneIds.length > 0) {
+              const zones = await (prisma as any).deliveryZone.findMany({
+                where: { id: { in: zoneIds } },
+              });
+              const zoneMap = new Map(
+                (zones as any[]).map((z) => [z.id, snakeify("delivery_zones", z)])
+              );
+              for (const row of rows) {
+                row.zone = zoneMap.get(row.delivery_zone_id) || null;
+              }
+            }
           }
         }
       }
@@ -960,8 +1211,12 @@ export class DbQueryBuilder implements PromiseLike<any> {
               for (const k of Object.keys(item)) {
                 if (k !== "id" && !conflictCols.includes(k)) updatePayload[k] = item[k];
               }
-              const data = this.toCamelData(updatePayload);
-              if (data === null) return this.gracefulEmpty();
+              const converted = this.toCamelData(updatePayload);
+              this.logDroppedKeys("upsert-update", converted.dropped);
+              if (Object.keys(converted.data).length === 0) {
+                return this.noValidColumns("upsert-update", converted.dropped);
+              }
+              const data = converted.data;
               const pk = this.pkWhere(saved);
               if (pk) {
                 saved = await delegate.update({ where: pk, data });
@@ -971,9 +1226,12 @@ export class DbQueryBuilder implements PromiseLike<any> {
               }
               outRows.push(saved);
             } else {
-              const data = this.toCamelData(item);
-              if (data === null) return this.gracefulEmpty();
-              saved = await delegate.create({ data });
+              const converted = this.toCamelData(item);
+              this.logDroppedKeys("upsert-insert", converted.dropped);
+              if (Object.keys(converted.data).length === 0) {
+                return this.noValidColumns("upsert-insert", converted.dropped);
+              }
+              saved = await delegate.create({ data: converted.data });
               outRows.push(saved);
             }
           }
@@ -984,9 +1242,18 @@ export class DbQueryBuilder implements PromiseLike<any> {
 
         const camelRows: Record<string, any>[] = [];
         for (const item of dataArray) {
-          const data = this.toCamelData(item);
-          if (data === null) return this.gracefulEmpty();
-          camelRows.push(data);
+          const converted = this.toCamelData(item);
+          this.logDroppedKeys("insert", converted.dropped);
+          // A payload whose only surviving key is the auto-generated id
+          // carries no caller data at all — fail loudly instead of
+          // inserting an empty row and reporting success.
+          const callerKeys = Object.keys(converted.data).filter(
+            (k) => k !== "id"
+          );
+          if (callerKeys.length === 0 && converted.dropped.length > 0) {
+            return this.noValidColumns("insert", converted.dropped);
+          }
+          camelRows.push(converted.data);
         }
 
         if (this.action === "upsert") {
@@ -1031,11 +1298,22 @@ export class DbQueryBuilder implements PromiseLike<any> {
             error: { code: "42601", message: "syntax error" },
           };
         }
-        if (keys.some((k) => !this.meta!.fields[k])) {
-          return this.gracefulEmpty();
+        // Unknown/invalid keys are stripped (and logged), never allowed
+        // to void the valid columns beside them. A payload left with no
+        // valid column at all still fails loudly — callers such as the
+        // returns refund lock rely on that rejection.
+        const converted = this.toCamelData(payloadCopy);
+        this.logDroppedKeys("update", converted.dropped);
+        if (Object.keys(converted.data).length === 0) {
+          return {
+            data: this.isSingle ? null : [],
+            error: {
+              code: "42703",
+              message: `Update on table "${this.tableName}" has no valid columns (dropped: ${converted.dropped.join(", ") || "none"})`,
+            },
+          };
         }
-        const data = this.toCamelData(payloadCopy);
-        if (data === null) return this.gracefulEmpty();
+        const data = converted.data;
 
         const where = this.where();
         const existing = await delegate.findMany({ where });

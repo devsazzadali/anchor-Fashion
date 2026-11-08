@@ -92,15 +92,23 @@ export function useRejectReturn() {
   });
 }
 
+type ItemConditions = Record<string, "good" | "damaged" | "defective">;
+
 export function useMarkReturnReceived() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (returnId: string) => {
-      const res = await markReturnReceivedAction(returnId);
+    mutationFn: async (
+      payload: string | { returnId: string; itemConditions?: ItemConditions }
+    ) => {
+      const returnId = typeof payload === "string" ? payload : payload.returnId;
+      const itemConditions =
+        typeof payload === "string" ? {} : payload.itemConditions ?? {};
+      const res = await markReturnReceivedAction(returnId, itemConditions);
       if (!res.success) throw new Error(res.error);
       return res.data;
     },
-    onSuccess: (_, returnId) => {
+    onSuccess: (_, payload) => {
+      const returnId = typeof payload === "string" ? payload : payload.returnId;
       qc.invalidateQueries({ queryKey: returnKeys.all });
       qc.invalidateQueries({ queryKey: returnKeys.detail(returnId) });
     },
@@ -110,12 +118,18 @@ export function useMarkReturnReceived() {
 export function useSyncReturnInventory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (returnId: string) => {
-      const res = await syncReturnInventoryAction(returnId);
+    mutationFn: async (
+      payload: string | { returnId: string; itemConditions?: ItemConditions }
+    ) => {
+      const returnId = typeof payload === "string" ? payload : payload.returnId;
+      const itemConditions =
+        typeof payload === "string" ? {} : payload.itemConditions ?? {};
+      const res = await syncReturnInventoryAction(returnId, itemConditions);
       if (!res.success) throw new Error(res.error);
       return res.data;
     },
-    onSuccess: (_, returnId) => {
+    onSuccess: (_, payload) => {
+      const returnId = typeof payload === "string" ? payload : payload.returnId;
       qc.invalidateQueries({ queryKey: returnKeys.all });
       qc.invalidateQueries({ queryKey: returnKeys.detail(returnId) });
     },

@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { CourierRegistry } from "./courier-registry";
+import { logCourierApiCall } from "@/lib/couriers/logger";
 import {
   ConsignmentRequest,
   ConsignmentResponse,
@@ -47,12 +48,28 @@ export class CourierGatewayService {
     code: CourierProviderCode,
     request: ConsignmentRequest
   ): Promise<ProviderResponse<ConsignmentResponse>> {
+    const started = Date.now();
+    let result: ProviderResponse<ConsignmentResponse>;
     try {
       const provider = await this.getProvider(code);
-      return await provider.createConsignment(request);
+      result = await provider.createConsignment(request);
     } catch (err: any) {
-      return this.buildError(code, err.message);
+      result = this.buildError(code, err.message);
     }
+    // Record the call so Admin → Couriers → Logs reflects real dispatch
+    // traffic (the logger sanitizes credentials and never throws).
+    await logCourierApiCall({
+      courierCode: code,
+      method: "POST",
+      endpoint: "createConsignment",
+      statusCode: result.success ? 200 : 502,
+      success: result.success,
+      responseTimeMs: Date.now() - started,
+      errorMessage: result.success ? undefined : result.error?.message,
+      payload: request,
+      responseData: result,
+    });
+    return result;
   }
 
   /**
@@ -62,12 +79,26 @@ export class CourierGatewayService {
     code: CourierProviderCode,
     consignmentId: string
   ): Promise<ProviderResponse<void>> {
+    const started = Date.now();
+    let result: ProviderResponse<void>;
     try {
       const provider = await this.getProvider(code);
-      return provider.cancelConsignment(consignmentId);
+      result = await provider.cancelConsignment(consignmentId);
     } catch (err: any) {
-      return this.buildError(code, err.message);
+      result = this.buildError(code, err.message);
     }
+    await logCourierApiCall({
+      courierCode: code,
+      method: "POST",
+      endpoint: "cancelConsignment",
+      statusCode: result.success ? 200 : 502,
+      success: result.success,
+      responseTimeMs: Date.now() - started,
+      errorMessage: result.success ? undefined : result.error?.message,
+      payload: { consignmentId },
+      responseData: result,
+    });
+    return result;
   }
 
   /**
@@ -77,12 +108,26 @@ export class CourierGatewayService {
     code: CourierProviderCode,
     trackingCode: string
   ): Promise<ProviderResponse<TrackingResult>> {
+    const started = Date.now();
+    let result: ProviderResponse<TrackingResult>;
     try {
       const provider = await this.getProvider(code);
-      return provider.trackShipment(trackingCode);
+      result = await provider.trackShipment(trackingCode);
     } catch (err: any) {
-      return this.buildError(code, err.message);
+      result = this.buildError(code, err.message);
     }
+    await logCourierApiCall({
+      courierCode: code,
+      method: "GET",
+      endpoint: "trackShipment",
+      statusCode: result.success ? 200 : 502,
+      success: result.success,
+      responseTimeMs: Date.now() - started,
+      errorMessage: result.success ? undefined : result.error?.message,
+      payload: { trackingCode },
+      responseData: result,
+    });
+    return result;
   }
 
   /**
@@ -92,12 +137,26 @@ export class CourierGatewayService {
     code: CourierProviderCode,
     consignmentId: string
   ): Promise<ProviderResponse<{ labelUrl: string; labelData?: string }>> {
+    const started = Date.now();
+    let result: ProviderResponse<{ labelUrl: string; labelData?: string }>;
     try {
       const provider = await this.getProvider(code);
-      return provider.generateLabel(consignmentId);
+      result = await provider.generateLabel(consignmentId);
     } catch (err: any) {
-      return this.buildError(code, err.message);
+      result = this.buildError(code, err.message);
     }
+    await logCourierApiCall({
+      courierCode: code,
+      method: "POST",
+      endpoint: "generateLabel",
+      statusCode: result.success ? 200 : 502,
+      success: result.success,
+      responseTimeMs: Date.now() - started,
+      errorMessage: result.success ? undefined : result.error?.message,
+      payload: { consignmentId },
+      responseData: result,
+    });
+    return result;
   }
 
   /**
